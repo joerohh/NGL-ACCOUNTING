@@ -1025,9 +1025,9 @@ class JobManager:
 
         # Build POD email recipients
         pod_to = list(customer.get("podEmailTo", []))
-        if invoice.do_sender_email:
-            pod_to.append(invoice.do_sender_email)
         pod_cc = list(customer.get("podEmailCc", []))
+        if invoice.do_sender_email:
+            pod_cc.append(invoice.do_sender_email)
         pod_subject = customer.get("podEmailSubject", "") or f"POD — {invoice.container_number}"
         pod_body = customer.get("podEmailBody", "") or f"Please find attached the Proof of Delivery for container {invoice.container_number}."
 

@@ -1,24 +1,29 @@
 {
-  "_comment": "TMS DOM selectors — update these after reviewing debug screenshots from first real run",
+  "_comment": "TMS DOM selectors — based on real NGL TMS portal (React/MUI at tms.ngltrans.net)",
   "login": {
-    "logged_in_indicator": ".main-content, [class*='dashboard'], nav[class*='nav']",
-    "sign_in_page": "input[type='email'], input[type='password'], button:has-text('Sign in')"
+    "logged_in_indicator": ".MuiBox-root",
+    "sign_in_url_fragment": "sign-in"
   },
-  "search": {
-    "container_search_input": "input[placeholder*='container' i], input[placeholder*='search' i], input[type='search']",
-    "autocomplete_dropdown": "[class*='autocomplete'], [class*='dropdown'], [role='listbox']",
-    "autocomplete_item": "[class*='autocomplete'] li, [class*='dropdown'] li, [role='option']"
+  "navigation": {
+    "main_page_path": "/order/impreg",
+    "sidebar_icons": "div.cursor-pointer"
   },
   "work_order": {
-    "work_order_header": "h1, h2, [class*='header'], [class*='title']",
-    "documents_tab": "a:has-text('Documents'), button:has-text('Documents'), [role='tab']:has-text('Documents')",
-    "document_table": "table, [class*='document-list'], [class*='file-list']",
-    "document_row": "table tbody tr, [class*='document-row'], [class*='file-row']",
-    "document_name": "td:nth-child(1), [class*='doc-name'], [class*='file-name']",
-    "document_type": "td:nth-child(2), [class*='doc-type'], [class*='file-type']"
+    "table_rows": "table tbody tr",
+    "cont_search_label": "CONT #",
+    "tabs": {
+      "detail_info": "Detail Info",
+      "billing_info": "Billing Info",
+      "document": "Document",
+      "memo": "Memo",
+      "tracking": "Tracking"
+    },
+    "do_sender_label": "DO SENDER"
   },
-  "viewer": {
-    "download_button": "a[download], button:has-text('Download'), [aria-label*='download' i], a[href*='download']",
-    "pdf_viewer": "iframe[src*='pdf'], embed[type*='pdf'], [class*='viewer']"
+  "documents": {
+    "fixed_doc_types": ["DO", "POD", "POL", "BL", "IT", "ITE", "CF", "CFS", "WAREHOUSE-BL", "WAREHOUSE-INBOUND"],
+    "columns": ["DATE", "DOCUMENT", "UPDATED BY", "VERIF", "CK", "BROWSE", "SAVE"],
+    "browse_button_text": "Browse",
+    "save_button_text": "SAVE"
   }
 }

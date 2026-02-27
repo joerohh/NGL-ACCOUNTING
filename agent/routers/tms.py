@@ -66,3 +66,33 @@ async def wait_for_tms_login():
             return {"status": "timeout", "message": "Login timed out. Please try again."}
     except Exception as e:
         raise HTTPException(500, f"Error waiting for TMS login: {e}")
+
+
+@router.post("/test-search/{container}")
+async def test_search(container: str):
+    """Test endpoint: search TMS for a container and return the work order URL."""
+    if not _tms_browser:
+        raise HTTPException(503, "TMS browser not initialized")
+    if not _tms_browser.is_logged_in():
+        raise HTTPException(400, "TMS not logged in — log in first via /tms/open-login")
+
+    try:
+        url = await _tms_browser.search_container(container)
+        return {"container": container, "work_order_url": url, "found": url is not None}
+    except Exception as e:
+        raise HTTPException(500, f"TMS search failed: {e}")
+
+
+@router.post("/test-do-sender/{container}")
+async def test_do_sender(container: str):
+    """Test endpoint: fetch D/O sender email for a container."""
+    if not _tms_browser:
+        raise HTTPException(503, "TMS browser not initialized")
+    if not _tms_browser.is_logged_in():
+        raise HTTPException(400, "TMS not logged in")
+
+    try:
+        email = await _tms_browser.fetch_do_sender_email(container)
+        return {"container": container, "do_sender_email": email, "found": email is not None}
+    except Exception as e:
+        raise HTTPException(500, f"D/O sender lookup failed: {e}")

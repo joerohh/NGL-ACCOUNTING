@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -200,10 +201,126 @@ class TMSBrowser:
             return False
 
     # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    async def _find_cont_search_input(self):
+        """Locate the CONT # search input on the Work Order detail page.
+
+        The CONT # input sits near a "CONT #" label/button in the top-right
+        area of the page.  We use a TreeWalker to find the label text, then
+        walk sibling elements to find the adjacent <input>.
+        """
+        return await self._page.evaluate("""() => {
+            // Strategy 1: TreeWalker — find text node "CONT #" then nearby input
+            const walker = document.createTreeWalker(
+                document.body, NodeFilter.SHOW_TEXT, null
+            );
+            while (walker.nextNode()) {
+                const txt = walker.currentNode.textContent.trim().toUpperCase();
+                if (txt === 'CONT #' || txt === 'CONT#') {
+                    // Walk up to the nearest container element
+                    let el = walker.currentNode.parentElement;
+                    for (let i = 0; i < 5 && el; i++) {
+                        // Check siblings for an input
+                        const parent = el.parentElement;
+                        if (!parent) break;
+                        const input = parent.querySelector('input');
+                        if (input) return true;  // found it — will use same logic to interact
+                        el = parent;
+                    }
+                }
+            }
+
+            // Strategy 2: Any button/label containing "CONT" near an input
+            const btns = document.querySelectorAll('button, label, span, div');
+            for (const btn of btns) {
+                const text = (btn.textContent || '').trim().toUpperCase();
+                if (text === 'CONT #' || text === 'CONT#' || text === 'CONT') {
+                    const parent = btn.parentElement;
+                    if (parent) {
+                        const input = parent.querySelector('input');
+                        if (input) return true;
+                    }
+                }
+            }
+            return false;
+        }""")
+
+    async def _get_cont_input(self):
+        """Return a Playwright ElementHandle for the CONT # input field."""
+        return await self._page.evaluate_handle("""() => {
+            // Find text node "CONT #" then nearby input
+            const walker = document.createTreeWalker(
+                document.body, NodeFilter.SHOW_TEXT, null
+            );
+            while (walker.nextNode()) {
+                const txt = walker.currentNode.textContent.trim().toUpperCase();
+                if (txt === 'CONT #' || txt === 'CONT#') {
+                    let el = walker.currentNode.parentElement;
+                    for (let i = 0; i < 5 && el; i++) {
+                        const parent = el.parentElement;
+                        if (!parent) break;
+                        const input = parent.querySelector('input');
+                        if (input) return input;
+                        el = parent;
+                    }
+                }
+            }
+            // Fallback: button/label near input
+            const btns = document.querySelectorAll('button, label, span, div');
+            for (const btn of btns) {
+                const text = (btn.textContent || '').trim().toUpperCase();
+                if (text === 'CONT #' || text === 'CONT#' || text === 'CONT') {
+                    const parent = btn.parentElement;
+                    if (parent) {
+                        const input = parent.querySelector('input');
+                        if (input) return input;
+                    }
+                }
+            }
+            return null;
+        }""")
+
+    async def _click_tab(self, tab_name: str) -> bool:
+        """Click a tab by its visible text (e.g. 'Detail Info', 'Document')."""
+        clicked = await self._page.evaluate("""(tabName) => {
+            // MUI tabs use role="tab" or button elements
+            const candidates = document.querySelectorAll(
+                '[role="tab"], button, a, span'
+            );
+            for (const el of candidates) {
+                const text = (el.textContent || '').trim();
+                if (text === tabName) {
+                    el.click();
+                    return true;
+                }
+            }
+            // Case-insensitive fallback
+            const lower = tabName.toLowerCase();
+            for (const el of candidates) {
+                const text = (el.textContent || '').trim().toLowerCase();
+                if (text === lower) {
+                    el.click();
+                    return true;
+                }
+            }
+            return false;
+        }""", tab_name)
+        if clicked:
+            await asyncio.sleep(TMS_ACTION_DELAY_S)
+        return clicked
+
+    # ------------------------------------------------------------------
     # Container Search
     # ------------------------------------------------------------------
     async def search_container(self, container_number: str) -> Optional[str]:
         """Search TMS for a container number and navigate to its work order.
+
+        Flow:
+        1. Go to MAIN page (/order/impreg) — the work order list
+        2. If CONT # input not visible, click first table row to open a detail page
+        3. Find the CONT # input, type the container number, press Enter
+        4. Verify the container loaded
 
         Returns the work order URL if found, None otherwise.
         """
@@ -213,81 +330,70 @@ class TMSBrowser:
             return None
 
         try:
-            # Navigate to TMS home/main page
-            await self._page.goto(TMS_URL, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(TMS_ACTION_DELAY_S)
-            await self._debug("home_page")
+            main_path = self._selectors.get("navigation", {}).get("main_page_path", "/order/impreg")
 
-            # Find the container search input
-            search_input = await self._page.query_selector(
-                "input[placeholder*='container' i], input[placeholder*='search' i], "
-                "input[type='search'], input[name*='container' i], input[name*='search' i]"
+            # Step 1: Navigate to MAIN page
+            await self._page.goto(
+                TMS_URL + main_path,
+                wait_until="domcontentloaded",
+                timeout=30000,
             )
+            await asyncio.sleep(TMS_ACTION_DELAY_S)
+            await self._debug("main_page")
 
-            if not search_input:
-                # Try broader search — any prominent text input
-                search_input = await self._page.query_selector(
-                    "input[type='text']:not([type='hidden'])"
-                )
+            # Step 2: Check if CONT # input is already visible
+            has_cont_input = await self._find_cont_search_input()
 
-            if not search_input:
-                await self._debug("no_search_input")
-                logger.error("Could not find container search input on TMS")
-                return None
-
-            # Clear and type the container number
-            await search_input.click()
-            await search_input.fill("")
-            await search_input.type(container_number, delay=50)
-            await asyncio.sleep(2)
-            await self._debug("search_typed")
-
-            # Wait for autocomplete dropdown and click the matching result
-            autocomplete_clicked = await self._page.evaluate("""(containerNum) => {
-                // Look for dropdown/autocomplete items
-                const selectors = [
-                    '[class*="autocomplete"] li',
-                    '[class*="dropdown"] li',
-                    '[class*="suggestion"]',
-                    '[role="option"]',
-                    '[role="listbox"] [role="option"]',
-                    '.search-results li',
-                    '.search-result',
-                    'ul li a',
-                ];
-                for (const sel of selectors) {
-                    const items = document.querySelectorAll(sel);
-                    for (const item of items) {
-                        const text = (item.textContent || '').toUpperCase();
-                        if (text.includes(containerNum.toUpperCase())) {
-                            item.click();
-                            return { found: true, text: item.textContent.trim() };
-                        }
-                    }
-                }
-                return { found: false };
-            }""", container_number)
-
-            if not autocomplete_clicked.get("found"):
-                # Try pressing Enter as fallback
-                await search_input.press("Enter")
-                await asyncio.sleep(3)
-                await self._debug("search_enter_pressed")
-
-                # Check if we landed on a results/work order page
-                page_text = await self._page.evaluate("() => document.body.innerText || ''")
-                if container_number.upper() not in page_text.upper():
-                    await self._debug("container_not_found")
-                    logger.warning("Container %s not found in TMS", container_number)
+            if not has_cont_input:
+                # Need to click a table row to open a work order detail page
+                logger.info("CONT # input not found — clicking first table row")
+                row_sel = self._selectors.get("work_order", {}).get("table_rows", "table tbody tr")
+                first_row = await self._page.query_selector(row_sel)
+                if not first_row:
+                    await self._debug("no_table_rows")
+                    logger.error("No work order rows found on MAIN page")
                     return None
 
+                await first_row.click()
+                await asyncio.sleep(TMS_ACTION_DELAY_S + 1)
+                await self._debug("clicked_first_row")
+
+                # Now check again for the CONT # input
+                has_cont_input = await self._find_cont_search_input()
+                if not has_cont_input:
+                    await self._debug("still_no_cont_input")
+                    logger.error("CONT # input not found even after opening a work order")
+                    return None
+
+            # Step 3: Get the input handle, clear, type, and press Enter
+            cont_input = await self._get_cont_input()
+            if not cont_input:
+                await self._debug("cont_input_handle_fail")
+                logger.error("Could not get handle for CONT # input")
+                return None
+
+            # Use Playwright methods on the JSHandle
+            await cont_input.as_element().click(click_count=3)  # select all
+            await cont_input.as_element().fill("")
+            await cont_input.as_element().type(container_number, delay=50)
+            await self._debug("cont_typed")
+
+            await cont_input.as_element().press("Enter")
+            await asyncio.sleep(TMS_ACTION_DELAY_S + 1)
             await self._page.wait_for_load_state("domcontentloaded")
             await asyncio.sleep(TMS_ACTION_DELAY_S)
-            await self._debug("work_order_page")
+            await self._debug("after_cont_search")
 
-            work_order_url = self._page.url
-            logger.info("Navigated to work order for %s: %s", container_number, work_order_url)
-            return work_order_url
+            # Step 4: Verify container loaded — check page text
+            page_text = await self._page.evaluate("() => document.body.innerText || ''")
+            if container_number.upper() in page_text.upper():
+                work_order_url = self._page.url
+                logger.info("Navigated to work order for %s: %s", container_number, work_order_url)
+                return work_order_url
+            else:
+                await self._debug("container_not_found")
+                logger.warning("Container %s not found in TMS after search", container_number)
+                return None
 
         except Exception as e:
             logger.error("TMS container search failed for %s: %s", container_number, e)
@@ -298,84 +404,82 @@ class TMSBrowser:
     # D/O Sender extraction
     # ------------------------------------------------------------------
     async def fetch_do_sender_email(self, container_number: str) -> Optional[str]:
-        """Search TMS for a container and extract the D/O SENDER email from the work order.
+        """Search TMS for a container and extract the D/O SENDER email.
+
+        Flow:
+        1. search_container() to navigate to the WO
+        2. Click "Detail Info" tab
+        3. TreeWalker + MUI fallbacks to read the DO SENDER input value
 
         Returns the email string if found, None otherwise.
         """
-        # Navigate to the work order for this container
         work_order_url = await self.search_container(container_number)
         if not work_order_url:
             return None
 
         try:
-            # Make sure we're on the Detail Info tab (it's the default/first tab)
-            await self._page.evaluate("""() => {
-                const tabs = document.querySelectorAll('a, [role="tab"], button, span');
-                for (const tab of tabs) {
-                    const text = (tab.textContent || '').trim().toLowerCase();
-                    if (text === 'detail info' || text === 'details') {
-                        tab.click();
-                        return true;
-                    }
-                }
-                return false;
-            }""")
-            await asyncio.sleep(1)
+            do_sender_label = self._selectors.get("work_order", {}).get("do_sender_label", "DO SENDER")
+            detail_tab = self._selectors.get("work_order", {}).get("tabs", {}).get("detail_info", "Detail Info")
+            await self._click_tab(detail_tab)
+            await self._debug("detail_info_tab")
 
-            # Extract the D/O SENDER field value
-            # From the TMS UI: it's a text input labeled "* DO SENDER"
-            do_sender = await self._page.evaluate("""() => {
-                // Strategy 1: Find label containing "DO SENDER" and get the associated input
-                const labels = document.querySelectorAll('label, span, div, td');
-                for (const label of labels) {
-                    const text = (label.textContent || '').trim().toUpperCase();
-                    if (text.includes('DO SENDER') || text.includes('D/O SENDER')) {
-                        // Check sibling/next input
-                        const parent = label.closest('div, td, tr, fieldset, .form-group');
-                        if (parent) {
-                            const input = parent.querySelector('input, textarea, select');
-                            if (input && input.value) return input.value.trim();
-                        }
-                        // Try next sibling
-                        let next = label.nextElementSibling;
-                        while (next) {
-                            if (next.tagName === 'INPUT' || next.tagName === 'TEXTAREA') {
-                                if (next.value) return next.value.trim();
+            do_sender = await self._page.evaluate("""(labelText) => {
+                const upperLabel = labelText.toUpperCase();
+
+                // Strategy 1: TreeWalker — find "DO SENDER" text, walk up to find input
+                const walker = document.createTreeWalker(
+                    document.body, NodeFilter.SHOW_TEXT, null
+                );
+                while (walker.nextNode()) {
+                    const txt = walker.currentNode.textContent.trim().toUpperCase();
+                    if (txt.includes(upperLabel)) {
+                        let el = walker.currentNode.parentElement;
+                        for (let i = 0; i < 6 && el; i++) {
+                            const inputs = el.querySelectorAll('input');
+                            for (const inp of inputs) {
+                                const val = (inp.value || '').trim();
+                                if (val && val.includes('@')) return val;
                             }
-                            const inp = next.querySelector('input, textarea');
-                            if (inp && inp.value) return inp.value.trim();
-                            next = next.nextElementSibling;
+                            el = el.parentElement;
                         }
                     }
                 }
 
-                // Strategy 2: Find any input whose preceding text contains "DO SENDER"
-                const allInputs = document.querySelectorAll('input[type="text"], input:not([type])');
+                // Strategy 2: MUI FormControl label association
+                const labels = document.querySelectorAll('label, .MuiInputLabel-root, .MuiFormLabel-root');
+                for (const lbl of labels) {
+                    const text = (lbl.textContent || '').toUpperCase();
+                    if (text.includes(upperLabel)) {
+                        const formCtrl = lbl.closest('.MuiFormControl-root');
+                        if (formCtrl) {
+                            const inp = formCtrl.querySelector('input');
+                            if (inp) {
+                                const val = (inp.value || '').trim();
+                                if (val && val.includes('@')) return val;
+                                if (val) return val;
+                            }
+                        }
+                        const parent = lbl.parentElement;
+                        if (parent) {
+                            const inp = parent.querySelector('input');
+                            if (inp && inp.value) return inp.value.trim();
+                        }
+                    }
+                }
+
+                // Strategy 3: Last resort — single non-NGL email input on page
+                const allInputs = document.querySelectorAll('input');
+                const emailInputs = [];
                 for (const inp of allInputs) {
                     const val = (inp.value || '').trim();
-                    if (!val || !val.includes('@')) continue;
-                    // Check label association
-                    const prevSib = inp.previousElementSibling;
-                    if (prevSib) {
-                        const prevText = (prevSib.textContent || '').toUpperCase();
-                        if (prevText.includes('DO SENDER') || prevText.includes('D/O SENDER')) {
-                            return val;
-                        }
-                    }
-                    // Check parent label
-                    const parentLabel = inp.closest('label');
-                    if (parentLabel && parentLabel.textContent.toUpperCase().includes('DO SENDER')) {
-                        return val;
+                    if (val && val.includes('@') && !val.includes('ngltrans.net')) {
+                        emailInputs.push(val);
                     }
                 }
-
-                // Strategy 3: Look for any input with an email value near "DO SENDER" text
-                const bodyText = document.body.innerHTML;
-                const doSenderMatch = bodyText.match(/DO\\s*SENDER[^<]*<[^>]*(?:input|textarea)[^>]*value=["']([^"']+@[^"']+)["']/i);
-                if (doSenderMatch) return doSenderMatch[1].trim();
+                if (emailInputs.length === 1) return emailInputs[0];
 
                 return null;
-            }""")
+            }""", do_sender_label)
 
             if do_sender:
                 logger.info("D/O sender found for %s: %s", container_number, do_sender)
@@ -420,97 +524,109 @@ class TMSBrowser:
     # Documents
     # ------------------------------------------------------------------
     async def navigate_to_documents_tab(self) -> bool:
-        """Click the Documents tab on the current work order page."""
+        """Click the 'Document' tab on the current work order page."""
         try:
-            # Try clicking a Documents tab/link
-            docs_clicked = await self._page.evaluate("""() => {
-                const selectors = [
-                    'a', 'button', '[role="tab"]', 'li a', 'nav a',
-                    '[class*="tab"]', 'span',
-                ];
-                for (const sel of selectors) {
-                    const items = document.querySelectorAll(sel);
-                    for (const item of items) {
-                        const text = (item.textContent || '').trim().toLowerCase();
-                        if (text === 'documents' || text === 'docs' || text === 'files') {
-                            item.click();
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }""")
-
-            if not docs_clicked:
-                await self._debug("no_documents_tab")
-                logger.warning("Could not find Documents tab")
+            tab_name = self._selectors.get("work_order", {}).get("tabs", {}).get("document", "Document")
+            clicked = await self._click_tab(tab_name)
+            if not clicked:
+                await self._debug("no_document_tab")
+                logger.warning("Could not find Document tab")
                 return False
 
-            await asyncio.sleep(TMS_ACTION_DELAY_S)
-            await self._debug("documents_tab")
-            logger.info("Navigated to Documents tab")
+            await self._debug("document_tab")
+            logger.info("Navigated to Document tab")
             return True
 
         except Exception as e:
-            logger.error("Failed to navigate to Documents tab: %s", e)
-            await self._debug("documents_tab_error")
+            logger.error("Failed to navigate to Document tab: %s", e)
+            await self._debug("document_tab_error")
             return False
 
     async def list_documents(self) -> list[dict]:
-        """Scrape the documents list on the current page.
+        """Parse the fixed-row document table on the Document tab.
 
-        Returns: [{ type: str, name: str, has_file: bool, row_index: int }]
+        TMS has a fixed set of doc type rows: DO, POD, POL, BL, IT, ITE,
+        CF, CFS, WAREHOUSE-BL, WAREHOUSE-INBOUND.  Each row has columns:
+        DATE, DOCUMENT, UPDATED BY, VERIF, CK, BROWSE, SAVE.
+
+        The BROWSE column contains either a "Browse" button (no file uploaded)
+        or a filename link (file exists and can be downloaded).
+
+        Returns: [{ type, name, has_file, row_index, filename }]
         """
         try:
-            docs = await self._page.evaluate("""() => {
+            fixed_types = self._selectors.get("documents", {}).get(
+                "fixed_doc_types",
+                ["DO", "POD", "POL", "BL", "IT", "ITE", "CF", "CFS", "WAREHOUSE-BL", "WAREHOUSE-INBOUND"],
+            )
+            browse_text = self._selectors.get("documents", {}).get("browse_button_text", "Browse")
+
+            docs = await self._page.evaluate("""(args) => {
+                const { fixedTypes, browseText } = args;
                 const results = [];
-                // Try table rows first
-                const rows = document.querySelectorAll('table tbody tr, [class*="document-row"], [class*="file-row"]');
+                const rows = document.querySelectorAll('table tbody tr');
                 let index = 0;
+
                 for (const row of rows) {
                     const cells = row.querySelectorAll('td');
-                    const text = (row.textContent || '').trim();
-                    if (!text) continue;
+                    if (cells.length < 2) { index++; continue; }
 
-                    let name = '';
+                    // First cell typically has the doc type text (DOCUMENT column)
+                    // Try to match against known fixed doc types
+                    const rowText = (row.textContent || '').trim().toUpperCase();
                     let docType = '';
+                    for (const ft of fixedTypes) {
+                        // Check if this row's text starts with or contains the doc type
+                        if (rowText.includes(ft)) {
+                            docType = ft;
+                            break;
+                        }
+                    }
+
+                    // Check the BROWSE column for a filename (not just the "Browse" button)
                     let hasFile = false;
-
-                    if (cells.length >= 2) {
-                        docType = (cells[0].textContent || '').trim();
-                        name = (cells[1].textContent || '').trim();
-                    } else {
-                        name = text;
+                    let filename = '';
+                    // Look for links/anchors in the row that aren't the Browse button
+                    const anchors = row.querySelectorAll('a');
+                    for (const a of anchors) {
+                        const aText = (a.textContent || '').trim();
+                        // A filename link is any link that ISN'T the "Browse" button text
+                        if (aText && aText !== browseText && aText.length > 2) {
+                            hasFile = true;
+                            filename = aText;
+                            break;
+                        }
                     }
 
-                    // Check if there's a download link or file indicator
-                    const links = row.querySelectorAll('a[href], button, [class*="download"]');
-                    hasFile = links.length > 0 || text.toLowerCase().includes('.pdf');
-
-                    // Detect document type from text
-                    const upperText = text.toUpperCase();
-                    if (upperText.includes('POD') || upperText.includes('PROOF OF DELIVERY')) {
-                        docType = docType || 'POD';
-                    } else if (upperText.includes('BOL') || upperText.includes('BILL OF LADING')) {
-                        docType = docType || 'BOL';
-                    } else if (upperText.includes('DO') || upperText.includes('DELIVERY ORDER')) {
-                        docType = docType || 'DO';
-                    } else if (upperText.includes('PL') || upperText.includes('PACKING LIST')) {
-                        docType = docType || 'PL';
+                    // Also check for file-like text in cells (e.g. "pod_document.pdf")
+                    if (!hasFile) {
+                        for (const cell of cells) {
+                            const cellText = (cell.textContent || '').trim();
+                            if (cellText.match(/\\.[a-zA-Z]{2,4}$/) && cellText !== browseText) {
+                                hasFile = true;
+                                filename = cellText;
+                                break;
+                            }
+                        }
                     }
 
-                    results.push({
-                        type: docType,
-                        name: name.substring(0, 200),
-                        has_file: hasFile,
-                        row_index: index,
-                    });
+                    if (docType) {
+                        results.push({
+                            type: docType,
+                            name: filename || docType,
+                            has_file: hasFile,
+                            row_index: index,
+                            filename: filename,
+                        });
+                    }
                     index++;
                 }
                 return results;
-            }""")
+            }""", {"fixedTypes": fixed_types, "browseText": browse_text})
 
-            logger.info("Found %d documents on TMS page", len(docs))
+            logger.info("Found %d document rows on TMS page", len(docs))
+            for doc in docs:
+                logger.info("  %s: has_file=%s, filename=%s", doc["type"], doc["has_file"], doc.get("filename", ""))
             return docs
 
         except Exception as e:
@@ -519,74 +635,135 @@ class TMSBrowser:
             return []
 
     async def download_document(self, row_index: int, download_dir: Path) -> Optional[Path]:
-        """Click a document row to open it, then download the PDF.
+        """Download a document from the Document tab by row index.
+
+        Three-tier strategy (matching QBO browser pattern):
+        A) Direct fetch via href — fastest, no UI interaction
+        B) Click filename link → check for new tab → fetch from tab URL
+        C) Check TMS_DOWNLOADS_DIR for browser-downloaded file
 
         Returns the path to the downloaded file, or None on failure.
         """
         try:
-            # Click the document row to open viewer
-            row_clicked = await self._page.evaluate("""(rowIndex) => {
-                const rows = document.querySelectorAll('table tbody tr, [class*="document-row"], [class*="file-row"]');
-                let index = 0;
-                for (const row of rows) {
-                    if (!row.textContent.trim()) continue;
-                    if (index === rowIndex) {
-                        // Try clicking a link within the row first
-                        const link = row.querySelector('a[href], button, [class*="view"], [class*="download"]');
-                        if (link) {
-                            link.click();
-                        } else {
-                            row.click();
-                        }
-                        return true;
+            # Get the filename link's href and text from the target row
+            link_info = await self._page.evaluate("""(rowIndex) => {
+                const rows = document.querySelectorAll('table tbody tr');
+                if (rowIndex >= rows.length) return null;
+                const row = rows[rowIndex];
+                const anchors = row.querySelectorAll('a');
+                for (const a of anchors) {
+                    const text = (a.textContent || '').trim();
+                    if (text && text !== 'Browse' && text.length > 2) {
+                        return {
+                            href: a.href || '',
+                            text: text,
+                            target: a.target || '',
+                        };
                     }
-                    index++;
                 }
-                return false;
+                return null;
             }""", row_index)
 
-            if not row_clicked:
-                logger.warning("Could not click document row %d", row_index)
+            if not link_info:
+                logger.warning("No downloadable file link at row %d", row_index)
+                await self._debug("no_file_link")
                 return None
 
-            await asyncio.sleep(TMS_ACTION_DELAY_S)
-            await self._debug("document_viewer")
+            filename = link_info.get("text", "document.pdf")
+            if not filename.lower().endswith(".pdf"):
+                filename += ".pdf"
+            href = link_info.get("href", "")
 
-            # Try to find and click a download button in the viewer
-            async with self._page.expect_download(timeout=15000) as download_info:
-                download_clicked = await self._page.evaluate("""() => {
-                    const selectors = [
-                        'a[download]',
-                        'a[href*="download"]',
-                        'button:has-text("Download")',
-                        '[aria-label*="download" i]',
-                        '[title*="download" i]',
-                        'a[href*=".pdf"]',
-                    ];
-                    for (const sel of selectors) {
+            # ── Method A: Direct fetch via JS fetch() ────────────────────
+            if href:
+                logger.info("Download Method A: direct fetch via href for %s", filename)
+                try:
+                    content = await self._page.evaluate("""async (url) => {
                         try {
-                            const el = document.querySelector(sel);
-                            if (el) {
-                                el.click();
-                                return { found: true, selector: sel };
+                            const resp = await fetch(url, { credentials: 'include' });
+                            if (!resp.ok) return { error: resp.status };
+                            const buf = await resp.arrayBuffer();
+                            return { data: Array.from(new Uint8Array(buf)) };
+                        } catch (e) {
+                            return { error: e.message };
+                        }
+                    }""", href)
+
+                    if isinstance(content, dict) and "data" in content:
+                        data = bytes(content["data"])
+                        if len(data) >= 5 and data[:5] == b'%PDF-':
+                            save_path = download_dir / filename
+                            save_path.write_bytes(data)
+                            logger.info("TMS document downloaded (Method A): %s", save_path)
+                            return save_path
+                        else:
+                            logger.warning("Method A: response is not a PDF (first bytes: %s)", data[:20])
+                    else:
+                        logger.warning("Method A failed: %s", content.get("error", "unknown"))
+                except Exception as e:
+                    logger.warning("Method A exception: %s", e)
+
+            # ── Method B: Click link → new tab → fetch from tab URL ──────
+            logger.info("Download Method B: clicking file link for %s", filename)
+            try:
+                async with self._context.expect_page(timeout=10000) as new_page_info:
+                    await self._page.evaluate("""(rowIndex) => {
+                        const rows = document.querySelectorAll('table tbody tr');
+                        if (rowIndex >= rows.length) return;
+                        const row = rows[rowIndex];
+                        const anchors = row.querySelectorAll('a');
+                        for (const a of anchors) {
+                            const text = (a.textContent || '').trim();
+                            if (text && text !== 'Browse' && text.length > 2) {
+                                a.click();
+                                return;
                             }
-                        } catch {}
-                    }
-                    return { found: false };
-                }""")
+                        }
+                    }""", row_index)
 
-                if not download_clicked.get("found"):
-                    await self._debug("no_download_button")
-                    logger.warning("Could not find download button in viewer")
-                    return None
+                new_page = await new_page_info.value
+                await asyncio.sleep(3)
+                tab_url = new_page.url
 
-            download = await download_info.value
-            suggested_name = download.suggested_filename or "document.pdf"
-            save_path = download_dir / suggested_name
-            await download.save_as(str(save_path))
+                if tab_url and "blob:" not in tab_url:
+                    # Fetch PDF from the new tab's URL
+                    content = await new_page.evaluate("""async () => {
+                        try {
+                            const resp = await fetch(window.location.href, { credentials: 'include' });
+                            if (!resp.ok) return { error: resp.status };
+                            const buf = await resp.arrayBuffer();
+                            return { data: Array.from(new Uint8Array(buf)) };
+                        } catch (e) {
+                            return { error: e.message };
+                        }
+                    }""")
 
-            logger.info("TMS document downloaded: %s", save_path)
-            return save_path
+                    if isinstance(content, dict) and "data" in content:
+                        data = bytes(content["data"])
+                        if len(data) >= 5 and data[:5] == b'%PDF-':
+                            save_path = download_dir / filename
+                            save_path.write_bytes(data)
+                            logger.info("TMS document downloaded (Method B): %s", save_path)
+                            await new_page.close()
+                            return save_path
+
+                await new_page.close()
+            except Exception as e:
+                logger.warning("Method B failed: %s", e)
+
+            # ── Method C: Check browser downloads directory ──────────────
+            logger.info("Download Method C: checking TMS downloads dir")
+            await asyncio.sleep(3)  # give browser time to finish download
+            for f in sorted(TMS_DOWNLOADS_DIR.glob("*"), key=os.path.getmtime, reverse=True):
+                if f.is_file() and f.stat().st_size > 100:
+                    save_path = download_dir / filename
+                    shutil.copy2(str(f), str(save_path))
+                    logger.info("TMS document downloaded (Method C): %s", save_path)
+                    return save_path
+
+            logger.error("All download methods failed for row %d", row_index)
+            await self._debug("download_all_failed")
+            return None
 
         except Exception as e:
             logger.error("TMS document download failed: %s", e)
@@ -602,13 +779,17 @@ class TMSBrowser:
         """End-to-end: search container → Documents tab → find POD → download.
 
         Returns path to the downloaded POD PDF, or None if not found.
+        The return value None with a logged warning distinguishes between:
+        - Container not found in TMS
+        - POD row exists but no file uploaded (flagged clearly)
+        - POD file exists and download failed
         """
         # Step 1: Search for the container
         work_order_url = await self.search_container(container_number)
         if not work_order_url:
             return None
 
-        # Step 2: Navigate to Documents tab
+        # Step 2: Navigate to Document tab
         docs_found = await self.navigate_to_documents_tab()
         if not docs_found:
             return None
@@ -617,19 +798,28 @@ class TMSBrowser:
         docs = await self.list_documents()
         pod_row = None
         for doc in docs:
-            doc_type = (doc.get("type") or "").upper()
-            doc_name = (doc.get("name") or "").upper()
-            if "POD" in doc_type or "POD" in doc_name or "PROOF OF DELIVERY" in doc_name:
-                if doc.get("has_file"):
-                    pod_row = doc
-                    break
+            if doc.get("type") == "POD":  # exact match — fixed rows
+                pod_row = doc
+                break
 
         if pod_row is None:
-            logger.warning("No POD document found in TMS for container %s", container_number)
-            await self._debug("pod_not_found")
+            logger.warning("No POD row found in document table for %s", container_number)
+            await self._debug("pod_row_missing")
             return None
 
-        logger.info("POD found at row %d: %s", pod_row["row_index"], pod_row.get("name", ""))
+        if not pod_row.get("has_file"):
+            logger.warning(
+                "POD row exists for %s but NO DOCUMENT UPLOADED — "
+                "the POD has not been uploaded to TMS yet",
+                container_number,
+            )
+            await self._debug("pod_no_file_uploaded")
+            return None
+
+        logger.info(
+            "POD found for %s at row %d: %s",
+            container_number, pod_row["row_index"], pod_row.get("filename", ""),
+        )
 
         # Step 4: Download the POD
         pod_path = await self.download_document(pod_row["row_index"], download_dir)

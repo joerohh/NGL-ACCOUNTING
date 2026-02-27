@@ -387,6 +387,13 @@ const agentBridge = {
   },
 
   async exportCustomers() {
+    // Try agent first — it has the canonical data
+    if (state.agentConnected) {
+      try {
+        const res = await fetch(this.baseUrl + '/customers/export');
+        if (res.ok) return await res.json();
+      } catch {}
+    }
     const all = this._custRead();
     return Object.values(all);
   },
@@ -495,13 +502,39 @@ async function agentHealthCheck() {
       clsDetails.style.display = 'none';
     }
 
-    // One-time customer sync when agent first connects
+    // One-time bidirectional customer sync when agent first connects.
+    // Agent's disk file (customers.json) is source of truth — pull it into
+    // localStorage so every device gets the same data. Then push any
+    // localStorage-only entries back to the agent.
     if (!state._agentCustomersSynced) {
       state._agentCustomersSynced = true;
       try {
+        // Step 1: Pull from agent → localStorage (agent is source of truth)
+        const agentRes = await fetch(agentBridge.baseUrl + '/customers?activeOnly=false');
+        if (agentRes.ok) {
+          const agentData = await agentRes.json();
+          const agentCustomers = agentData.customers || [];
+          if (agentCustomers.length > 0) {
+            const merged = agentBridge._custRead();
+            for (const c of agentCustomers) {
+              const key = (c.code || '').toUpperCase();
+              if (!key) continue;
+              // Agent wins if it has a newer updatedAt, or if local doesn't have this customer
+              const local = merged[key];
+              if (!local || (c.updatedAt && (!local.updatedAt || c.updatedAt >= local.updatedAt))) {
+                merged[key] = c;
+              }
+            }
+            agentBridge._custWrite(merged);
+          }
+        }
+        // Step 2: Push any localStorage-only entries back to agent
         const allCust = Object.values(agentBridge._custRead());
         if (allCust.length > 0) {
-          agentBridge.importCustomers(allCust);  // fire-and-forget
+          fetch(agentBridge.baseUrl + '/customers/import', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customers: allCust }),
+          }).catch(() => {});
         }
       } catch (_) {}
     }
