@@ -1,0 +1,57 @@
+'use strict';
+// ══════════════════════════════════════════════════════════
+//  GLOBAL STATE — shared across all modules
+// ══════════════════════════════════════════════════════════
+
+// ── Merge tool state ──
+const state = {
+  activeTool: 'home',  // 'home' | 'merge' | 'invoice-sender'
+  mode: 'idle',        // 'idle' | 'auto' | 'manual'
+  pdfs: [],            // Array<{id, name, size, file}>
+  excelRows: [],       // Array<{containerNumber, invoiceNumber?}>
+  mergeResults: [],    // Array<{containerNumber, bytes, filename, subfolder}>
+  isProcessing: false,
+  logCollapsed: true,
+  agentConnected: false,
+  _agentCustomersSynced: false,  // true after first customer sync to agent
+  activeJobId: null,
+  mergeMode: 'per-container',   // 'per-container' | 'all-in-one' | 'invoices-only' | 'pods-only'
+  sortOrder: 'excel',           // 'excel' | 'container' | 'invoice'
+};
+
+let sortableInstance = null;
+
+// ── Invoice sender state ──
+// InvoiceRecord fields: id, invoiceNumber, customerName, invoiceDate, dueDate,
+//   amount, email, poNumber, containerNumber, bolNumber, customerCode, subject,
+//   emailOverride, subjectOverride, customerMatch, resolvedEmails, resolvedCc,
+//   resolvedBcc, sendMethod, requiredDocs, customerActive, validationStatus,
+//   sendStatus, sentAt, errorMessage, doSenderEmail (from CSV for OEC flow)
+const invoiceState = {
+  csvLoaded: false,
+  invoices: [],           // Array<InvoiceRecord>
+  subjectTemplate: 'Invoice {invoice_number} - {customer_name}',
+  selectedIds: new Set(),
+  reviewingId: null,
+  isProcessing: false,
+  logCollapsed: true,
+};
+
+// ── Send progress state ──
+let sendJobEventSource = null;
+const sendState = {
+  jobId: null,
+  isRunning: false,
+  testMode: false,
+  results: [],
+  sent: 0,
+  skipped: 0,
+  errors: 0,
+  mismatches: 0,
+  missingDocs: 0,
+};
+
+// ── Customer manager state ──
+let custEditingCode = null; // null = creating, string = editing
+let _custDocMode = 'all';        // 'all' or 'specific'
+let _custOrGroups = [];           // e.g. [['bol','pol'], ['pl','do']]

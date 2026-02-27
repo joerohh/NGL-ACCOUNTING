@@ -1,0 +1,17 @@
+# Browser profile data (Playwright/Chromium)
+agent/.tms_browser_profile/
+agent/.qbo_browser_profile/
+
+# Python environment
+agent/venv/
+agent/.venv/
+__pycache__/
+*.pyc
+
+# API keys — NEVER commit these
+.env
+agent/.env
+
+# Windows junk
+Thumbs.db
+desktop.ini

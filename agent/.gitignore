@@ -1,0 +1,6 @@
+.env
+.browser_profile/
+.job_state/
+downloads/
+__pycache__/
+*.pyc

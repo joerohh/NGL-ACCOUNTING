@@ -1,0 +1,746 @@
+'use strict';
+// ══════════════════════════════════════════════════════════
+//  MERGE TOOL — Excel parsing, PDF handling, merge logic
+// ══════════════════════════════════════════════════════════
+
+// ── Merge Mode & Sort Controls ──
+const RUN_BTN_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+
+function setMergeMode(mode) {
+  state.mergeMode = mode;
+  document.querySelectorAll('#mergeModeGroup .merge-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  updateRunButtonLabel();
+}
+
+function setSortOrder(order) {
+  state.sortOrder = order;
+  document.querySelectorAll('#sortOrderGroup .merge-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sort === order);
+  });
+}
+
+function updateRunButtonLabel() {
+  const btn = document.getElementById('runAutoBtn');
+  if (!btn || state.isProcessing) return;
+  const labels = {
+    'per-container': 'Run Auto Merge',
+    'all-in-one':    'Merge All Into One PDF',
+    'invoices-only': 'Merge Invoices Only',
+    'pods-only':     'Merge PODs Only',
+  };
+  btn.innerHTML = `${RUN_BTN_SVG} ${labels[state.mergeMode] || 'Run Auto Merge'}`;
+}
+
+function setProgress(pct, label) {
+  const bar = document.getElementById('progressBar');
+  const lbl = document.getElementById('progressLabel');
+  const con = document.getElementById('progressContainer');
+  if (pct === null) {
+    con.style.display = 'none';
+    return;
+  }
+  con.style.display = 'block';
+  bar.style.width = pct + '%';
+  if (lbl && label !== undefined) lbl.textContent = label;
+}
+
+
+// ── Log Toggle ──
+function toggleLog() {
+  const body  = document.getElementById('statusLogBody');
+  const arrow = document.getElementById('logToggleArrow');
+  state.logCollapsed = !state.logCollapsed;
+  if (state.logCollapsed) {
+    body.classList.add('collapsed');
+    arrow.classList.add('collapsed');
+  } else {
+    body.classList.remove('collapsed');
+    arrow.classList.remove('collapsed');
+    body.style.maxHeight = '250px';
+  }
+}
+
+
+// ── Logging ──
+function addLog(level, message) {
+  const log = document.getElementById('statusLog');
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const div  = document.createElement('div');
+  div.style.color = LOG_COLORS[level] || LOG_COLORS.info;
+  div.innerHTML =
+    `<span style="color:#475569;">${time}</span> ` +
+    `<span style="font-weight:700;">${LOG_PREFIXES[level]}</span> ` +
+    escHtml(message);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  const log = document.getElementById('statusLog');
+  log.innerHTML = '';
+  addLog('info', '// Log cleared');
+}
+
+
+// ── Mode Management ──
+function setMode(mode) {
+  state.mode = mode;
+  const badge = document.getElementById('modeBadge');
+  const dot   = document.getElementById('modeDot');
+  const label = document.getElementById('modeLabel');
+  badge.className = 'mode-badge';
+
+  const idleHint     = document.getElementById('idleHint');
+  const autoActions  = document.getElementById('autoActions');
+  const manualActions= document.getElementById('manualActions');
+  const pdfQueue     = document.getElementById('pdfQueue');
+  const groupsView   = document.getElementById('containerGroupsView');
+
+  if (mode === 'idle') {
+    badge.classList.add('mode-idle');
+    dot.className = 'badge-dot idle-dot';
+    label.textContent = 'Idle';
+    idleHint.style.display = '';
+    autoActions.style.display = 'none';
+    manualActions.style.display = 'none';
+    pdfQueue.style.display = '';
+    groupsView.style.display = 'none';
+  } else if (mode === 'auto') {
+    badge.classList.add('mode-auto');
+    dot.className = 'badge-dot auto-dot';
+    label.textContent = 'Auto Mode';
+    idleHint.style.display = 'none';
+    autoActions.style.display = 'flex';
+    manualActions.style.display = 'none';
+    pdfQueue.style.display = 'none';
+    groupsView.style.display = '';
+  } else if (mode === 'manual') {
+    badge.classList.add('mode-manual');
+    dot.className = 'badge-dot manual-dot';
+    label.textContent = 'Manual Mode';
+    idleHint.style.display = 'none';
+    autoActions.style.display = 'none';
+    manualActions.style.display = '';
+    pdfQueue.style.display = '';
+    groupsView.style.display = 'none';
+  }
+
+  updateQueueCount();
+}
+
+function updateQueueCount() {
+  const el = document.getElementById('queueCount');
+  const n  = state.pdfs.length;
+  el.textContent = n === 0 ? '0 files' : `${n} file${n !== 1 ? 's' : ''}`;
+}
+
+
+// ── Excel Handling ──
+function handleExcelInputChange(input) {
+  if (input.files && input.files[0]) handleExcelFile(input.files[0]);
+}
+
+async function handleExcelFile(file) {
+  addLog('info', `Parsing: ${file.name}`);
+  try {
+    const buf = await readAsArrayBuffer(file);
+    const wb  = XLSX.read(buf, { type: 'array' });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws);
+
+    if (rows.length === 0) {
+      addLog('error', 'Excel file is empty or unreadable');
+      return;
+    }
+
+    const headers = Object.keys(rows[0]);
+
+    // Fuzzy column detection
+    const containerKey = findColumnKey(headers, CONTAINER_ALIASES);
+    const invoiceKey   = findColumnKey(headers, INVOICE_ALIASES);
+
+    if (!containerKey) {
+      addLog('error', 'No "Container Number" column found');
+      addLog('warning', `Found columns: ${headers.join(', ')}`);
+      addLog('info', 'Expected something like "Container Number", "CONT #", "Cont#", "CNTR", etc.');
+      return;
+    }
+
+    addLog('info', `Matched container column: "${containerKey}"`);
+    if (invoiceKey) {
+      addLog('info', `Matched invoice column: "${invoiceKey}"`);
+    } else {
+      addLog('warning', 'No invoice number column found — agent auto-fetch will be limited');
+    }
+
+    // Parse rows — deduplicate by container number
+    const seen = new Set();
+    const parsed = [];
+    for (const row of rows) {
+      const cn = String(row[containerKey] || '').trim();
+      if (!cn || seen.has(cn.toLowerCase())) continue;
+      seen.add(cn.toLowerCase());
+      parsed.push({
+        containerNumber: cn,
+        invoiceNumber: invoiceKey ? String(row[invoiceKey] || '').trim() : '',
+      });
+    }
+
+    if (parsed.length === 0) {
+      addLog('error', 'No valid container numbers found in the spreadsheet');
+      return;
+    }
+
+    state.excelRows = parsed;
+    addLog('success', `Parsed ${parsed.length} container numbers from "${file.name}"`);
+    parsed.slice(0, 5).forEach(r => {
+      const inv = r.invoiceNumber ? ` (Inv: ${r.invoiceNumber})` : '';
+      addLog('info', `  → ${r.containerNumber}${inv}`);
+    });
+    if (parsed.length > 5) addLog('info', `  → ...and ${parsed.length - 5} more`);
+
+    // Update drop zone UI
+    const dz   = document.getElementById('excelDropZone');
+    const drop = document.getElementById('excelDropContent');
+    const loaded = document.getElementById('excelLoadedState');
+    dz.classList.add('has-file');
+    drop.style.display = 'none';
+    loaded.style.display = 'flex';
+    document.getElementById('excelFileName').textContent = file.name;
+    const invCount = parsed.filter(r => r.invoiceNumber).length;
+    document.getElementById('excelFileSub').textContent =
+      `${parsed.length} containers` + (invCount ? ` · ${invCount} invoice numbers` : '');
+
+    setMode('auto');
+    renderContainerGroups();
+    addLog('info', 'Now upload the PDF documents to match against these containers');
+
+  } catch (err) {
+    addLog('error', 'Failed to parse Excel: ' + err.message);
+  }
+}
+
+function removeExcel() {
+  state.excelRows = [];
+  document.getElementById('excelInput').value = '';
+  document.getElementById('excelDropZone').classList.remove('has-file');
+  document.getElementById('excelDropContent').style.display = '';
+  document.getElementById('excelLoadedState').style.display = 'none';
+  document.getElementById('containerGroupsView').innerHTML = '';
+  document.getElementById('failureReport').style.display = 'none';
+  document.getElementById('saveOutputBtn').style.display = 'none';
+  state.mergeResults = [];
+
+  setMode(state.pdfs.length > 0 ? 'manual' : 'idle');
+  addLog('info', 'Excel manifest removed — switched to Manual Mode');
+}
+
+
+// ── PDF Handling ──
+function handlePdfInputChange(input) {
+  if (input.files && input.files.length > 0) {
+    handlePdfFiles(Array.from(input.files));
+    input.value = '';
+  }
+}
+
+function handlePdfFiles(files) {
+  const pdfs    = files.filter(f => /\.pdf$/i.test(f.name));
+  const skipped = files.length - pdfs.length;
+  if (skipped > 0) addLog('warning', `Skipped ${skipped} non-PDF file(s)`);
+  if (pdfs.length === 0) return;
+
+  const newPdfs = pdfs.map(f => ({ id: uid(), name: f.name, size: f.size, file: f }));
+  state.pdfs.push(...newPdfs);
+  addLog('info', `Added ${newPdfs.length} PDF${newPdfs.length !== 1 ? 's' : ''} to queue`);
+
+  if (state.mode !== 'auto') setMode('manual');
+
+  renderPdfQueue();
+  if (state.mode === 'auto') renderContainerGroups();
+  updateQueueCount();
+}
+
+function removePdf(id) {
+  state.pdfs = state.pdfs.filter(p => p.id !== id);
+  renderPdfQueue();
+  if (state.mode === 'auto') renderContainerGroups();
+  updateQueueCount();
+  if (state.pdfs.length === 0 && state.mode === 'manual') setMode('idle');
+}
+
+
+// ── Rendering — PDF Queue (Manual Mode) ──
+const ICON_PDF = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
+const ICON_GRIP = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>`;
+const ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+
+const EMPTY_QUEUE_HTML = `
+  <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:170px; text-align:center; padding:20px;">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" style="margin-bottom:12px;">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+    </svg>
+    <div style="font-size:0.9rem; color:#94a3b8;">No documents in queue</div>
+    <div style="font-size:0.8rem; color:#cbd5e1; margin-top:4px;">Drop PDFs above to get started</div>
+  </div>`;
+
+function renderPdfQueue() {
+  const queue = document.getElementById('pdfQueue');
+
+  if (state.pdfs.length === 0) {
+    queue.innerHTML = EMPTY_QUEUE_HTML;
+    if (sortableInstance) { sortableInstance.destroy(); sortableInstance = null; }
+    return;
+  }
+
+  queue.innerHTML = state.pdfs.map((pdf, i) => `
+    <div class="pdf-card" data-id="${pdf.id}">
+      <span class="drag-handle" title="Drag to reorder">${ICON_GRIP}</span>
+      ${ICON_PDF}
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:0.9rem; font-weight:500; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(pdf.name)}</div>
+        <div style="font-size:0.8rem; color:#94a3b8; margin-top:2px;">${fmtSize(pdf.size)} &nbsp;·&nbsp; Position ${i + 1}</div>
+      </div>
+      <button
+        onclick="removePdf('${pdf.id}')"
+        style="background:none; border:none; cursor:pointer; color:#cbd5e1; flex-shrink:0; padding:5px; border-radius:5px; line-height:0;"
+        onmouseover="this.style.color='#dc2626'; this.style.background='#fef2f2'"
+        onmouseout="this.style.color='#cbd5e1'; this.style.background='none'"
+        title="Remove">${ICON_TRASH}
+      </button>
+    </div>`).join('');
+
+  updateQueueCount();
+  initSortable();
+}
+
+
+// ── Rendering — Container Groups (Auto Mode) ──
+function classifyPdf(name) {
+  const lower = name.toLowerCase();
+  if (/invoice|inv[_\s\-]|billing/i.test(lower)) return 'invoice';
+  if (/pod|proof[_\s\-]?of[_\s\-]?delivery|delivery|bol|bill[_\s\-]?of[_\s\-]?lading/i.test(lower)) return 'pod';
+  return 'other';
+}
+
+function renderContainerGroups() {
+  const view = document.getElementById('containerGroupsView');
+  if (state.excelRows.length === 0) { view.innerHTML = ''; return; }
+
+  view.innerHTML = state.excelRows.map(row => {
+    const matched = state.pdfs.filter(p =>
+      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
+    );
+    const isMatch = matched.length > 0;
+
+    // Classify matched files
+    const invoiceFiles = matched.filter(p => classifyPdf(p.name) === 'invoice');
+    const podFiles     = matched.filter(p => classifyPdf(p.name) === 'pod');
+    const otherFiles   = matched.filter(p => classifyPdf(p.name) === 'other');
+
+    const hasInvoice = invoiceFiles.length > 0;
+    const hasPod     = podFiles.length > 0;
+
+    return `
+      <div class="container-group ${isMatch ? 'matched' : 'unmatched'}">
+        <div class="container-group-header">
+          <span style="font-size:0.95rem; font-weight:700; color:#0f172a; font-family:monospace; letter-spacing:0.02em;">${escHtml(row.containerNumber)}</span>
+          <span style="margin-left:auto; font-size:0.8rem; font-weight:600; color:${isMatch ? '#16a34a' : '#d97706'};">
+            ${isMatch ? `${matched.length} file${matched.length !== 1 ? 's' : ''}` : 'No match'}
+          </span>
+        </div>
+
+        <!-- Invoice checkbox row -->
+        <div class="doc-check-row">
+          <input type="checkbox" ${hasInvoice ? 'checked' : ''} disabled />
+          <span class="doc-check-label">Invoice</span>
+          ${hasInvoice
+            ? invoiceFiles.map(f => `<span class="doc-check-file" title="${escHtml(f.name)}">${escHtml(f.name)}</span>`).join('')
+            : `<span class="doc-check-missing">Not uploaded</span>`
+          }
+        </div>
+
+        <!-- POD checkbox row -->
+        <div class="doc-check-row">
+          <input type="checkbox" ${hasPod ? 'checked' : ''} disabled />
+          <span class="doc-check-label">POD</span>
+          ${hasPod
+            ? podFiles.map(f => `<span class="doc-check-file" title="${escHtml(f.name)}">${escHtml(f.name)}</span>`).join('')
+            : `<span class="doc-check-missing">Not uploaded</span>`
+          }
+        </div>
+
+        ${otherFiles.length > 0 ? otherFiles.map(f => `
+          <div class="doc-check-row">
+            <input type="checkbox" checked disabled />
+            <span class="doc-check-label">Other</span>
+            <span class="doc-check-file" title="${escHtml(f.name)}">${escHtml(f.name)}</span>
+          </div>`).join('') : ''}
+
+        ${!isMatch ? `<div style="font-size:0.8rem; color:#94a3b8; padding:4px 6px; margin-top:2px;">Upload a PDF with "${escHtml(row.containerNumber)}" in the filename</div>` : ''}
+        ${row.invoiceNumber ? `<div style="font-size:0.75rem; color:#94a3b8; padding:2px 6px;">Invoice #: ${escHtml(row.invoiceNumber)}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  updateQueueCount();
+}
+
+
+// ── Sortable ──
+function initSortable() {
+  if (sortableInstance) { sortableInstance.destroy(); sortableInstance = null; }
+  if (state.pdfs.length <= 1) return;
+
+  sortableInstance = new Sortable(document.getElementById('pdfQueue'), {
+    animation: 200,
+    easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    dragClass: 'sortable-drag',
+    handle: '.drag-handle',
+    onEnd(evt) {
+      const moved = state.pdfs.splice(evt.oldIndex, 1)[0];
+      state.pdfs.splice(evt.newIndex, 0, moved);
+      setTimeout(() => renderPdfQueue(), 0);
+    },
+  });
+}
+
+
+// ── PDF Merging (core) ──
+async function mergePdfFiles(pdfs) {
+  const { PDFDocument } = PDFLib;
+  const merged = await PDFDocument.create();
+
+  for (const pdf of pdfs) {
+    try {
+      const buf  = await readAsArrayBuffer(pdf.file);
+      const doc  = await PDFDocument.load(buf, { ignoreEncryption: true });
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    } catch (err) {
+      throw new Error(`"${pdf.name}": ${err.message}`);
+    }
+  }
+
+  return merged.save();
+}
+
+
+// ── Merge Helpers ──
+function getDatePrefix() {
+  const d = new Date();
+  return String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
+}
+
+function getSortedRows() {
+  const rows = [...state.excelRows];
+  if (state.sortOrder === 'container') {
+    rows.sort((a, b) => a.containerNumber.localeCompare(b.containerNumber, undefined, { numeric: true }));
+  } else if (state.sortOrder === 'invoice') {
+    rows.sort((a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || '', undefined, { numeric: true }));
+  }
+  return rows;
+}
+
+function getOrderedMatchedPdfs(matched) {
+  const priority = { invoice: 0, pod: 1, other: 2 };
+  return [...matched].sort((a, b) =>
+    (priority[classifyPdf(a.name)] ?? 2) - (priority[classifyPdf(b.name)] ?? 2)
+  );
+}
+
+const SUBFOLDER_MAP = {
+  'per-container': 'One to One Merge',
+  'all-in-one':    'All Documents Merged',
+  'invoices-only': 'Invoices Only',
+  'pods-only':     'PODs Only',
+};
+
+async function mergePerContainer(rows, failures) {
+  const total = rows.length;
+  const datePrefix = getDatePrefix();
+  const subfolder = SUBFOLDER_MAP['per-container'];
+
+  for (let i = 0; i < total; i++) {
+    const row = rows[i];
+    setProgress(Math.round((i / total) * 100), `Processing ${i + 1} / ${total}: ${row.containerNumber}`);
+    addLog('info', `Searching → ${row.containerNumber}`);
+
+    const matched = state.pdfs.filter(p =>
+      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
+    );
+
+    if (!matched.length) {
+      addLog('warning', `No match for ${row.containerNumber} — skipped`);
+      failures.push({ containerNumber: row.containerNumber, reason: 'No matching PDF filename' });
+      continue;
+    }
+
+    const ordered = getOrderedMatchedPdfs(matched);
+    addLog('info', `  Found: ${ordered.map(m => m.name).join(', ')}`);
+
+    try {
+      const bytes = await mergePdfFiles(ordered);
+      const filename = `${datePrefix}_${row.containerNumber}_merged.pdf`;
+      state.mergeResults.push({ containerNumber: row.containerNumber, bytes, filename, subfolder });
+      addLog('success', `  → ${filename} (${fmtSize(bytes.length)})`);
+    } catch (err) {
+      addLog('error', `Failed to merge ${row.containerNumber}: ${err.message}`);
+      failures.push({ containerNumber: row.containerNumber, reason: err.message });
+    }
+  }
+}
+
+async function mergeAllInOne(rows, failures) {
+  const allPdfs = [];
+  const total = rows.length;
+  const subfolder = SUBFOLDER_MAP['all-in-one'];
+
+  for (let i = 0; i < total; i++) {
+    const row = rows[i];
+    setProgress(Math.round((i / total) * 80), `Collecting ${i + 1} / ${total}: ${row.containerNumber}`);
+
+    const matched = state.pdfs.filter(p =>
+      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
+    );
+
+    if (!matched.length) {
+      addLog('warning', `No match for ${row.containerNumber} — skipped`);
+      failures.push({ containerNumber: row.containerNumber, reason: 'No matching PDF filename' });
+      continue;
+    }
+
+    const ordered = getOrderedMatchedPdfs(matched);
+    allPdfs.push(...ordered);
+    addLog('info', `  ${row.containerNumber}: ${ordered.map(m => m.name).join(', ')}`);
+  }
+
+  if (!allPdfs.length) { addLog('error', 'No PDFs to merge'); return; }
+
+  setProgress(85, `Merging ${allPdfs.length} PDFs into one document…`);
+  addLog('info', `Merging ${allPdfs.length} total PDFs into one document`);
+
+  try {
+    const bytes = await mergePdfFiles(allPdfs);
+    const containerCount = state.excelRows.length;
+    const filename = `${getDatePrefix()}_${containerCount}_merged.pdf`;
+    state.mergeResults.push({ containerNumber: 'ALL', bytes, filename, subfolder });
+    addLog('success', `→ ${filename} (${fmtSize(bytes.length)})`);
+  } catch (err) {
+    addLog('error', 'Merge failed: ' + err.message);
+  }
+}
+
+async function mergeByType(rows, failures, type) {
+  const typePdfs = [];
+  const total = rows.length;
+  const typeLabel = type === 'invoice' ? 'Invoices' : 'PODs';
+  const subfolder = type === 'invoice' ? SUBFOLDER_MAP['invoices-only'] : SUBFOLDER_MAP['pods-only'];
+
+  for (let i = 0; i < total; i++) {
+    const row = rows[i];
+    setProgress(Math.round((i / total) * 80), `Scanning ${i + 1} / ${total}: ${row.containerNumber}`);
+
+    const matched = state.pdfs.filter(p =>
+      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
+    );
+    const typeFiles = matched.filter(p => classifyPdf(p.name) === type);
+
+    if (!typeFiles.length) {
+      addLog('warning', `No ${typeLabel} for ${row.containerNumber}`);
+      failures.push({ containerNumber: row.containerNumber, reason: `No ${typeLabel} found` });
+      continue;
+    }
+
+    typePdfs.push(...typeFiles);
+    addLog('info', `  ${row.containerNumber}: ${typeFiles.map(m => m.name).join(', ')}`);
+  }
+
+  if (!typePdfs.length) { addLog('error', `No ${typeLabel} PDFs found`); return; }
+
+  setProgress(85, `Merging ${typePdfs.length} ${typeLabel} PDFs…`);
+  addLog('info', `Merging ${typePdfs.length} ${typeLabel} PDFs into one document`);
+
+  try {
+    const bytes = await mergePdfFiles(typePdfs);
+    const containerCount = state.excelRows.length;
+    const filename = `${getDatePrefix()}_${typeLabel}_${containerCount}_merged.pdf`;
+    state.mergeResults.push({ containerNumber: type.toUpperCase() + '_ONLY', bytes, filename, subfolder });
+    addLog('success', `→ ${filename} (${fmtSize(bytes.length)})`);
+  } catch (err) {
+    addLog('error', `${typeLabel} merge failed: ` + err.message);
+  }
+}
+
+
+// ── Auto Merge ──
+async function runAutoMerge() {
+  if (state.isProcessing) return;
+  if (!state.excelRows.length) { addLog('error', 'No Excel manifest loaded'); return; }
+  if (!state.pdfs.length)      { addLog('error', 'No PDFs uploaded'); return; }
+
+  state.isProcessing = true;
+  state.mergeResults = [];
+
+  const btn = document.getElementById('runAutoBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Processing…`;
+
+  document.getElementById('failureReport').style.display = 'none';
+  document.getElementById('saveOutputBtn').style.display = 'none';
+  setProgress(0, 'Starting…');
+
+  const modeLabel = { 'per-container': 'Per Container', 'all-in-one': 'All in One', 'invoices-only': 'Invoices Only', 'pods-only': 'PODs Only' };
+  const sortLabel = { 'excel': 'Excel order', 'container': 'Container #', 'invoice': 'Invoice #' };
+  addLog('info', `──── Auto Merge started (${modeLabel[state.mergeMode]}, sort: ${sortLabel[state.sortOrder]}) ────`);
+
+  const rows = getSortedRows();
+  const failures = [];
+
+  if (state.mergeMode === 'per-container') {
+    await mergePerContainer(rows, failures);
+  } else if (state.mergeMode === 'all-in-one') {
+    await mergeAllInOne(rows, failures);
+  } else if (state.mergeMode === 'invoices-only') {
+    await mergeByType(rows, failures, 'invoice');
+  } else if (state.mergeMode === 'pods-only') {
+    await mergeByType(rows, failures, 'pod');
+  }
+
+  setProgress(100, 'Done');
+  setTimeout(() => setProgress(null), 1500);
+
+  addLog('info', '──────────────────────────');
+  addLog('success', `Complete: ${state.mergeResults.length} merged · ${failures.length} failed`);
+
+  if (failures.length > 0) {
+    addLog('warning', `Failures: ${failures.map(f => f.containerNumber).join(', ')}`);
+    renderFailureReport(failures);
+  }
+
+  if (state.mergeResults.length > 0) {
+    document.getElementById('saveOutputBtn').style.display = 'flex';
+    addLog('info', state.agentConnected
+      ? 'Click "Save to Folder" to save merged files'
+      : 'Start the agent server, then click "Save to Folder"');
+  }
+
+  btn.disabled = false;
+  updateRunButtonLabel();
+  state.isProcessing = false;
+}
+
+function renderFailureReport(failures) {
+  const rpt = document.getElementById('failureReport');
+  const lst = document.getElementById('failureList');
+  lst.innerHTML = failures.map(f => `
+    <div class="failure-row">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <span style="font-family:monospace; color:#dc2626; font-weight:600;">${escHtml(f.containerNumber)}</span>
+      <span style="color:#94a3b8; font-size:0.8rem; margin-left:auto;">${escHtml(f.reason)}</span>
+    </div>`).join('');
+  rpt.style.display = 'block';
+}
+
+
+// ── Manual Merge ──
+async function runManualMerge() {
+  if (state.isProcessing) return;
+  if (!state.pdfs.length) { addLog('error', 'No PDFs in queue'); return; }
+
+  state.isProcessing = true;
+
+  const btn = document.getElementById('quickMergeBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Merging…`;
+
+  setProgress(30, `Merging ${state.pdfs.length} PDFs…`);
+  addLog('info', `Manual merge: ${state.pdfs.length} file${state.pdfs.length !== 1 ? 's' : ''} in order:`);
+  state.pdfs.forEach((p, i) => addLog('info', `  ${i + 1}. ${p.name}`));
+
+  try {
+    const bytes = await mergePdfFiles(state.pdfs);
+    setProgress(100, 'Done!');
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    triggerDownload(blob, 'NGL_Merged.pdf');
+    addLog('success', `Downloaded: NGL_Merged.pdf (${fmtSize(bytes.length)})`);
+  } catch (err) {
+    addLog('error', 'Merge failed: ' + err.message);
+  }
+
+  setTimeout(() => setProgress(null), 1500);
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg> Quick Merge &amp; Download`;
+  state.isProcessing = false;
+}
+
+
+// ── Save Merged Output ──
+async function saveMergedOutput() {
+  if (!state.mergeResults.length) {
+    addLog('error', 'No merged results yet. Run Auto Merge first.');
+    return;
+  }
+
+  if (!state.agentConnected) {
+    addLog('error', 'Agent server is not running. Start the agent server first, then try again.');
+    return;
+  }
+
+  addLog('info', `Saving ${state.mergeResults.length} file${state.mergeResults.length !== 1 ? 's' : ''} to output folder…`);
+  setProgress(50, 'Saving to folder…');
+
+  const result = await agentBridge.saveToFolder(state.mergeResults);
+  if (result && !result.error) {
+    setProgress(100, 'Saved!');
+    addLog('success', `Saved ${result.saved}/${result.total} files → ${result.outputDir}`);
+    addLog('info', 'Output folder opened in Explorer');
+  } else {
+    addLog('error', 'Save failed: ' + (result?.error || 'Unknown error'));
+  }
+
+  setTimeout(() => setProgress(null), 1500);
+}
+
+
+// ── Clear All ──
+function clearAll() {
+  state.pdfs         = [];
+  state.excelRows    = [];
+  state.mergeResults = [];
+  state.isProcessing = false;
+  state.mergeMode    = 'per-container';
+  state.sortOrder    = 'excel';
+
+  document.getElementById('pdfInput').value   = '';
+  document.getElementById('excelInput').value = '';
+
+  // Reset excel zone
+  document.getElementById('excelDropZone').classList.remove('has-file');
+  document.getElementById('excelDropContent').style.display    = '';
+  document.getElementById('excelLoadedState').style.display    = 'none';
+
+  // Reset queue
+  document.getElementById('pdfQueue').innerHTML          = EMPTY_QUEUE_HTML;
+  document.getElementById('containerGroupsView').innerHTML = '';
+  document.getElementById('failureReport').style.display  = 'none';
+  document.getElementById('saveOutputBtn').style.display  = 'none';
+
+  // Reset merge options UI
+  document.querySelectorAll('#mergeModeGroup .merge-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === 'per-container');
+  });
+  document.querySelectorAll('#sortOrderGroup .merge-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sort === 'excel');
+  });
+
+  if (sortableInstance) { sortableInstance.destroy(); sortableInstance = null; }
+
+  setProgress(null);
+  setMode('idle');
+  updateRunButtonLabel();
+  addLog('info', 'All files cleared — ready for new job');
+}

@@ -1,0 +1,10 @@
+Invoice Send Errors — 2/26/2026
+Reason: Agent failed to locate invoice in QBO (search results hadn't loaded yet)
+=================================================================================
+
+Invoice          Container       Customer                              Amount
+LM26020580F      MSKU0624620     IDCLOG01 - IDC LOGISTICS INTERNATIONAL    685
+LM26020581F      FXLU8941088     LIVING14 - LIVINGSTONE LOGISTICS INC      810
+LE26020038F      SMCU2014745     MKMETA01 - MK TRADING LLC                 650
+LM26020587N      BEAU6284597     TOTALC01 - TOTAL CARGO EXPRESS LOGISTICS  972.1
+PE26020218F      ECHU5144780     YMKGLO01 - YMK GLOBAL INC                 989

@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NGL Transportation Accounting</title>
+
+  <!-- ── CDN Dependencies ── -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════ LAYOUT ═══════════════════════════════════════════ -->
+<div class="app-layout">
+
+<!-- ── Left Sidebar ── -->
+<nav class="sidebar">
+  <!-- Logo -->
+  <div class="sidebar-logo" onclick="switchTool('home')">
+    <img id="headerLogo" src="assets/images/ChatGPT Image Feb 23, 2026, 11_11_54 AM.png" alt="NGL Transportation Logo"
+         onerror="this.style.display='none'; document.getElementById('logoFallback').style.display='flex';" />
+    <div id="logoFallback" style="width:42px; height:42px; background:#0f172a; border-radius:10px; display:none; align-items:center; justify-content:center; margin:0 auto;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+      </svg>
+    </div>
+    <div class="logo-title">NGL Transportation</div>
+    <div class="logo-subtitle" id="headerSubtitle">Accounting Suite</div>
+  </div>
+
+  <!-- Navigation Items -->
+  <div class="sidebar-nav">
+    <div class="sidebar-section-label">Workspace</div>
+
+    <div class="sidebar-nav-item" id="navMerge" onclick="switchTool('merge')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+      </svg>
+      Merging Tool
+    </div>
+
+    <div class="sidebar-nav-item" id="navInvoiceSender" onclick="switchTool('invoice-sender')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+      </svg>
+      Invoice Sender
+    </div>
+
+    <div class="sidebar-nav-item" id="navCustomers" onclick="switchTool('customers')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      Customers
+    </div>
+  </div>
+
+  <!-- Sidebar Bottom -->
+  <div class="sidebar-bottom">
+    <div class="sidebar-bottom-item" onclick="alert('Settings coming soon')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      Settings
+    </div>
+    <div class="sidebar-bottom-item" onclick="alert('Documentation and help resources coming soon')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      Help
+    </div>
+  </div>
+
+  <!-- Sidebar Footer -->
+  <div class="sidebar-footer">
+    <div id="mergeToolControls" style="display:none; flex-direction:column; gap:6px; align-items:center;">
+      <span id="modeBadge" class="mode-badge mode-idle" style="font-size:0.68rem;">
+        <span id="modeDot" class="badge-dot idle-dot"></span>
+        <span id="modeLabel">Idle</span>
+      </span>
+      <button class="btn btn-secondary" style="padding:5px 10px; font-size:0.72rem; width:100%; justify-content:center;" onclick="clearAll()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+        Clear All
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main Content Area ── -->
+<div class="main-content">
+
+<!-- ═══════════════════════════════════════════ HOME VIEW ═══════════════════════════════════════════ -->
+<div id="homeView">
+  <div class="home-page">
+
+    <!-- Hero Header -->
+    <div class="home-hero">
+      <div class="home-hero-text">
+        <h1>NGL Accounting Suite</h1>
+        <p>Internal logistics accounting tools &mdash; merge documents, send invoices, manage customers.</p>
+      </div>
+      <button class="btn btn-primary" onclick="switchTool('invoice-sender')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+        Start sending invoices
+      </button>
+    </div>
+
+    <div class="home-body">
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <button class="quick-action-btn" onclick="switchTool('merge')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+          New merge
+        </button>
+        <button class="quick-action-btn" onclick="switchTool('invoice-sender')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Send invoices
+        </button>
+        <button class="quick-action-btn" onclick="switchTool('customers'); setTimeout(()=>custOpenModal(),200);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add customer
+        </button>
+      </div>
+
+      <!-- Metrics Strip -->
+      <div class="metrics-strip" id="homeMetrics">
+        <div class="metric-card">
+          <div class="metric-label">Pending Invoices</div>
+          <div class="metric-value" id="metricPending">--</div>
+          <div class="metric-sub">Loaded in sender</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">PDFs Merged Today</div>
+          <div class="metric-value" id="metricMerged">0</div>
+          <div class="metric-sub">Containers processed</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Emails Sent</div>
+          <div class="metric-value" id="metricSent">--</div>
+          <div class="metric-sub">Via QBO today</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Customers</div>
+          <div class="metric-value" id="metricCustomers">--</div>
+          <div class="metric-sub">Active profiles</div>
+        </div>
+      </div>
+
+      <!-- Agent Connections -->
+      <div class="home-section-label">Agent Connections</div>
+      <div class="agent-connections" id="homeAgentConnections">
+        <!-- QBO -->
+        <div class="connection-card" id="homeQboCard">
+          <div class="connection-icon" style="background:#fff7ed;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">QuickBooks Online</div>
+            <div class="connection-status" id="homeQboStatus">Checking...</div>
+          </div>
+          <button class="connection-btn" id="homeQboBtn" onclick="agentOpenQBOLogin()" style="display:none;">
+            Log in
+          </button>
+          <div class="connection-dot" id="homeQboDot"></div>
+        </div>
+
+        <!-- TMS -->
+        <div class="connection-card" id="homeTmsCard">
+          <div class="connection-icon" style="background:#eff6ff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+            </svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">TMS Portal</div>
+            <div class="connection-status" id="homeTmsStatus">Checking...</div>
+          </div>
+          <button class="connection-btn" id="homeTmsBtn" onclick="agentOpenTMSLogin()" style="display:none;">
+            Log in
+          </button>
+          <div class="connection-dot" id="homeTmsDot"></div>
+        </div>
+
+        <!-- Classifier -->
+        <div class="connection-card" id="homeClsCard">
+          <div class="connection-icon" style="background:#f0fdf4;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a4 4 0 0 1 4 4c0 1.95-2 3-2 8h-4c0-5-2-6.05-2-8a4 4 0 0 1 4-4z"/><line x1="10" y1="17" x2="14" y2="17"/><line x1="10" y1="20" x2="14" y2="20"/>
+            </svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">AI Classifier</div>
+            <div class="connection-status" id="homeClsStatus">Checking...</div>
+          </div>
+          <div class="connection-dot" id="homeClsDot"></div>
+        </div>
+
+        <!-- Agent Server -->
+        <div class="connection-card" id="homeAgentCard">
+          <div class="connection-icon" style="background:#faf5ff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
+          <div class="connection-info">
+            <div class="connection-name">Agent Server</div>
+            <div class="connection-status" id="homeAgentStatus">Checking...</div>
+          </div>
+          <div class="connection-dot" id="homeAgentDot"></div>
+        </div>
+      </div>
+
+      <!-- Tool Cards -->
+      <div class="home-section-label">Tools</div>
+      <div class="tool-cards">
+        <div class="tool-card">
+          <div class="tool-card-icon" style="background:#fff7ed;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+            </svg>
+          </div>
+          <h3>Merging Tool</h3>
+          <p>Combine invoices and PODs into organized PDF packages.</p>
+          <ul class="tool-card-features">
+            <li>Bulk merge by container number via Excel</li>
+            <li>Manual drag-and-drop PDF ordering</li>
+            <li>Auto-match filenames to containers</li>
+          </ul>
+          <button class="tool-card-open" onclick="switchTool('merge')">Open tool &rarr;</button>
+        </div>
+        <div class="tool-card">
+          <div class="tool-card-icon" style="background:#eff6ff;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+            </svg>
+          </div>
+          <h3>Invoice Sender</h3>
+          <p>Send invoices through QBO with customer matching.</p>
+          <ul class="tool-card-features">
+            <li>Import from TMS Excel export</li>
+            <li>Auto-fill emails from customer profiles</li>
+            <li>Verify containers and amounts in QBO</li>
+          </ul>
+          <button class="tool-card-open" onclick="switchTool('invoice-sender')">Open tool &rarr;</button>
+        </div>
+        <div class="tool-card">
+          <div class="tool-card-icon" style="background:#f0fdf4;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <h3>Customers</h3>
+          <p>Manage profiles, email preferences, and document rules.</p>
+          <ul class="tool-card-features">
+            <li>Set TO, CC, BCC emails per customer</li>
+            <li>Configure required attachments (POD, BOL)</li>
+            <li>Bulk import/export from Excel or JSON</li>
+          </ul>
+          <button class="tool-card-open" onclick="switchTool('customers')">Open tool &rarr;</button>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="home-section-label">Recent Activity</div>
+      <div class="activity-panel" id="homeActivityPanel">
+        <div class="activity-row">
+          <div class="activity-icon" style="background:#f0fdf4;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="activity-text">Merged 12 PDFs for container <strong>CMAU6645700</strong></div>
+          <div class="activity-time">2 hours ago</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon" style="background:#eff6ff;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div class="activity-text">Sent invoice <strong>INV-10492</strong> to ACME Logistics</div>
+          <div class="activity-time">3 hours ago</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon" style="background:#fff7ed;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div class="activity-text">Added customer profile <strong>WEST COAST DRAY</strong></div>
+          <div class="activity-time">Yesterday</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon" style="background:#f0fdf4;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="activity-text">Batch sent <strong>24 invoices</strong> via QBO</div>
+          <div class="activity-time">Yesterday</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon" style="background:#eff6ff;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+          </div>
+          <div class="activity-text">Merged invoices + PODs for <strong>8 containers</strong></div>
+          <div class="activity-time">2 days ago</div>
+        </div>
+      </div>
+
+    </div><!-- /home-body -->
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ CUSTOMER MANAGEMENT VIEW ═══════════════════════════════════════════ -->
+<div id="customerView" style="display:none;">
+  <div class="tool-header-bar">
+    <div class="tool-header-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      Customer Management
+    </div>
+    <div class="tool-switcher">
+      <button class="tool-switcher-btn" onclick="toggleToolSwitcher(this)">
+        Switch Tool
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="tool-switcher-menu" id="toolSwitcherCustomers">
+        <div class="tool-switcher-item" onclick="switchTool('merge')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+          Merging Tool
+        </div>
+        <div class="tool-switcher-item" onclick="switchTool('invoice-sender')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Invoice Sender
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="max-width:1280px; margin:0 auto; padding:24px 24px 40px;">
+
+    <!-- Toolbar -->
+    <div class="cust-toolbar">
+      <input type="text" class="search-input" id="custSearchInput" placeholder="Search customers by code or name..." oninput="custRenderTable()">
+      <select id="custActiveFilter" onchange="custRenderTable()" style="padding:9px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; color:#475569; cursor:pointer;">
+        <option value="active">Active Only</option>
+        <option value="all">All Customers</option>
+      </select>
+      <button class="btn btn-primary" onclick="custOpenModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Customer
+      </button>
+      <button class="btn btn-secondary" onclick="custOpenImportModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import
+      </button>
+      <button class="btn btn-secondary" onclick="custExport()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+    </div>
+
+    <!-- Customer Count -->
+    <div id="custCount" style="font-size:0.82rem; color:#64748b; margin-bottom:12px;"></div>
+
+    <!-- Customer Table -->
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table class="cust-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Emails</th>
+              <th>Required Docs</th>
+              <th>Notes</th>
+              <th>Status</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="custTableBody"></tbody>
+        </table>
+      </div>
+      <div id="custEmptyState" class="cust-empty" style="display:none;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+        </svg>
+        <div style="font-size:0.95rem; font-weight:600; margin-bottom:4px;">No customers yet</div>
+        <div>Add customers manually or use Import to bulk-load from JSON/CSV.</div>
+        <div style="margin-top:6px; font-size:0.8rem; color:#cbd5e1;">Requires agent server running on localhost:8787</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Customer Add/Edit Modal -->
+<div class="modal-overlay" id="custModal">
+  <div class="modal-box" style="width:650px;">
+    <div class="modal-header">
+      <h2 id="custModalTitle">Add Customer</h2>
+      <button onclick="custCloseModal()" style="background:none; border:none; cursor:pointer; color:#94a3b8; font-size:1.2rem;">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div>
+          <label class="modal-field-label">Customer Code *</label>
+          <input type="text" class="modal-input" id="custCodeInput" placeholder="e.g. HTNSAM01" style="text-transform:uppercase;">
+        </div>
+        <div>
+          <label class="modal-field-label">Customer Name *</label>
+          <input type="text" class="modal-input" id="custNameInput" placeholder="e.g. HTNS AMERICA INC.">
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label class="modal-field-label">Email Addresses (press Enter to add)</label>
+        <div class="tag-input-wrap" id="custEmailTags" onclick="this.querySelector('input').focus()">
+          <input type="email" placeholder="Type email and press Enter..." onkeydown="custHandleTagKey(event, 'email')" onblur="custFlushTagInput('custEmailTags')">
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label class="modal-field-label">Additional CC Emails (press Enter to add)</label>
+        <div class="tag-input-wrap" id="custCcTags" onclick="this.querySelector('input').focus()">
+          <input type="email" placeholder="Extra CC (ar@ngltrans.net is always included)..." onkeydown="custHandleTagKey(event, 'cc')" onblur="custFlushTagInput('custCcTags')">
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label class="modal-field-label">BCC Emails (press Enter to add)</label>
+        <div class="tag-input-wrap" id="custBccTags" onclick="this.querySelector('input').focus()">
+          <input type="email" placeholder="Optional BCC recipients..." onkeydown="custHandleTagKey(event, 'bcc')" onblur="custFlushTagInput('custBccTags')">
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label class="modal-field-label">Send Method</label>
+        <select class="modal-input" id="custSendMethod" onchange="custSendMethodChanged()">
+          <option value="email">Standard QBO Email</option>
+          <option value="qbo_invoice_only_then_pod_email">QBO Invoice Only + POD Email</option>
+          <option value="portal_upload">Portal Upload</option>
+        </select>
+        <div style="font-size:0.73rem; color:#94a3b8; margin-top:4px;" id="custSendMethodHint">
+          Send all attachments via QuickBooks Online email.
+        </div>
+      </div>
+
+      <!-- OEC Flow: POD Email Settings (hidden by default) -->
+      <div id="custPodEmailSection" style="display:none; margin-bottom:16px; padding:12px 14px; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px;">
+        <div style="font-size:0.82rem; font-weight:600; color:#9a3412; margin-bottom:10px;">POD Email Settings</div>
+
+        <div style="margin-bottom:10px;">
+          <label class="modal-field-label">POD Email To (press Enter to add)</label>
+          <div class="tag-input-wrap" id="custPodEmailToTags" onclick="this.querySelector('input').focus()">
+            <input type="email" placeholder="e.g. pod.sw@oecgroup.com" onkeydown="custHandleTagKey(event, 'podEmailTo')" onblur="custFlushTagInput('custPodEmailToTags')">
+          </div>
+          <div style="font-size:0.7rem; color:#94a3b8; margin-top:3px;">Static recipients for every POD email. DO sender email is added automatically from CSV.</div>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label class="modal-field-label">POD Email CC (press Enter to add)</label>
+          <div class="tag-input-wrap" id="custPodEmailCcTags" onclick="this.querySelector('input').focus()">
+            <input type="email" placeholder="e.g. ar@ngltrans.net" onkeydown="custHandleTagKey(event, 'podEmailCc')" onblur="custFlushTagInput('custPodEmailCcTags')">
+          </div>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label class="modal-field-label">POD Email Subject</label>
+          <input class="modal-input" id="custPodEmailSubject" type="text" placeholder="POD — {container_number} — {customer_name}" value="POD — {container_number} — {customer_name}">
+          <div style="font-size:0.7rem; color:#94a3b8; margin-top:3px;">Tokens: {container_number}, {invoice_number}, {customer_name}</div>
+        </div>
+
+        <div>
+          <label class="modal-field-label">POD Email Body</label>
+          <textarea class="modal-input" id="custPodEmailBody" rows="3" placeholder="Please find the attached Proof of Delivery...">Please find the attached Proof of Delivery for container {container_number}.</textarea>
+        </div>
+      </div>
+
+      <!-- Portal Upload Settings (hidden by default) -->
+      <div id="custPortalSection" style="display:none; margin-bottom:16px; padding:12px 14px; background:#fefce8; border:1px solid #fde68a; border-radius:8px;">
+        <div style="font-size:0.82rem; font-weight:600; color:#854d0e; margin-bottom:10px;">Portal Upload Settings</div>
+
+        <div style="margin-bottom:10px;">
+          <label class="modal-field-label">Portal URL</label>
+          <input class="modal-input" id="custPortalUrl" type="text" placeholder="https://sso.tranzact.com/...">
+        </div>
+
+        <div>
+          <label class="modal-field-label">Portal Client Name</label>
+          <input class="modal-input" id="custPortalClient" type="text" placeholder="e.g. TRUE VALUE RETAIL SUPPORT CENTER (TRV)">
+          <div style="font-size:0.7rem; color:#94a3b8; margin-top:3px;">The agent will select this client in the portal dropdown.</div>
+        </div>
+      </div>
+
+      <!-- Required Documents — only for standard QBO email -->
+      <div id="custDocRulesSection" style="margin-bottom:16px;">
+        <label class="modal-field-label">Required Documents</label>
+        <!-- Toggle: All vs Specific -->
+        <div style="display:flex; gap:0; margin-bottom:10px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
+          <button type="button" id="custDocModeAll" class="doc-mode-btn doc-mode-active" onclick="custSetDocMode('all')"
+                  style="flex:1; padding:8px 12px; font-size:0.82rem; border:none; cursor:pointer; transition:all 0.2s;">
+            Send All Attachments
+          </button>
+          <button type="button" id="custDocModeSpecific" class="doc-mode-btn" onclick="custSetDocMode('specific')"
+                  style="flex:1; padding:8px 12px; font-size:0.82rem; border:none; border-left:1px solid #e2e8f0; cursor:pointer; transition:all 0.2s;">
+            Require Specific Docs
+          </button>
+        </div>
+        <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:8px;" id="custDocModeHint">
+          All attachments on the invoice will be included when sending.
+        </div>
+        <!-- Specific docs panel (hidden by default) -->
+        <div id="custDocSpecificPanel" style="display:none;">
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
+            <label class="doc-check-label"><input type="checkbox" value="invoice" onchange="custDocCheckChanged()"> Invoice</label>
+            <label class="doc-check-label"><input type="checkbox" value="pod" onchange="custDocCheckChanged()"> POD</label>
+            <label class="doc-check-label"><input type="checkbox" value="pol" onchange="custDocCheckChanged()"> POL</label>
+            <label class="doc-check-label"><input type="checkbox" value="bol" onchange="custDocCheckChanged()"> BOL</label>
+            <label class="doc-check-label"><input type="checkbox" value="pl" onchange="custDocCheckChanged()"> PL</label>
+            <label class="doc-check-label"><input type="checkbox" value="do" onchange="custDocCheckChanged()"> DO</label>
+          </div>
+          <!-- OR-group builder -->
+          <div id="custOrGroupSection" style="display:none; border-top:1px solid #e2e8f0; padding-top:8px;">
+            <div style="font-size:0.78rem; font-weight:600; color:#475569; margin-bottom:6px;">Either / Or Groups</div>
+            <div id="custOrGroupList" style="margin-bottom:6px;"></div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <select id="custOrLeft" class="modal-input" style="flex:1; padding:4px 8px; font-size:0.78rem;"></select>
+              <span style="font-size:0.78rem; color:#94a3b8; font-weight:600;">OR</span>
+              <select id="custOrRight" class="modal-input" style="flex:1; padding:4px 8px; font-size:0.78rem;"></select>
+              <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem; white-space:nowrap;" onclick="custAddOrGroup()">Link</button>
+            </div>
+            <div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">
+              Link two docs as "either/or" — the invoice will pass if <em>at least one</em> is attached.
+            </div>
+          </div>
+          <!-- Rules summary -->
+          <div id="custDocRuleSummary" style="margin-top:8px; padding:8px 10px; background:#f8fafc; border-radius:6px; font-size:0.78rem; color:#475569; display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Attachment info for OEC flow (hidden by default) -->
+      <div id="custDocInfoOec" style="display:none; margin-bottom:16px; padding:12px 14px; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px;">
+        <label class="modal-field-label" style="margin-bottom:6px;">Attachments Handled Automatically</label>
+        <div style="font-size:0.82rem; color:#78350f; line-height:1.5;">
+          <div style="margin-bottom:4px;"><strong>Invoice</strong> — sent via QBO email (invoice page only, no other docs)</div>
+          <div><strong>POD</strong> — sent separately via Gmail to the POD recipients above</div>
+        </div>
+        <div style="font-size:0.72rem; color:#9a3412; margin-top:8px;">Both invoice and POD must be attached in QBO for this flow to work.</div>
+      </div>
+
+      <!-- Attachment info for Portal flow (hidden by default) -->
+      <div id="custDocInfoPortal" style="display:none; margin-bottom:16px; padding:12px 14px; background:#fefce8; border:1px solid #fde68a; border-radius:8px;">
+        <label class="modal-field-label" style="margin-bottom:6px;">Attachments Handled Automatically</label>
+        <div style="font-size:0.82rem; color:#713f12; line-height:1.5;">
+          <div style="margin-bottom:4px;"><strong>Invoice + POD</strong> — merged into one PDF and uploaded to the portal</div>
+        </div>
+        <div style="font-size:0.72rem; color:#854d0e; margin-top:8px;">Both invoice and POD must be attached in QBO for this flow to work.</div>
+      </div>
+
+      <div>
+        <label class="modal-field-label">Notes</label>
+        <textarea class="modal-input" id="custNotesInput" rows="2" placeholder="Optional notes about this customer..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="custCloseModal()">Cancel</button>
+      <button class="btn btn-primary" id="custSaveBtn" onclick="custSave()">Save Customer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Customer Import Modal -->
+<div class="modal-overlay" id="custImportModal">
+  <div class="modal-box" style="width:550px;">
+    <div class="modal-header">
+      <h2>Import Customers</h2>
+      <button onclick="custCloseImportModal()" style="background:none; border:none; cursor:pointer; color:#94a3b8; font-size:1.2rem;">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.85rem; color:#64748b; margin:0 0 16px;">
+        Upload an <strong>Excel</strong>, <strong>CSV</strong>, or <strong>JSON</strong> file with customer data.
+        Required columns: <code>Code</code>, <code>Name</code>. Optional: <code>Email</code>, <code>CC</code>, <code>BCC</code>,
+        <code>Required Docs</code>, <code>Send Method</code> (email/portal), <code>Notes</code>.
+        Emails and docs can be comma-separated in one cell.
+      </p>
+      <div class="drop-zone" id="custImportDrop" onclick="document.getElementById('custImportFile').click()">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" style="margin-bottom:8px;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <div style="font-weight:600; color:#475569;">Drop Excel, CSV, or JSON file here</div>
+        <div style="font-size:0.8rem; color:#94a3b8; margin-top:4px;">Accepts .xlsx, .xls, .csv, .json</div>
+        <input type="file" id="custImportFile" accept=".json,.xlsx,.xls,.csv" style="display:none;" onchange="custHandleImportFile(event)">
+      </div>
+      <div id="custImportStatus" style="margin-top:12px; font-size:0.85rem;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="custCloseImportModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ MERGE TOOL VIEW ═══════════════════════════════════════════ -->
+<div id="mergeToolView" style="display:none;">
+  <div class="tool-header-bar">
+    <div class="tool-header-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+      </svg>
+      Merging Tool
+    </div>
+    <div class="tool-header-right">
+    <button class="agent-header-btn" id="agentBtnMerge" onclick="agentHeaderBtnClick()" title="Agent Server Status">
+      <span class="agent-hdr-dot offline" id="agentDotMerge"></span>
+      <span id="agentTextMerge">Agent Offline</span>
+    </button>
+    <div class="tool-switcher">
+      <button class="tool-switcher-btn" onclick="toggleToolSwitcher(this)">
+        Switch Tool
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="tool-switcher-menu" id="toolSwitcherMerge">
+        <div class="tool-switcher-item" onclick="switchTool('invoice-sender')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Invoice Sender
+        </div>
+        <div class="tool-switcher-item" onclick="switchTool('customers')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Customers
+        </div>
+      </div>
+    </div>
+    </div><!-- /tool-header-right -->
+  </div>
+
+<!-- Hero Banner -->
+<div id="heroBanner" style="position:relative; max-width:1280px; margin:0 auto; overflow:hidden;">
+  <img id="heroTruck" src="assets/images/ngl truck.png" alt="NGL Transportation Truck"
+       style="width:100%; max-height:180px; object-fit:cover; display:block; opacity:0.15;"
+       onerror="document.getElementById('heroBanner').style.display='none';" />
+  <div style="position:absolute; inset:0; background:linear-gradient(to bottom, transparent 20%, #f8fafc 100%);"></div>
+</div>
+
+<!-- Main -->
+<main style="max-width:1280px; margin:0 auto; padding:24px 24px 40px;">
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;" id="mainGrid">
+
+    <!-- ═══════════════ LEFT PANEL ═══════════════ -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <!-- ── Step 1: Excel Drop Zone ── -->
+      <div class="panel-card">
+        <div class="section-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          Step 1 — Excel Manifest <span style="color:#94a3b8; font-weight:400; text-transform:none; letter-spacing:0;">(Optional — enables Auto Mode)</span>
+        </div>
+
+        <div id="excelDropZone" class="drop-zone" onclick="document.getElementById('excelInput').click()">
+          <div id="excelDropContent">
+            <div style="display:flex; justify-content:center; margin-bottom:12px;">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+            </div>
+            <div style="font-size:0.95rem; font-weight:600; color:#334155;">Drop Excel Manifest</div>
+            <div style="font-size:0.85rem; color:#64748b; margin-top:4px;">Needs a <strong style="color:#334155;">Container Number</strong> column to match PDFs automatically</div>
+            <div style="font-size:0.8rem; color:#94a3b8; margin-top:8px;">.xlsx &nbsp;·&nbsp; .xls &nbsp;·&nbsp; .csv</div>
+          </div>
+          <div id="excelLoadedState" style="display:none; align-items:center; gap:10px;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <div style="flex:1; text-align:left; min-width:0;">
+              <div id="excelFileName" style="font-size:0.9rem; font-weight:600; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+              <div id="excelFileSub" style="font-size:0.8rem; color:#16a34a; margin-top:2px;"></div>
+            </div>
+            <button onclick="event.stopPropagation(); removeExcel()" style="background:none; border:none; cursor:pointer; color:#94a3b8; flex-shrink:0; padding:4px;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#94a3b8'">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleExcelInputChange(this)" />
+      </div>
+
+
+      <!-- ── Step 2: PDF Drop Zone ── -->
+      <div class="panel-card">
+        <div class="section-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+          </svg>
+          Step 2 — PDF Documents
+        </div>
+
+        <div id="pdfDropZone" class="drop-zone" onclick="document.getElementById('pdfInput').click()">
+          <div style="display:flex; justify-content:center; margin-bottom:12px;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <div style="font-size:0.95rem; font-weight:600; color:#334155;">Drop PDF Documents Here</div>
+          <div style="font-size:0.85rem; color:#64748b; margin-top:4px;">Invoices, PODs, or any PDF files &nbsp;·&nbsp; Multiple files supported</div>
+          <div style="font-size:0.8rem; color:#94a3b8; margin-top:8px;">.pdf only</div>
+        </div>
+        <input type="file" id="pdfInput" accept=".pdf" multiple style="display:none;" onchange="handlePdfInputChange(this)" />
+      </div>
+
+
+      <!-- ── Action Buttons ── -->
+      <div id="actionArea">
+
+        <!-- Idle hint -->
+        <div id="idleHint" style="text-align:center; padding:16px 0; color:#94a3b8; font-size:0.9rem; line-height:1.7;">
+          Upload an <span style="color:#ea580c; font-weight:600;">Excel file</span> for Auto Mode<br>or drop <span style="color:#16a34a; font-weight:600;">PDF files</span> for Manual Mode
+        </div>
+
+        <!-- Auto Mode Actions -->
+        <div id="autoActions" style="display:none; flex-direction:column; gap:8px;">
+
+          <!-- Merge Options Panel -->
+          <div id="mergeOptionsPanel" style="padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Merge Mode</div>
+              <div id="mergeModeGroup" style="display:flex; gap:4px; flex-wrap:wrap;">
+                <button class="merge-opt active" data-mode="per-container" onclick="setMergeMode('per-container')">Per Container</button>
+                <button class="merge-opt" data-mode="all-in-one" onclick="setMergeMode('all-in-one')">All in One</button>
+                <button class="merge-opt" data-mode="invoices-only" onclick="setMergeMode('invoices-only')">Invoices Only</button>
+                <button class="merge-opt" data-mode="pods-only" onclick="setMergeMode('pods-only')">PODs Only</button>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Sort By</div>
+              <div id="sortOrderGroup" style="display:flex; gap:4px;">
+                <button class="merge-opt active" data-sort="excel" onclick="setSortOrder('excel')">Excel Order</button>
+                <button class="merge-opt" data-sort="container" onclick="setSortOrder('container')">Container #</button>
+                <button class="merge-opt" data-sort="invoice" onclick="setSortOrder('invoice')">Invoice #</button>
+              </div>
+            </div>
+          </div>
+
+          <button id="runAutoBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="runAutoMerge()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            Run Auto Merge
+          </button>
+          <button id="saveOutputBtn" class="btn btn-success" style="width:100%; justify-content:center; display:none;" onclick="saveMergedOutput()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Save to Folder
+          </button>
+        </div>
+
+        <!-- Manual Mode Actions -->
+        <div id="manualActions" style="display:none;">
+          <button id="quickMergeBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="runManualMerge()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+            </svg>
+            Quick Merge &amp; Download
+          </button>
+          <div style="font-size:0.8rem; color:#94a3b8; text-align:center; margin-top:7px;">Drag cards above to reorder before merging</div>
+        </div>
+
+      </div><!-- /actionArea -->
+
+      <!-- Progress Bar (hidden until processing) -->
+      <div id="progressContainer" style="display:none;">
+        <div style="height:5px; background:#e2e8f0; border-radius:3px; overflow:hidden;">
+          <div id="progressBar" style="height:100%; background:linear-gradient(90deg,#ea580c,#f97316); width:0%;"></div>
+        </div>
+        <div id="progressLabel" style="font-size:0.8rem; color:#64748b; margin-top:5px; text-align:center;"></div>
+      </div>
+
+    </div><!-- /LEFT PANEL -->
+
+
+    <!-- ═══════════════ RIGHT PANEL ═══════════════ -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <!-- ── Queue Section ── -->
+      <div class="panel-card">
+        <div class="section-label" style="justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:7px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            Document Queue
+          </div>
+          <span id="queueCount" style="font-family:monospace; font-size:0.8rem; color:#94a3b8; font-weight:400; text-transform:none; letter-spacing:0;">0 files</span>
+        </div>
+
+        <div id="queueWrapper">
+          <!-- Manual Mode: sortable PDF cards -->
+          <div id="pdfQueue"></div>
+          <!-- Auto Mode: container groups -->
+          <div id="containerGroupsView" style="display:none;"></div>
+        </div>
+
+        <!-- Failure Report (auto mode) -->
+        <div id="failureReport" style="display:none; margin-top:10px;">
+          <div style="font-size:0.85rem; font-weight:700; color:#dc2626; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            Failure Report
+          </div>
+          <div id="failureList"></div>
+        </div>
+      </div>
+
+
+      <!-- ── Status Log (Collapsible) ── -->
+      <div class="panel-card" style="padding:14px 20px;">
+        <div class="log-toggle" onclick="toggleLog()">
+          <div style="display:flex; align-items:center; gap:7px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <span class="section-label" style="margin-bottom:0;">Status Log</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button onclick="event.stopPropagation(); clearLog()" style="background:none; border:none; cursor:pointer; color:#94a3b8; font-size:0.8rem;" onmouseover="this.style.color='#475569'" onmouseout="this.style.color='#94a3b8'">clear</button>
+            <svg id="logToggleArrow" class="log-toggle-arrow collapsed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+        </div>
+        <div id="statusLogBody" class="collapsed" style="margin-top:12px;">
+          <div id="statusLog"></div>
+        </div>
+      </div>
+
+      <!-- ── AI Agent Panel ── -->
+      <div class="agent-panel" id="agentPanel">
+        <div class="agent-header" onclick="toggleAgentPanel()">
+          <div style="display:flex; align-items:center; gap:7px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.002 4.002 0 0 1 12 2z"/>
+              <circle cx="12" cy="6" r="1"/>
+            </svg>
+            <span class="section-label" style="margin-bottom:0;">AI Agent</span>
+            <span class="agent-status-dot offline" id="agentDot"></span>
+            <span id="agentStatusText" style="font-size:0.75rem; color:#94a3b8;">Offline</span>
+          </div>
+          <svg id="agentToggleArrow" class="log-toggle-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+
+        <div class="agent-body" id="agentBody">
+          <!-- Status Summary — compact row -->
+          <div style="display:flex; gap:10px; margin-bottom:12px; font-size:0.78rem;">
+            <div style="flex:1; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="color:#64748b;">QBO</span>
+              <span id="qboStatus" style="font-weight:600; color:#94a3b8;">--</span>
+            </div>
+            <div style="flex:1; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="color:#64748b;">TMS</span>
+              <span id="tmsStatus" style="font-weight:600; color:#94a3b8;">--</span>
+            </div>
+            <div style="flex:1; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="color:#64748b;">Classifier</span>
+              <span id="classifierStatus" style="font-weight:600; color:#94a3b8;">--</span>
+            </div>
+          </div>
+
+          <!-- QBO Login Section — only shown when login required -->
+          <div id="qboLoginSection" style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:12px; margin-bottom:12px; display:none;">
+            <div style="font-size:0.82rem; color:#92400e; margin-bottom:8px;">
+              <strong>Step 1:</strong> Log into QuickBooks to enable auto-fetch.
+            </div>
+            <div style="font-size:0.75rem; color:#a16207; margin-bottom:10px;">
+              Clicking below opens a Chrome window. Log in there, then come back here.
+            </div>
+            <button class="btn btn-secondary" style="width:100%; justify-content:center; padding:8px 14px; font-size:0.82rem;" onclick="agentOpenQBOLogin()" id="qboLoginBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+              <span id="qboLoginBtnText">Open QBO Login</span>
+            </button>
+          </div>
+
+          <!-- TMS Login Section — only shown when login required -->
+          <div id="tmsLoginSection" style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px; margin-bottom:12px; display:none;">
+            <div style="font-size:0.82rem; color:#1e40af; margin-bottom:8px;">
+              <strong>TMS:</strong> Log in to enable POD fetching from TMS.
+            </div>
+            <div style="font-size:0.75rem; color:#3b82f6; margin-bottom:10px;">
+              Clicking below opens a Chrome window. Sign in with Google SSO, then come back here.
+            </div>
+            <button class="btn btn-secondary" style="width:100%; justify-content:center; padding:8px 14px; font-size:0.82rem;" onclick="agentOpenTMSLogin()" id="tmsLoginBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+              <span id="tmsLoginBtnText">Open TMS Login</span>
+            </button>
+          </div>
+
+          <!-- Classifier usage (small text) -->
+          <div id="classifierDetails" style="font-size:0.72rem; color:#94a3b8; margin-bottom:10px; display:none;">
+            <span id="classifierUsage"></span>
+          </div>
+
+          <!-- Action Buttons Row -->
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button class="btn btn-primary" id="fetchMissingBtn" style="flex:1; justify-content:center;" onclick="agentFetchMissing()" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Auto-Fetch Missing
+            </button>
+            <button class="btn btn-secondary" id="pauseJobBtn" style="display:none; padding:8px 14px; justify-content:center;" onclick="agentPauseJob()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+              Pause
+            </button>
+          </div>
+
+          <!-- Progress Area -->
+          <div id="agentProgressArea" style="display:none; max-height:200px; overflow-y:auto;">
+            <div style="font-size:0.78rem; font-weight:600; color:#475569; margin-bottom:6px;">
+              Fetch Progress <span id="agentProgressCount" style="font-weight:400; color:#94a3b8;"></span>
+            </div>
+            <div id="agentProgressList"></div>
+          </div>
+
+          <!-- Agent info -->
+          <div style="font-size:0.72rem; color:#94a3b8; text-align:center; margin-top:8px;">
+            Agent: <code style="font-size:0.72rem;">localhost:8787</code>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /RIGHT PANEL -->
+
+  </div><!-- /mainGrid -->
+</main>
+</div><!-- /mergeToolView -->
+
+
+<!-- ═══════════════════════════════════════════ INVOICE SENDER VIEW ═══════════════════════════════════════════ -->
+<div id="invoiceSenderView" style="display:none;">
+  <div class="tool-header-bar">
+    <div class="tool-header-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+      </svg>
+      Invoice Sender
+    </div>
+    <div class="tool-header-right">
+    <button class="agent-header-btn" id="agentBtnInvoice" onclick="agentHeaderBtnClick()" title="Agent Server Status">
+      <span class="agent-hdr-dot offline" id="agentDotInvoice"></span>
+      <span id="agentTextInvoice">Agent Offline</span>
+    </button>
+    <div class="tool-switcher">
+      <button class="tool-switcher-btn" onclick="toggleToolSwitcher(this)">
+        Switch Tool
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="tool-switcher-menu" id="toolSwitcherInvoice">
+        <div class="tool-switcher-item" onclick="switchTool('merge')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+          Merging Tool
+        </div>
+        <div class="tool-switcher-item" onclick="switchTool('customers')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Customers
+        </div>
+      </div>
+    </div>
+    </div><!-- /tool-header-right -->
+  </div>
+<main style="max-width:1280px; margin:0 auto; padding:24px 24px 40px;">
+
+  <!-- ── Controls Row (3 columns) ── -->
+  <div id="invControlsGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+
+    <!-- Column 1: CSV Upload -->
+    <div class="panel-card">
+      <div class="section-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
+        </svg>
+        Step 1 — Invoice CSV
+      </div>
+      <div id="invCsvDropZone" class="drop-zone"
+           ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over');"
+           ondragleave="this.classList.remove('drag-over');"
+           ondrop="invHandleCsvDrop(event)">
+        <div id="invCsvDropContent">
+          <div style="display:flex; justify-content:center; margin-bottom:10px;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/>
+            </svg>
+          </div>
+          <div style="font-size:0.92rem; font-weight:600; color:#334155;">Drop Invoice CSV / Excel</div>
+          <div style="font-size:0.82rem; color:#64748b; margin-top:4px;">QuickBooks export with Invoice # and Customer columns</div>
+          <div style="font-size:0.78rem; color:#94a3b8; margin-top:6px;">.csv &nbsp;·&nbsp; .xlsx &nbsp;·&nbsp; .xls</div>
+        </div>
+        <div id="invCsvLoadedState" style="display:none; align-items:center; gap:10px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <div style="flex:1; text-align:left; min-width:0;">
+            <div id="invCsvFileName" style="font-size:0.88rem; font-weight:600; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+            <div id="invCsvFileSub" style="font-size:0.78rem; color:#16a34a; margin-top:2px;"></div>
+          </div>
+          <button onclick="event.stopPropagation(); invRemoveCsv()" style="background:none; border:none; cursor:pointer; color:#94a3b8; flex-shrink:0; padding:4px;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#94a3b8'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <input type="file" id="invCsvInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="invHandleCsvInput(this)" />
+    </div>
+
+    <!-- Column 2: Settings & Actions -->
+    <div class="panel-card">
+      <div class="section-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings & Actions
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:5px;">Fallback Subject Template</label>
+        <input id="invSubjectTemplate" type="text" value="Invoice {invoice_number} - {customer_name}"
+               style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:7px; font-size:0.85rem; color:#1e293b; outline:none; transition:border-color 0.15s;"
+               onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'"
+               oninput="invUpdateSubjectTemplate(this.value)" />
+        <div style="font-size:0.7rem; color:#94a3b8; margin-top:4px; line-height:1.5;">
+          Used when Excel has no <strong>Subject</strong> column.<br>
+          Tokens: <code style="font-size:0.7rem; color:#64748b;">{invoice_number}</code>
+          <code style="font-size:0.7rem; color:#64748b;">{customer_name}</code>
+          <code style="font-size:0.7rem; color:#64748b;">{container_number}</code>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.78rem; color:#64748b; white-space:nowrap;" title="When enabled, the agent fills the email form but waits for your approval before clicking Send on each invoice">
+          <input type="checkbox" id="invTestModeToggle" onchange="invToggleTestLimitVisibility()" style="accent-color:#ea580c; width:15px; height:15px;">
+          Test Mode
+        </label>
+        <div id="invTestLimitWrap" style="display:none; align-items:center; gap:4px;">
+          <label for="invTestLimitInput" style="font-size:0.75rem; color:#64748b; white-space:nowrap;">Limit:</label>
+          <input type="number" id="invTestLimitInput" value="5" min="1" max="200" style="width:56px; padding:2px 4px; font-size:0.78rem; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+        </div>
+      </div>
+      <button id="invSendQboBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="invSendViaQBO()" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+        Send via QBO
+      </button>
+
+      <button id="invAuditLogBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem;" onclick="invLoadAuditLog()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        </svg>
+        Audit Log
+      </button>
+
+      <button id="invClearAllBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem;" onclick="invClearAll()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+        Clear All
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── Progress Bar ── -->
+  <div id="invProgressContainer" style="display:none; margin-bottom:16px;">
+    <div style="height:5px; background:#e2e8f0; border-radius:3px; overflow:hidden;">
+      <div id="invProgressBar" style="height:100%; background:linear-gradient(90deg,#ea580c,#f97316); width:0%; transition:width 0.3s ease;"></div>
+    </div>
+    <div id="invProgressLabel" style="font-size:0.8rem; color:#64748b; margin-top:5px; text-align:center;"></div>
+  </div>
+
+  <!-- ── Summary Bar ── -->
+  <div id="invSummaryBar" class="inv-summary-bar" style="display:none;"></div>
+  <div id="invSendStatusBar" class="inv-summary-bar" style="display:none;"></div>
+
+  <!-- ── Send Status Filter ── -->
+  <div id="invSendFilterWrap" style="display:none; margin-bottom:8px;">
+    <select id="invSendFilter" onchange="invRenderTable()" style="padding:5px 10px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:6px; color:#334155; background:#fff; cursor:pointer;">
+      <option value="all">All Invoices</option>
+      <option value="not_sent">Not Sent</option>
+      <option value="in_progress">In Progress</option>
+      <option value="sent">Sent</option>
+      <option value="skipped">Skipped / No Attachments</option>
+      <option value="error">Error</option>
+    </select>
+  </div>
+
+  <!-- ── Invoice Table ── -->
+  <div id="invTableContainer" class="panel-card" style="padding:0; overflow-x:auto;">
+    <table class="inv-table">
+      <thead>
+        <tr>
+          <th style="width:40px; padding-left:14px;"><input type="checkbox" onchange="invToggleAll(this.checked)" id="invSelectAllCb" /></th>
+          <th>Invoice #</th>
+          <th>Container</th>
+          <th>Customer</th>
+          <th style="text-align:right;">Amount</th>
+          <th>Send Method</th>
+          <th>Subject</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="invTableBody">
+        <tr>
+          <td colspan="8" style="text-align:center; padding:50px 20px; color:#94a3b8;">
+            <div style="margin-bottom:8px;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+            </div>
+            Upload a TMS Excel to see invoices here
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Status Log (Collapsible) ── -->
+  <div class="panel-card" style="padding:14px 20px; margin-top:20px;">
+    <div class="log-toggle" onclick="invToggleLog()">
+      <div style="display:flex; align-items:center; gap:7px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+        <span class="section-label" style="margin-bottom:0;">Status Log</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button onclick="event.stopPropagation(); invClearLog()" style="background:none; border:none; cursor:pointer; color:#94a3b8; font-size:0.8rem;" onmouseover="this.style.color='#475569'" onmouseout="this.style.color='#94a3b8'">clear</button>
+        <svg id="invLogToggleArrow" class="log-toggle-arrow collapsed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+    </div>
+    <div id="invStatusLogBody" class="collapsed" style="margin-top:12px;">
+      <div id="invStatusLog"></div>
+    </div>
+  </div>
+
+</main>
+</div><!-- /invoiceSenderView -->
+
+
+<!-- ═══════════════════════════════════════════ REVIEW MODAL ═══════════════════════════════════════════ -->
+<div id="reviewModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 id="reviewModalTitle">Review Invoice</h2>
+      <button onclick="invCloseReview()" style="background:none; border:none; cursor:pointer; color:#94a3b8; padding:4px;" onmouseover="this.style.color='#1e293b'" onmouseout="this.style.color='#94a3b8'">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" id="reviewModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="invCloseReview()">Cancel</button>
+      <button class="btn btn-primary" onclick="invSaveReview()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ SCRIPT ═══════════════════════════════════════════ -->
+<script src="assets/js/utils.js"></script>
+<script src="assets/js/state.js"></script>
+<script src="assets/js/agent-bridge.js"></script>
+<script src="assets/js/merge.js"></script>
+<script src="assets/js/invoice-sender.js"></script>
+<script src="assets/js/customers.js"></script>
+<script src="assets/js/app.js"></script>
+
+</div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+</body>
+</html>

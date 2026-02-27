@@ -1,0 +1,18 @@
+{
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+
+    // Agent temp/generated data — still on disk, just hidden from sidebar
+    "agent/.browser_profile": true,
+    "agent/.browser_downloads": true,
+    "agent/.job_state": true,
+    "agent/debug": true,
+    "agent/downloads": true,
+    "agent/output": true,
+    "agent/ngl_env": true,
+
+    // Claude Code internal files
+    ".claude": true
+  }
+}
