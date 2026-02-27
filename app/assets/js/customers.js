@@ -587,7 +587,29 @@ async function custExport() {
     alert('No customers to export.');
     return;
   }
-  const json = JSON.stringify(customers, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  triggerDownload(blob, 'customers_export.json');
+
+  // Build rows with friendly column names that match import aliases
+  const rows = customers.map(c => ({
+    'Code':          c.code || '',
+    'Name':          c.name || '',
+    'Emails':        (c.emails || []).join(', '),
+    'CC Emails':     (c.ccEmails || []).join(', '),
+    'BCC Emails':    (c.bccEmails || []).join(', '),
+    'Send Method':   c.sendMethod || 'email',
+    'Required Docs': (c.requiredDocs || []).join(', '),
+    'Notes':         c.notes || '',
+    'Active':        c.active !== false ? 'Yes' : 'No',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Auto-width columns
+  const colWidths = Object.keys(rows[0] || {}).map(k => ({ wch: Math.max(k.length, 18) }));
+  ws['!cols'] = colWidths;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  triggerDownload(blob, 'customers_export.xlsx');
 }
