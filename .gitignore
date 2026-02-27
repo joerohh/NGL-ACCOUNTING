@@ -15,3 +15,36 @@ agent/.env
 # Windows junk
 Thumbs.db
 desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# OS junk
+.DS_Store
+
+# Large files — prevent accidental commits
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.mp4
+*.mov
+*.avi
+*.iso
+*.exe
+*.msi
+
+# Editor / IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+send-errors-*.txt
+
+# Node (in case npm is ever used)
+node_modules/

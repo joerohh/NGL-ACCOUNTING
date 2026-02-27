@@ -6,8 +6,10 @@ echo   Push Updates to All Devices
 echo ================================================
 echo.
 
+:: Stage all changes (respects .gitignore)
 git add -A
 
+:: Check if there's anything to commit
 git diff --cached --quiet
 if %errorlevel% == 0 (
     echo No new changes to push. Everything is already up to date.
@@ -16,8 +18,15 @@ if %errorlevel% == 0 (
     exit /b 0
 )
 
-for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set dt=%%I
-set TIMESTAMP=%dt:~0,4%-%dt:~4,2%-%dt:~6,2% %dt:~8,2%:%dt:~10,2%
+:: Show what's being committed so the user can sanity-check
+echo Files to be committed:
+echo ------------------------------------------------
+git diff --cached --name-status
+echo ------------------------------------------------
+echo.
+
+:: Get timestamp via PowerShell (wmic is deprecated on Windows 11)
+for /f "delims=" %%I in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm\""') do set TIMESTAMP=%%I
 
 git commit -m "update: saved on %TIMESTAMP%"
 
