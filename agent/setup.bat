@@ -4,18 +4,45 @@ echo   NGL Agent - One-Click Setup
 echo ============================================
 echo.
 
-REM Check Python
-python --version >nul 2>&1
-if errorlevel 1 (
+cd /d "%~dp0"
+
+REM Find Python — try py launcher first, then python
+set PYTHON=
+where py >nul 2>&1
+if %errorlevel% == 0 (
+    set PYTHON=py -3
+) else (
+    where python >nul 2>&1
+    if %errorlevel% == 0 (
+        set PYTHON=python
+    )
+)
+
+if "%PYTHON%"=="" (
     echo [ERROR] Python is not installed!
     echo Download from: https://www.python.org/downloads/
     pause
     exit /b 1
 )
-echo [OK] Python found
 
-REM Install dependencies
+echo [OK] Found: %PYTHON%
+%PYTHON% --version
 echo.
+
+REM Create virtual environment
+echo Creating virtual environment...
+%PYTHON% -m venv venv
+if errorlevel 1 (
+    echo [ERROR] Failed to create virtual environment
+    pause
+    exit /b 1
+)
+echo [OK] Virtual environment created
+echo.
+
+REM Activate and install
+call venv\Scripts\activate.bat
+
 echo Installing Python packages...
 pip install -r requirements.txt
 if errorlevel 1 (
@@ -24,9 +51,9 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [OK] Packages installed
+echo.
 
 REM Install Playwright browsers
-echo.
 echo Installing Chromium browser for automation...
 python -m playwright install chromium
 if errorlevel 1 (
@@ -35,15 +62,16 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [OK] Chromium installed
+echo.
 
 REM Check .env
-echo.
 if not exist .env (
-    echo [WARNING] No .env file found. Creating template...
-    echo ANTHROPIC_API_KEY=your-claude-api-key-here > .env
-    echo NGL_AGENT_TOKEN=ngl-local-dev-token >> .env
-    echo.
-    echo [ACTION REQUIRED] Edit .env and add your Claude API key!
+    if exist .env.example (
+        copy .env.example .env >nul
+        echo [ACTION REQUIRED] Edit .env and fill in your real API keys!
+    ) else (
+        echo [WARNING] No .env file found. Create one with your API keys.
+    )
 ) else (
     echo [OK] .env file exists
 )
@@ -52,9 +80,9 @@ echo.
 echo ============================================
 echo   Setup complete!
 echo.
-echo   To start the agent:
-echo     python main.py
+echo   To start the agent, run:
+echo     Start Agent.bat  (in the project root)
 echo.
-echo   Make sure to set your Claude API key in .env
+echo   Make sure your API keys are set in agent\.env
 echo ============================================
 pause
