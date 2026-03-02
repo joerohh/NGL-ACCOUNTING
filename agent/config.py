@@ -48,7 +48,7 @@ QBO_BASE_URL = "https://app.qbo.intuit.com"
 QBO_LOGIN_URL = "https://qbo.intuit.com/app/homepage"
 
 # Timing — guards against rate limiting
-QBO_ACTION_DELAY_S = 2.5        # seconds between QBO actions
+QBO_ACTION_DELAY_S = 1.0        # seconds between QBO actions (was 2.5)
 QBO_RETRY_COUNT = 3             # retries per failed download
 QBO_RETRY_BACKOFF_S = 5.0       # initial backoff (doubles each retry)
 

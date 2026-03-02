@@ -422,6 +422,10 @@ function invRenderTable() {
           statusHtml = '<span class="status-badge status-sent">Sent</span>';
           if (inv.sentAt) statusHtml += '<br><span style="font-size:0.68rem; color:#64748b;">' + inv.sentAt + '</span>';
           break;
+        case 'sent_no_pod':
+          statusHtml = '<span class="status-badge" style="background:#fef3c7; color:#92400e; border:1px solid #f59e0b;">Sent (No POD)</span>';
+          if (inv.errorMessage) statusHtml += '<br><span style="font-size:0.68rem; color:#92400e;" title="' + escHtml(inv.errorMessage) + '">' + escHtml(inv.errorMessage.substring(0, 50)) + '</span>';
+          break;
         case 'skipped_no_attachments':
           statusHtml = '<span class="status-badge status-skipped">No Attachments</span>';
           break;
@@ -697,7 +701,7 @@ function invUpdateSendStatusBar() {
   const hasSendStatus = invoiceState.invoices.some(function(i) { return i.sendStatus; });
   if (!hasSendStatus) { bar.style.display = 'none'; return; }
 
-  const counts = { sent: 0, not_sent: 0, in_progress: 0, skipped: 0, skipped_no_attachments: 0, error: 0 };
+  const counts = { sent: 0, sent_no_pod: 0, not_sent: 0, in_progress: 0, skipped: 0, skipped_no_attachments: 0, error: 0 };
   invoiceState.invoices.forEach(function(inv) {
     if (inv.sendStatus && counts.hasOwnProperty(inv.sendStatus)) counts[inv.sendStatus]++;
   });
@@ -705,6 +709,7 @@ function invUpdateSendStatusBar() {
   bar.style.display = 'flex';
   bar.innerHTML =
     '<div class="inv-summary-item" style="color:#16a34a;"><strong>' + counts.sent + '</strong> sent</div>' +
+    (counts.sent_no_pod > 0 ? '<div class="inv-summary-item" style="color:#92400e;"><strong>' + counts.sent_no_pod + '</strong> sent (no POD)</div>' : '') +
     (counts.in_progress > 0 ? '<div class="inv-summary-item" style="color:#d97706;"><strong>' + counts.in_progress + '</strong> in progress</div>' : '') +
     (counts.not_sent > 0 ? '<div class="inv-summary-item" style="color:#dc2626;"><strong>' + counts.not_sent + '</strong> not sent</div>' : '') +
     (counts.skipped + counts.skipped_no_attachments > 0 ? '<div class="inv-summary-item" style="color:#64748b;"><strong>' + (counts.skipped + counts.skipped_no_attachments) + '</strong> skipped</div>' : '') +
@@ -729,7 +734,7 @@ async function invSendViaQBO() {
 
   // Only send invoices that are ready AND not already sent
   const readyInvoices = invoiceState.invoices.filter(inv =>
-    inv.validationStatus === 'ready' && inv.sendStatus !== 'sent'
+    inv.validationStatus === 'ready' && inv.sendStatus !== 'sent' && inv.sendStatus !== 'sent_no_pod'
   );
   if (readyInvoices.length === 0) {
     // Check if all ready invoices were already sent (retry scenario)
@@ -803,6 +808,8 @@ async function invSendViaQBO() {
   sendState.errors = 0;
   sendState.mismatches = 0;
   sendState.missingDocs = 0;
+  sendState.startTime = Date.now();
+  sendState.completedCount = 0;
 
   // Clear previous send statuses for invoices about to be sent
   invoicePayload.forEach(function(p) {
@@ -868,33 +875,41 @@ function invHandleSendEvent(event) {
       break;
     case 'searching_invoice':
       invAddLog('info', '  Searching QBO for: ' + event.invoiceNumber);
+      invSetStepText('Searching QBO for ' + event.invoiceNumber + '...');
       break;
     case 'invoice_not_found':
       sendState.errors++;
+      sendState.completedCount++;
       invAddLog('error', '  NOT FOUND in QBO: ' + event.invoiceNumber);
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'error', { errorMessage: 'Not found in QBO' });
       break;
     case 'verifying_invoice':
       invAddLog('info', '  Verifying: ' + event.invoiceNumber + ' / Container ' + event.containerNumber);
+      invSetStepText('Verifying invoice details...');
       break;
     case 'invoice_mismatch':
       sendState.mismatches++;
+      sendState.completedCount++;
       invAddLog('error', '  MISMATCH: ' + event.reason);
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'error', { errorMessage: 'Mismatch: ' + event.reason });
       break;
     case 'checking_attachments':
       invAddLog('info', '  Checking attachments...');
+      invSetStepText('Checking attachments...');
       break;
     case 'invoice_missing_docs':
       sendState.missingDocs++;
+      sendState.completedCount++;
       invAddLog('warning', '  MISSING DOCS: ' + event.missing.join(', '));
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped_no_attachments', { errorMessage: 'Missing: ' + event.missing.join(', ') });
       break;
     case 'opening_send_form':
       invAddLog('info', '  Opening Review & Send form...');
+      invSetStepText('Opening send form...');
       break;
     case 'filling_send_form':
       invAddLog('info', '  Filling: To=' + event.toEmails.join(', ') + ' | Subject=' + event.subject);
+      invSetStepText('Filling email form...');
       break;
     case 'awaiting_approval':
       invAddLog('warning', '  WAITING FOR APPROVAL — review the form in QBO browser');
@@ -905,14 +920,18 @@ function invHandleSendEvent(event) {
       break;
     case 'sending_invoice':
       invAddLog('info', '  Clicking Send...');
+      invSetStepText('Sending...');
       break;
     case 'invoice_sent':
       sendState.sent++;
+      sendState.completedCount++;
       invAddLog('success', '  SENT: ' + event.invoiceNumber + ' → ' + event.toEmails.join(', '));
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'sent', { sentAt: new Date().toLocaleTimeString() });
+      invSetStepText('');
       break;
     case 'invoice_skipped':
       sendState.skipped++;
+      sendState.completedCount++;
       invAddLog('warning', '  SKIPPED: ' + event.invoiceNumber + ' (' + event.reason + ')');
       if (event.reason === 'no_attachments') {
         invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped_no_attachments');
@@ -922,6 +941,7 @@ function invHandleSendEvent(event) {
       break;
     case 'invoice_error':
       sendState.errors++;
+      sendState.completedCount++;
       invAddLog('error', '  ERROR: ' + event.error);
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'error', { errorMessage: event.error });
       break;
@@ -957,6 +977,7 @@ function invHandleSendEvent(event) {
       break;
     case 'oec_pod_email_sent':
       sendState.sent++;
+      sendState.completedCount++;
       invAddLog('success', '  [OEC] POD email sent successfully');
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'sent', { sentAt: new Date().toLocaleTimeString() });
       break;
@@ -975,7 +996,19 @@ function invHandleSendEvent(event) {
       invAddLog('warning', '  [TMS] POD not found in TMS for container ' + (event.containerNumber || ''));
       break;
     case 'tms_login_required':
-      invAddLog('error', '  [TMS] TMS session expired — log in via Agent panel');
+      invAddLog('warning', '  [TMS] ' + (event.message || 'TMS login required — please log in now'));
+      invSetStepText('Waiting for TMS login...');
+      invShowTmsLoginPrompt();
+      break;
+    case 'tms_logged_in':
+      invAddLog('success', '  [TMS] ' + (event.message || 'TMS login successful'));
+      invSetStepText('TMS connected — fetching POD...');
+      invDismissTmsLoginPrompt();
+      break;
+    case 'tms_login_timeout':
+      invAddLog('warning', '  [TMS] ' + (event.message || 'TMS login timed out — continuing without POD'));
+      invSetStepText('Continuing without TMS...');
+      invDismissTmsLoginPrompt();
       break;
     // ── Portal flow events ──
     case 'portal_downloading':
@@ -989,11 +1022,13 @@ function invHandleSendEvent(event) {
       break;
     case 'portal_upload_success':
       sendState.sent++;
+      sendState.completedCount++;
       invAddLog('success', '  [Portal] Successfully uploaded to portal');
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'sent', { sentAt: new Date().toLocaleTimeString() });
       break;
     case 'portal_upload_failed':
       sendState.errors++;
+      sendState.completedCount++;
       invAddLog('error', '  [Portal] Upload failed: ' + event.error);
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'error', { errorMessage: 'Portal upload failed: ' + event.error });
       break;
@@ -1035,6 +1070,8 @@ function invShowSendProgress() {
       <div id="invSendProgressBar" style="background:linear-gradient(90deg, #ea580c, #f97316); height:100%; width:0%; transition:width 0.3s;"></div>
     </div>
     <div id="invSendProgressText" style="font-size:0.8rem; color:#64748b; margin-top:6px;">Starting...</div>
+    <div id="invSendStepText" style="font-size:0.78rem; color:#94a3b8; margin-top:2px;"></div>
+    <div id="invSendTimeInfo" style="font-size:0.78rem; color:#94a3b8; margin-top:4px;"></div>
     <div class="send-tally" id="invSendTally">
       <span class="send-tally-item sent">Sent: 0</span>
       <span class="send-tally-item skipped">Skipped: 0</span>
@@ -1049,6 +1086,36 @@ function invUpdateSendProgress(current, total) {
   const text = document.getElementById('invSendProgressText');
   if (bar) bar.style.width = Math.round((current / total) * 100) + '%';
   if (text) text.textContent = 'Processing ' + (current + 1) + ' of ' + total + '...';
+
+  // Elapsed time + ETA
+  var timeEl = document.getElementById('invSendTimeInfo');
+  if (timeEl && sendState.startTime) {
+    var elapsed = Date.now() - sendState.startTime;
+    var elapsedStr = _fmtDuration(elapsed);
+    var etaStr = '';
+    if (sendState.completedCount > 0) {
+      var avgMs = elapsed / sendState.completedCount;
+      var remaining = (total - sendState.completedCount) * avgMs;
+      etaStr = ' \u2022 ~' + _fmtDuration(remaining) + ' remaining';
+    }
+    timeEl.textContent = 'Elapsed: ' + elapsedStr + etaStr;
+  }
+}
+
+function _fmtDuration(ms) {
+  var totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return totalSec + 's';
+  var m = Math.floor(totalSec / 60);
+  var s = totalSec % 60;
+  if (m < 60) return m + 'm ' + s + 's';
+  var h = Math.floor(m / 60);
+  m = m % 60;
+  return h + 'h ' + m + 'm';
+}
+
+function invSetStepText(text) {
+  var el = document.getElementById('invSendStepText');
+  if (el) el.textContent = text;
 }
 
 function invUpdateSendTally() {
@@ -1065,6 +1132,21 @@ function invUpdateSendTally() {
 function invShowSendResults(summary) {
   const panel = document.getElementById('invSendProgressPanel');
   if (!panel) return;
+
+  // Calculate timing stats
+  var timeHtml = '';
+  if (sendState.startTime) {
+    var totalMs = Date.now() - sendState.startTime;
+    var totalStr = _fmtDuration(totalMs);
+    var totalProcessed = (summary.sent || 0) + (summary.skipped || 0) + (summary.errors || 0) +
+        (summary.mismatches || 0) + (summary.missingDocs || 0) + (summary.noAttachments || 0);
+    var avgStr = totalProcessed > 0 ? _fmtDuration(totalMs / totalProcessed) + '/invoice' : '';
+    timeHtml = '<div style="margin-top:10px; font-size:0.82rem; color:#64748b;">' +
+      'Total time: <strong>' + totalStr + '</strong>' +
+      (avgStr ? ' &bull; Average: <strong>' + avgStr + '</strong>' : '') +
+      '</div>';
+  }
+
   panel.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
       <strong style="font-size:0.95rem;">Send Complete</strong>
@@ -1096,6 +1178,7 @@ function invShowSendResults(summary) {
         <div style="font-size:0.75rem; color:#64748b;">No Attachments</div>
       </div>
     </div>
+    ${timeHtml}
     <div style="margin-top:12px; display:flex; gap:8px;">
       <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="invLoadAuditLog()">View Audit Log</button>
       <button class="btn btn-secondary" style="font-size:0.82rem;" onclick="agentBridge.exportAuditLog()">Download Report (CSV)</button>
@@ -1227,6 +1310,36 @@ async function invApprovalDecision(approve) {
     const res = await agentBridge.skipSend(sendState.jobId);
     if (res.error) invAddLog('error', '  Failed to skip: ' + res.error);
   }
+}
+
+function invShowTmsLoginPrompt() {
+  const panel = document.getElementById('invSendProgressPanel');
+  if (!panel) return;
+
+  // Remove any previous TMS prompt
+  invDismissTmsLoginPrompt();
+
+  const section = document.createElement('div');
+  section.id = 'invTmsLoginPrompt';
+  section.style.cssText = 'margin-top:12px; border:2px solid #d97706; border-radius:10px; padding:16px; background:#fffbeb; animation: approvalPulse 1.5s ease-in-out infinite;';
+  section.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <div style="width:10px; height:10px; border-radius:50%; background:#d97706; animation: approvalPulse 1s ease-in-out infinite;"></div>
+      <strong style="font-size:0.88rem; color:#92400e;">TMS Login Required</strong>
+    </div>
+    <div style="font-size:0.82rem; color:#78350f; line-height:1.6; margin-bottom:10px;">
+      The agent needs to access TMS to download the POD.<br>
+      A TMS login window has been opened — <strong>please log in now</strong>.<br>
+      <span style="color:#92400e;">The agent is waiting (2 min timeout).</span>
+    </div>
+  `;
+  panel.appendChild(section);
+  section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function invDismissTmsLoginPrompt() {
+  const el = document.getElementById('invTmsLoginPrompt');
+  if (el) el.remove();
 }
 
 async function invPauseSendJob() {

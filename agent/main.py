@@ -137,6 +137,26 @@ async def lifespan(app: FastAPI):
     tms.set_tms_browser(tms_browser)
     logger.info("Job manager ready")
 
+    # Auto-check sessions — navigate to QBO/TMS so restored cookies take effect
+    try:
+        qbo_logged_in = await qbo_browser.is_logged_in()
+        if qbo_logged_in:
+            logger.info("QBO session restored — already logged in!")
+        else:
+            logger.info("QBO session not active — login page will appear in the browser")
+            await qbo_browser.open_login_page()
+    except Exception as e:
+        logger.warning("QBO session check failed: %s", e)
+
+    try:
+        tms_logged_in = tms_browser.is_logged_in()
+        if tms_logged_in:
+            logger.info("TMS session restored — already logged in!")
+        else:
+            logger.info("TMS session not active — you'll need to log in manually")
+    except Exception as e:
+        logger.warning("TMS session check failed: %s", e)
+
     logger.info("=" * 50)
     logger.info("  Agent is live! Open index.html in your browser.")
     logger.info("=" * 50)

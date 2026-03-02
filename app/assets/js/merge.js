@@ -429,6 +429,122 @@ async function mergePdfFiles(pdfs) {
 }
 
 
+// ── Performance Helpers ──
+async function preloadAllPdfs(pdfs) {
+  const bufferMap = new Map();
+  await Promise.all(pdfs.map(async (pdf) => {
+    bufferMap.set(pdf.id, await readAsArrayBuffer(pdf.file));
+  }));
+  return bufferMap;
+}
+
+function buildMatchIndex(rows, pdfs) {
+  const index = new Map();
+  const entries = pdfs.map(p => ({ pdf: p, lower: p.name.toLowerCase() }));
+  for (const row of rows) {
+    const cn = row.containerNumber.toLowerCase();
+    index.set(row.containerNumber, entries.filter(e => e.lower.includes(cn)).map(e => e.pdf));
+  }
+  return index;
+}
+
+function getWorkerCount() {
+  const cores = navigator.hardwareConcurrency || 4;
+  return Math.max(2, Math.min(6, Math.floor(cores / 2) - 1));
+}
+
+function createWorkerPool(size) {
+  const resolvers = new Map();
+  const workers = [];
+  for (let i = 0; i < size; i++) {
+    const w = new Worker('assets/js/merge-worker.js');
+    w.onmessage = (e) => {
+      const r = resolvers.get(e.data.taskId);
+      if (r) { resolvers.delete(e.data.taskId); r(e.data); }
+    };
+    w.onerror = () => {
+      state._workersFailed = true;
+      for (const [, r] of resolvers) r({ type: 'error', error: 'Worker failed' });
+      resolvers.clear();
+    };
+    workers.push(w);
+  }
+  let robin = 0;
+  return {
+    submit(task) {
+      return new Promise((resolve) => {
+        const taskId = uid();
+        resolvers.set(taskId, resolve);
+        const bufs = task.pdfBuffers.map(b => b.slice(0));
+        workers[robin++ % size].postMessage(
+          { ...task, taskId, pdfBuffers: bufs }, bufs
+        );
+      });
+    },
+    terminate() { workers.forEach(w => w.terminate()); },
+  };
+}
+
+async function mergePerContainerSequential(rows, failures, bufferMap, matchIndex) {
+  const { PDFDocument } = PDFLib;
+  const total = rows.length;
+  const datePrefix = getDatePrefix();
+  const subfolder = SUBFOLDER_MAP['per-container'];
+
+  addLog('info', 'Pre-parsing PDF documents…');
+  const docCache = new Map();
+  for (const pdf of state.pdfs) {
+    const buf = bufferMap.get(pdf.id);
+    if (!buf) continue;
+    try {
+      docCache.set(pdf.id, await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false }));
+    } catch (err) {
+      addLog('warning', `Cannot parse ${pdf.name}: ${err.message}`);
+    }
+  }
+
+  for (let i = 0; i < total; i++) {
+    const row = rows[i];
+    const t0 = performance.now();
+    setProgress(Math.round((i / total) * 100), `Processing ${i + 1} / ${total}: ${row.containerNumber}`);
+
+    const matched = matchIndex.get(row.containerNumber) || [];
+    if (!matched.length) {
+      addLog('warning', `No match for ${row.containerNumber} — skipped`);
+      failures.push({ containerNumber: row.containerNumber, reason: 'No matching PDF filename' });
+      continue;
+    }
+
+    const ordered = getOrderedMatchedPdfs(matched);
+    addLog('info', `  Found: ${ordered.map(m => m.name).join(', ')}`);
+
+    try {
+      const merged = await PDFDocument.create();
+      for (const pdf of ordered) {
+        const doc = docCache.get(pdf.id);
+        if (!doc) throw new Error(`"${pdf.name}": not parsed`);
+        const pages = await merged.copyPages(doc, doc.getPageIndices());
+        pages.forEach(p => merged.addPage(p));
+      }
+      const bytes = await merged.save({
+        objectsPerTick: Infinity,
+        updateFieldAppearances: false,
+        addDefaultPage: false,
+      });
+      const ms = Math.round(performance.now() - t0);
+      const filename = `${datePrefix}_${row.containerNumber}_merged.pdf`;
+      state.mergeResults.push({ containerNumber: row.containerNumber, bytes, filename, subfolder });
+      addLog('success', `  → ${filename} (${fmtSize(bytes.length)}) [${ms}ms]`);
+    } catch (err) {
+      addLog('error', `Failed to merge ${row.containerNumber}: ${err.message}`);
+      failures.push({ containerNumber: row.containerNumber, reason: err.message });
+    }
+
+    if (i % 10 === 9) await new Promise(r => setTimeout(r, 0));
+  }
+}
+
+
 // ── Merge Helpers ──
 function getDatePrefix() {
   const d = new Date();
@@ -459,42 +575,77 @@ const SUBFOLDER_MAP = {
   'pods-only':     'PODs Only',
 };
 
-async function mergePerContainer(rows, failures) {
+async function mergePerContainer(rows, failures, bufferMap, matchIndex) {
   const total = rows.length;
   const datePrefix = getDatePrefix();
   const subfolder = SUBFOLDER_MAP['per-container'];
 
-  for (let i = 0; i < total; i++) {
-    const row = rows[i];
-    setProgress(Math.round((i / total) * 100), `Processing ${i + 1} / ${total}: ${row.containerNumber}`);
-    addLog('info', `Searching → ${row.containerNumber}`);
-
-    const matched = state.pdfs.filter(p =>
-      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
-    );
-
-    if (!matched.length) {
-      addLog('warning', `No match for ${row.containerNumber} — skipped`);
-      failures.push({ containerNumber: row.containerNumber, reason: 'No matching PDF filename' });
-      continue;
-    }
-
-    const ordered = getOrderedMatchedPdfs(matched);
-    addLog('info', `  Found: ${ordered.map(m => m.name).join(', ')}`);
-
+  // Try Web Workers for parallel merging
+  if (window.Worker && !state._workersFailed) {
+    let pool;
     try {
-      const bytes = await mergePdfFiles(ordered);
-      const filename = `${datePrefix}_${row.containerNumber}_merged.pdf`;
-      state.mergeResults.push({ containerNumber: row.containerNumber, bytes, filename, subfolder });
-      addLog('success', `  → ${filename} (${fmtSize(bytes.length)})`);
+      const workerCount = getWorkerCount();
+      pool = createWorkerPool(workerCount);
+      addLog('info', `Using ${workerCount} parallel workers (${navigator.hardwareConcurrency || '?'} logical cores)`);
     } catch (err) {
-      addLog('error', `Failed to merge ${row.containerNumber}: ${err.message}`);
-      failures.push({ containerNumber: row.containerNumber, reason: err.message });
+      state._workersFailed = true;
+      addLog('warning', 'Workers unavailable, using sequential merge');
+      return mergePerContainerSequential(rows, failures, bufferMap, matchIndex);
     }
+
+    let completed = 0;
+    const tasks = [];
+
+    for (const row of rows) {
+      const matched = matchIndex.get(row.containerNumber) || [];
+      if (!matched.length) {
+        addLog('warning', `No match for ${row.containerNumber} — skipped`);
+        failures.push({ containerNumber: row.containerNumber, reason: 'No matching PDF filename' });
+        completed++;
+        setProgress(Math.round((completed / total) * 100), `${completed} / ${total} containers`);
+        continue;
+      }
+
+      const ordered = getOrderedMatchedPdfs(matched);
+      addLog('info', `  ${row.containerNumber}: ${ordered.map(m => m.name).join(', ')}`);
+
+      const pdfBuffers = ordered.map(p => bufferMap.get(p.id));
+      const pdfNames = ordered.map(p => p.name);
+      const filename = `${datePrefix}_${row.containerNumber}_merged.pdf`;
+
+      const task = pool.submit({
+        containerNumber: row.containerNumber,
+        pdfBuffers, pdfNames, filename, subfolder,
+      }).then((result) => {
+        completed++;
+        setProgress(Math.round((completed / total) * 100), `${completed} / ${total} containers`);
+        if (result.type === 'error') {
+          addLog('error', `Failed to merge ${result.containerNumber}: ${result.error}`);
+          failures.push({ containerNumber: result.containerNumber, reason: result.error });
+        } else {
+          state.mergeResults.push({
+            containerNumber: result.containerNumber,
+            bytes: result.mergedBytes,
+            filename: result.filename,
+            subfolder: result.subfolder,
+          });
+          addLog('success', `  → ${result.filename} (${fmtSize(result.mergedBytes.length)})`);
+        }
+      });
+      tasks.push(task);
+    }
+
+    await Promise.all(tasks);
+    pool.terminate();
+    return;
   }
+
+  // Sequential fallback (file:// protocol or Workers blocked)
+  return mergePerContainerSequential(rows, failures, bufferMap, matchIndex);
 }
 
-async function mergeAllInOne(rows, failures) {
+async function mergeAllInOne(rows, failures, bufferMap, matchIndex) {
+  const { PDFDocument } = PDFLib;
   const allPdfs = [];
   const total = rows.length;
   const subfolder = SUBFOLDER_MAP['all-in-one'];
@@ -503,10 +654,7 @@ async function mergeAllInOne(rows, failures) {
     const row = rows[i];
     setProgress(Math.round((i / total) * 80), `Collecting ${i + 1} / ${total}: ${row.containerNumber}`);
 
-    const matched = state.pdfs.filter(p =>
-      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
-    );
-
+    const matched = matchIndex.get(row.containerNumber) || [];
     if (!matched.length) {
       addLog('warning', `No match for ${row.containerNumber} — skipped`);
       failures.push({ containerNumber: row.containerNumber, reason: 'No matching PDF filename' });
@@ -524,7 +672,14 @@ async function mergeAllInOne(rows, failures) {
   addLog('info', `Merging ${allPdfs.length} total PDFs into one document`);
 
   try {
-    const bytes = await mergePdfFiles(allPdfs);
+    const merged = await PDFDocument.create();
+    for (const pdf of allPdfs) {
+      const buf = bufferMap.get(pdf.id);
+      const doc = await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false });
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    const bytes = await merged.save({ objectsPerTick: Infinity, updateFieldAppearances: false, addDefaultPage: false });
     const containerCount = state.excelRows.length;
     const filename = `${getDatePrefix()}_${containerCount}_merged.pdf`;
     state.mergeResults.push({ containerNumber: 'ALL', bytes, filename, subfolder });
@@ -534,7 +689,8 @@ async function mergeAllInOne(rows, failures) {
   }
 }
 
-async function mergeByType(rows, failures, type) {
+async function mergeByType(rows, failures, bufferMap, matchIndex, type) {
+  const { PDFDocument } = PDFLib;
   const typePdfs = [];
   const total = rows.length;
   const typeLabel = type === 'invoice' ? 'Invoices' : 'PODs';
@@ -544,9 +700,7 @@ async function mergeByType(rows, failures, type) {
     const row = rows[i];
     setProgress(Math.round((i / total) * 80), `Scanning ${i + 1} / ${total}: ${row.containerNumber}`);
 
-    const matched = state.pdfs.filter(p =>
-      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
-    );
+    const matched = matchIndex.get(row.containerNumber) || [];
     const typeFiles = matched.filter(p => classifyPdf(p.name) === type);
 
     if (!typeFiles.length) {
@@ -565,7 +719,14 @@ async function mergeByType(rows, failures, type) {
   addLog('info', `Merging ${typePdfs.length} ${typeLabel} PDFs into one document`);
 
   try {
-    const bytes = await mergePdfFiles(typePdfs);
+    const merged = await PDFDocument.create();
+    for (const pdf of typePdfs) {
+      const buf = bufferMap.get(pdf.id);
+      const doc = await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false });
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    const bytes = await merged.save({ objectsPerTick: Infinity, updateFieldAppearances: false, addDefaultPage: false });
     const containerCount = state.excelRows.length;
     const filename = `${getDatePrefix()}_${typeLabel}_${containerCount}_merged.pdf`;
     state.mergeResults.push({ containerNumber: type.toUpperCase() + '_ONLY', bytes, filename, subfolder });
@@ -597,24 +758,35 @@ async function runAutoMerge() {
   const sortLabel = { 'excel': 'Excel order', 'container': 'Container #', 'invoice': 'Invoice #' };
   addLog('info', `──── Auto Merge started (${modeLabel[state.mergeMode]}, sort: ${sortLabel[state.sortOrder]}) ────`);
 
+  const t0 = performance.now();
+
+  // Pre-load all PDFs in parallel
+  addLog('info', `Pre-loading ${state.pdfs.length} PDFs…`);
+  const readStart = performance.now();
+  const bufferMap = await preloadAllPdfs(state.pdfs);
+  addLog('info', `Pre-loaded ${state.pdfs.length} PDFs (${Math.round(performance.now() - readStart)}ms)`);
+
+  // Build match index (pre-compute container → PDF mapping)
   const rows = getSortedRows();
+  const matchIndex = buildMatchIndex(rows, state.pdfs);
   const failures = [];
 
   if (state.mergeMode === 'per-container') {
-    await mergePerContainer(rows, failures);
+    await mergePerContainer(rows, failures, bufferMap, matchIndex);
   } else if (state.mergeMode === 'all-in-one') {
-    await mergeAllInOne(rows, failures);
+    await mergeAllInOne(rows, failures, bufferMap, matchIndex);
   } else if (state.mergeMode === 'invoices-only') {
-    await mergeByType(rows, failures, 'invoice');
+    await mergeByType(rows, failures, bufferMap, matchIndex, 'invoice');
   } else if (state.mergeMode === 'pods-only') {
-    await mergeByType(rows, failures, 'pod');
+    await mergeByType(rows, failures, bufferMap, matchIndex, 'pod');
   }
 
+  const elapsed = Math.round(performance.now() - t0);
   setProgress(100, 'Done');
   setTimeout(() => setProgress(null), 1500);
 
   addLog('info', '──────────────────────────');
-  addLog('success', `Complete: ${state.mergeResults.length} merged · ${failures.length} failed`);
+  addLog('success', `Complete: ${state.mergeResults.length} merged · ${failures.length} failed · ${(elapsed / 1000).toFixed(1)}s total`);
 
   if (failures.length > 0) {
     addLog('warning', `Failures: ${failures.map(f => f.containerNumber).join(', ')}`);
@@ -662,7 +834,15 @@ async function runManualMerge() {
   state.pdfs.forEach((p, i) => addLog('info', `  ${i + 1}. ${p.name}`));
 
   try {
-    const bytes = await mergePdfFiles(state.pdfs);
+    const { PDFDocument } = PDFLib;
+    const buffers = await Promise.all(state.pdfs.map(p => readAsArrayBuffer(p.file)));
+    const merged = await PDFDocument.create();
+    for (let i = 0; i < state.pdfs.length; i++) {
+      const doc = await PDFDocument.load(buffers[i], { ignoreEncryption: true, updateMetadata: false });
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    const bytes = await merged.save({ objectsPerTick: Infinity, updateFieldAppearances: false, addDefaultPage: false });
     setProgress(100, 'Done!');
     const blob = new Blob([bytes], { type: 'application/pdf' });
     triggerDownload(blob, 'NGL_Merged.pdf');

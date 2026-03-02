@@ -17,6 +17,7 @@ const state = {
   activeJobId: null,
   mergeMode: 'per-container',   // 'per-container' | 'all-in-one' | 'invoices-only' | 'pods-only'
   sortOrder: 'excel',           // 'excel' | 'container' | 'invoice'
+  _workersFailed: false,        // true if Web Workers unavailable (fallback to sequential)
 };
 
 let sortableInstance = null;
@@ -49,6 +50,8 @@ const sendState = {
   errors: 0,
   mismatches: 0,
   missingDocs: 0,
+  startTime: null,       // Date.now() when send job starts
+  completedCount: 0,     // invoices fully processed (for ETA calc)
 };
 
 // ── Customer manager state ──

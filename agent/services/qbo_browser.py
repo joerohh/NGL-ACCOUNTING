@@ -23,7 +23,7 @@ from config import (
     SELECTORS_FILE,
     DOWNLOADS_DIR,
 )
-from utils import strip_motw
+from utils import strip_motw, kill_chrome_with_profile, save_cookies_async, restore_cookies
 
 logger = logging.getLogger("ngl.qbo_browser")
 
@@ -90,6 +90,9 @@ class QBOBrowser:
         except Exception:
             pass
 
+        # Kill orphaned Chrome processes that may be locking the profile directory
+        kill_chrome_with_profile(BROWSER_PROFILE_DIR)
+
         # Clean stale browser downloads from previous sessions
         for f in BROWSER_DOWNLOADS_DIR.glob("*"):
             try:
@@ -119,7 +122,14 @@ class QBOBrowser:
             self._page = self._context.pages[0]
         else:
             self._page = await self._context.new_page()
-        logger.info("QBO browser initialized (profile: %s)", BROWSER_PROFILE_DIR)
+
+        # Restore saved session cookies (so QBO login persists across restarts)
+        cookie_file = BROWSER_PROFILE_DIR / "_session_cookies.json"
+        restored = await restore_cookies(self._context, cookie_file)
+        if restored:
+            logger.info("QBO browser initialized with %d restored cookies", restored)
+        else:
+            logger.info("QBO browser initialized (profile: %s)", BROWSER_PROFILE_DIR)
 
     async def _ensure_browser(self) -> None:
         """Re-launch Chrome if the browser/page has been closed or crashed."""
@@ -139,13 +149,24 @@ class QBOBrowser:
             logger.info("Browser relaunched successfully")
 
     async def close(self) -> None:
-        """Shut down browser — disconnect without closing Chrome so cookies persist.
+        """Shut down browser — save cookies first, then close properly.
 
-        If we call context.close(), Chrome performs a clean shutdown that can
-        invalidate QBO session cookies.  Instead we just detach from the browser
-        process and let it terminate on its own — the persistent profile keeps
-        the active session cookies intact for next startup.
+        We save all cookies (including session-only ones) to a JSON file so they
+        can be restored on next startup.  Then we close the context properly so
+        Chrome doesn't leave orphaned processes locking the profile directory.
         """
+        cookie_file = BROWSER_PROFILE_DIR / "_session_cookies.json"
+        try:
+            if self._context:
+                await save_cookies_async(self._context, cookie_file)
+        except Exception as e:
+            logger.warning("Could not save QBO cookies: %s", e)
+
+        try:
+            if self._context:
+                await self._context.close()
+        except Exception:
+            pass
         try:
             if self._playwright:
                 await self._playwright.stop()
@@ -154,7 +175,7 @@ class QBOBrowser:
         self._context = None
         self._page = None
         self._playwright = None
-        logger.info("QBO browser closed")
+        logger.info("QBO browser closed (cookies saved)")
 
     # ------------------------------------------------------------------
     # Keep-alive (prevents session timeout)
@@ -265,31 +286,46 @@ class QBOBrowser:
         # Reset step counter for each new invoice search
         self._debug_step = 0
 
-        # Navigate to QBO homepage to get the search bar
-        await self._page.goto(QBO_BASE_URL, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(8)
-        await self._debug(f"homepage_loaded_{invoice_number}")
-
-        # Find and click the search bar
+        # Find the search bar — reuse current page if already on QBO, else load homepage
         search_input_sel = (
             'input[placeholder*="search" i], '
             'input[placeholder*="navigate" i], '
             "input[data-testid='global-search-input']"
         )
 
+        search_input = None
+        current_url = self._page.url if self._page else ""
+
+        if QBO_BASE_URL in current_url:
+            # Already on QBO — try to grab search bar without reloading (saves ~12s)
+            try:
+                search_input = await self._page.wait_for_selector(search_input_sel, timeout=3000)
+                logger.info("Reusing existing QBO search bar (skipped homepage reload)")
+            except Exception:
+                search_input = None  # Fall through to full navigation
+
+        if not search_input:
+            # Full homepage navigation (first invoice, or search bar not found)
+            await self._page.goto(QBO_BASE_URL, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(8)
+            try:
+                search_input = await self._page.wait_for_selector(search_input_sel, timeout=15000)
+            except Exception as e:
+                logger.error("Could not find QBO search bar after homepage load: %s", e)
+                await self._debug(f"search_bar_NOT_FOUND_{invoice_number}")
+                return None
+
         try:
-            search_input = await self._page.wait_for_selector(search_input_sel, timeout=15000)
             await search_input.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.3)
             await search_input.fill("")
-            await asyncio.sleep(0.5)
-            await search_input.type(invoice_number, delay=100)
+            await asyncio.sleep(0.2)
+            await search_input.type(invoice_number, delay=50)
             logger.info("Typed '%s' into QBO search bar", invoice_number)
-            await asyncio.sleep(3)
-            await self._debug(f"search_typed_{invoice_number}")
+            await asyncio.sleep(1.5)
         except Exception as e:
-            logger.error("Could not find QBO search bar: %s", e)
-            await self._debug(f"search_bar_NOT_FOUND_{invoice_number}")
+            logger.error("Failed to type in QBO search bar: %s", e)
+            await self._debug(f"search_type_FAILED_{invoice_number}")
             return None
 
         # Press Enter to go to the full Search Results page
@@ -352,7 +388,6 @@ class QBOBrowser:
                 await asyncio.sleep(3)
                 data_loaded = await _wait_for_search_data(max_wait=15)
 
-        await self._debug(f"search_results_page_{invoice_number}")
         logger.info("Search results page for %s: %s (data_loaded=%s)", invoice_number, self._page.url, data_loaded)
 
         # Now find and click the invoice row in the results table.
@@ -399,9 +434,23 @@ class QBOBrowser:
 
             if row_clicked:
                 logger.info("Clicked search result: %s", row_clicked)
-                await self._debug(f"clicked_search_row_{invoice_number}")
                 await self._page.wait_for_load_state("domcontentloaded")
-                await asyncio.sleep(12)
+
+                # Wait for invoice detail page — detect "Review and send" button
+                # instead of fixed 12s sleep (saves ~7s, timeout 15s for safety)
+                for _ in range(30):  # 30 × 0.5s = 15s max wait
+                    found_btn = await self._page.evaluate("""() => {
+                        const els = document.querySelectorAll('a, button, [role="button"]');
+                        for (const el of els) {
+                            const text = (el.textContent || '').trim().toLowerCase();
+                            if (text.includes('review and send') || text.includes('review & send')) return true;
+                        }
+                        return false;
+                    }""")
+                    if found_btn:
+                        break
+                    await asyncio.sleep(0.5)
+
                 await self._debug(f"invoice_detail_page_{invoice_number}")
 
                 url = self._page.url
@@ -872,8 +921,7 @@ class QBOBrowser:
 
         # Scroll to bottom to see attachments
         await self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(3)
-        await self._debug("check_attachments_scrolled")
+        await asyncio.sleep(1.5)
 
         # Read all attachment filenames from the page
         attachments_data = await self._page.evaluate("""() => {
@@ -1186,7 +1234,6 @@ class QBOBrowser:
         Returns True if the send form loaded, False otherwise.
         """
         await self._ensure_browser()
-        await self._debug("before_review_and_send")
 
         try:
             # Find and click "Review and send" button
@@ -1208,10 +1255,22 @@ class QBOBrowser:
                 return False
 
             logger.info("Clicked 'Review and send': %s", clicked)
-            await asyncio.sleep(5)
             await self._page.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(3)
-            await self._debug("review_send_form_loaded")
+
+            # Poll for Subject field instead of fixed 8s sleep (saves ~5s)
+            for _ in range(24):  # 24 × 0.5s = 12s max wait
+                has_subj = await self._page.evaluate("""() => {
+                    const inputs = document.querySelectorAll('input, textarea');
+                    for (const inp of inputs) {
+                        const label = (inp.getAttribute('aria-label') || '').toLowerCase();
+                        const name = (inp.getAttribute('name') || '').toLowerCase();
+                        if (label.includes('subject') || name.includes('subject')) return true;
+                    }
+                    return false;
+                }""")
+                if has_subj:
+                    break
+                await asyncio.sleep(0.5)
 
             # Verify the send form loaded by checking for the Subject field
             has_subject = await self._page.evaluate("""() => {
@@ -1288,7 +1347,6 @@ class QBOBrowser:
         Returns: { filled: bool, toEmails: list, ccEmails: list, subject: str }
         """
         await self._ensure_browser()
-        await self._debug("fill_form_start")
 
         result = {
             "filled": False,
@@ -1336,8 +1394,6 @@ class QBOBrowser:
                                att_info["count"], expected_attachment_count, MAX_ATT_VERIFY)
                 filled["attachments"] = att_info["count"] > 0
 
-            await self._debug("fill_form_attachments_verified")
-
             # --- Fill TO field (CRITICAL — abort if not found) ---
             to_input = await self._page.query_selector("#email_to")
             if not to_input:
@@ -1381,7 +1437,7 @@ class QBOBrowser:
                     logger.info("Clicked CC/BCC toggle")
 
                 # Wait for CC input to appear after React re-renders
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
             except Exception as e:
                 logger.warning("Could not click CC/BCC toggle: %s", e)
 
@@ -1429,7 +1485,7 @@ class QBOBrowser:
                 logger.warning("Could not find Subject field (#email_subject)")
 
             logger.info("Form fill results: %s", filled)
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
             await self._debug("fill_form_done")
 
             # Only mark as filled if the critical To field was populated
@@ -1451,7 +1507,6 @@ class QBOBrowser:
         Returns True if the send appeared to succeed, False otherwise.
         """
         await self._ensure_browser()
-        await self._debug("before_send_click")
 
         # Remember current URL to detect navigation after send
         pre_send_url = self._page.url
@@ -1480,23 +1535,16 @@ class QBOBrowser:
                 return False
 
             logger.info("Clicked 'Send invoice' button: %s", clicked)
-            await asyncio.sleep(5)
 
-            # Check if page navigated away (indicates send success)
-            post_send_url = self._page.url
-            if post_send_url != pre_send_url:
-                logger.info("Send appears successful — page navigated from %s to %s",
-                           pre_send_url[:80], post_send_url[:80])
-                await self._debug("send_SUCCESS")
-                return True
-
-            # Page didn't navigate — might still be on send form (error?) or processing
-            await asyncio.sleep(3)
-            post_send_url = self._page.url
-            if post_send_url != pre_send_url:
-                logger.info("Send succeeded after delay — navigated to %s", post_send_url[:80])
-                await self._debug("send_SUCCESS_delayed")
-                return True
+            # Poll for URL change instead of fixed 8s sleep (saves ~5s)
+            for _ in range(20):  # 20 × 0.5s = 10s max wait
+                await asyncio.sleep(0.5)
+                post_send_url = self._page.url
+                if post_send_url != pre_send_url:
+                    logger.info("Send successful — page navigated from %s to %s",
+                               pre_send_url[:80], post_send_url[:80])
+                    await self._debug("send_SUCCESS")
+                    return True
 
             # Check for any error messages on the page
             errors = await self._page.evaluate("""() => {

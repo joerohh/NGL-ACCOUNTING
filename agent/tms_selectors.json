@@ -5,7 +5,7 @@
     "sign_in_url_fragment": "sign-in"
   },
   "navigation": {
-    "main_page_path": "/order/impreg",
+    "main_page_path": "/main/imp",
     "sidebar_icons": "div.cursor-pointer"
   },
   "work_order": {

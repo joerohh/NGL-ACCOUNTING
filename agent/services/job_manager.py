@@ -721,9 +721,6 @@ class JobManager:
             })
             return
 
-        # Give the send form extra time to fully render (attachments load async)
-        await asyncio.sleep(3)
-
         # Build and fill the form
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{invoice.container_number}"
         to_emails = customer_emails
@@ -974,54 +971,74 @@ class JobManager:
             await asyncio.sleep(2)
             pod_path = await self._qbo.find_and_download_pod(temp_dir)
 
-        # Try 2: Fetch POD from TMS portal (if QBO didn't have it or download failed)
-        if not pod_path and self._tms:
-            if self._tms.is_logged_in():
-                await self._emit_send(job, "tms_fetching_pod", {
+        # Try 2: Always consult TMS — for POD (if missing) AND DO SENDER (always)
+        if self._tms:
+            # If TMS is not logged in, pause and wait for user to log in
+            if not self._tms.is_logged_in():
+                await self._emit_send(job, "tms_login_required", {
                     "invoiceNumber": invoice.invoice_number,
-                    "containerNumber": invoice.container_number,
+                    "message": "TMS login required to fetch POD/DO SENDER — please log in now",
                 })
-                pod_path = await self._tms.fetch_pod_for_container(
-                    invoice.container_number, temp_dir
-                )
-                if pod_path:
-                    await self._emit_send(job, "tms_pod_downloaded", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "fileName": pod_path.name,
+                await self._tms.open_login_page()
+                logged_in = await self._tms.wait_for_login(timeout_s=120)
+                if logged_in:
+                    await self._emit_send(job, "tms_logged_in", {
+                        "message": "TMS login successful — continuing",
                     })
                 else:
-                    await self._emit_send(job, "tms_pod_not_found", {
+                    await self._emit_send(job, "tms_login_timeout", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "message": "TMS login timed out (2 min) — skipping TMS lookup",
+                    })
+
+            # Now attempt TMS fetch if logged in
+            if self._tms.is_logged_in():
+                if not pod_path:
+                    # Need both POD and DO SENDER — single trip
+                    await self._emit_send(job, "tms_fetching_pod", {
                         "invoiceNumber": invoice.invoice_number,
                         "containerNumber": invoice.container_number,
                     })
-            else:
-                await self._emit_send(job, "tms_login_required", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "error": "TMS not logged in — log in via Agent panel to enable POD fetching",
-                })
+                    tms_pod, tms_do_sender = await self._tms.fetch_pod_and_do_sender(
+                        invoice.container_number, temp_dir
+                    )
+                    if tms_pod:
+                        pod_path = tms_pod
+                        await self._emit_send(job, "tms_pod_downloaded", {
+                            "invoiceNumber": invoice.invoice_number,
+                            "fileName": pod_path.name,
+                        })
+                    else:
+                        await self._emit_send(job, "tms_pod_not_found", {
+                            "invoiceNumber": invoice.invoice_number,
+                            "containerNumber": invoice.container_number,
+                        })
+                    if tms_do_sender and not invoice.do_sender_email:
+                        invoice.do_sender_email = tms_do_sender
+                        logger.info("D/O sender from TMS for %s: %s", invoice.container_number, tms_do_sender)
+                else:
+                    # POD already from QBO — just fetch DO SENDER
+                    await self._emit_send(job, "tms_fetching_do_sender", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "containerNumber": invoice.container_number,
+                    })
+                    tms_do_sender = await self._tms.fetch_do_sender_email(
+                        invoice.container_number
+                    )
+                    if tms_do_sender and not invoice.do_sender_email:
+                        invoice.do_sender_email = tms_do_sender
+                        logger.info("D/O sender from TMS for %s: %s", invoice.container_number, tms_do_sender)
 
-        # No POD found anywhere
+        # No POD found anywhere — QBO invoice was sent but POD email can't go out
         if not pod_path:
             source = "QBO or TMS" if self._tms else "QBO"
-            result.status = "sent"
+            result.status = "sent_no_pod"
             result.error = f"QBO invoice sent but no POD found ({source}) — send POD manually"
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": f"No POD found in {source} — send POD manually",
             })
             return
-
-        # If D/O sender email is missing, try to look it up from TMS
-        if not invoice.do_sender_email and self._tms and self._tms.is_logged_in():
-            await self._emit_send(job, "tms_fetching_pod", {
-                "invoiceNumber": invoice.invoice_number,
-                "containerNumber": invoice.container_number,
-                "message": "Looking up D/O sender from TMS...",
-            })
-            tms_do_sender = await self._tms.fetch_do_sender_email(invoice.container_number)
-            if tms_do_sender:
-                invoice.do_sender_email = tms_do_sender
-                logger.info("D/O sender from TMS for %s: %s", invoice.container_number, tms_do_sender)
 
         # Build POD email recipients
         pod_to = list(customer.get("podEmailTo", []))
@@ -1077,7 +1094,7 @@ class JobManager:
             job._approval_event = None
             job._approval_decision = None
             if not approved:
-                result.status = "sent"  # QBO part already sent, just skipping POD email
+                result.status = "sent_no_pod"
                 result.error = "QBO sent but POD email skipped by user"
                 await self._emit_send(job, "invoice_skipped", {
                     "invoiceNumber": invoice.invoice_number,
