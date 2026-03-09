@@ -233,7 +233,7 @@ body {
   border-bottom: 1px solid #f1f5f9; transition: background 0.15s;
 }
 .sidebar-logo:hover { background: #fafafa; }
-.sidebar-logo img { width: 100%; max-width: 120px; height: auto; object-fit: contain; }
+.sidebar-logo img { width: 100%; max-width: 120px; height: auto; object-fit: contain; margin: 0 auto; display: block; border-radius: 16px; }
 .sidebar-logo .logo-title {
   font-size: 0.78rem; font-weight: 700; color: #0f172a; margin-top: 6px; line-height: 1.2;
 }

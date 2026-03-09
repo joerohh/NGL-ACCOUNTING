@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import smtplib
+from typing import Optional
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -25,7 +26,7 @@ class EmailSender:
         subject: str,
         body: str,
         pod_path: Path,
-        reply_to: str | None = None,
+        reply_to: Optional[str] = None,
     ) -> dict:
         """Send a POD PDF as an email attachment via Gmail SMTP.
 
@@ -53,7 +54,7 @@ class EmailSender:
         subject: str,
         body: str,
         pod_path: Path,
-        reply_to: str | None,
+        reply_to: Optional[str],
     ) -> dict:
         """Synchronous email send (runs in thread pool)."""
         msg = MIMEMultipart()

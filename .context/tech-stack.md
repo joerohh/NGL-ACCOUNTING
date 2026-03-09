@@ -1,39 +1,49 @@
 # Tech Stack — NGL Accounting System
 
-> Update exact versions after running `npm install`.
+## Web App (Frontend)
 
-## Framework & Language
 | Tool | Version | Notes |
 |---|---|---|
-| Next.js | 15.x | App Router, static export for GitHub Pages |
-| TypeScript | 5.x | Strict mode enabled |
-| React | 19.x | Server Components default |
+| HTML/CSS/JS | Vanilla | No framework, no build step |
+| Tailwind CSS | CDN (latest) | Utility-first styling |
+| pdf-lib | 1.17.1 | Client-side PDF merge engine |
+| SheetJS (xlsx) | 0.20.3 | Excel (.xlsx) parsing |
+| SortableJS | 1.15.2 | Drag-and-drop reordering |
+| JSZip | 3.10.1 | ZIP file creation for bulk downloads |
 
-## Styling
+## Agent Server (Backend)
+
 | Tool | Version | Notes |
 |---|---|---|
-| Tailwind CSS | 4.x | Utility-first |
-| Shadcn/UI | latest | Component library, Industrial/Clean theme |
+| Python | 3.12+ | Via `py` launcher |
+| FastAPI | latest | REST API + SSE streaming |
+| Uvicorn | latest | ASGI server |
+| Playwright | latest | Browser automation (Chrome) |
+| Anthropic SDK | latest | Claude Haiku for document classification |
+| python-dotenv | latest | Environment variable management |
 
-## Core Libraries
-| Tool | Version | Notes |
-|---|---|---|
-| pdf-lib | latest | Client-side PDF merge engine |
-| xlsx (SheetJS) | latest | Excel (.xlsx) parsing |
-| lucide-react | latest | Icon set |
+## External Services
+| Service | Purpose |
+|---|---|
+| QuickBooks Online (QBO) | Invoice sending via browser automation |
+| NGL TMS Portal | POD document retrieval |
+| Gmail SMTP | OEC flow POD emails |
+| TranzAct Portal | Portal upload flow |
+| Claude Haiku API | AI document classification |
 
-## Development
-| Tool | Version | Notes |
-|---|---|---|
-| ESLint | latest | `npm run lint` |
-| Node.js | 20.x LTS | Recommended runtime |
+## Running the App
+```
+# Web app — open directly in browser
+app/index.html
 
-## Commands
-```bash
-npm run dev      # Start development server
-npm run build    # Production build (static export)
-npm run lint     # Run ESLint
+# Agent server — first-time setup
+agent/setup.bat
+
+# Agent server — start
+Start Agent.bat  (or: cd agent && python main.py)
 ```
 
-## Deployment Target
-GitHub Pages — static HTML/CSS/JS export, no server runtime needed.
+## Deployment
+- Local-only utility (not deployed to any hosting)
+- Web app runs via `file://` protocol
+- Agent server runs on `localhost:8787`

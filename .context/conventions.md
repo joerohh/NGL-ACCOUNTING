@@ -1,45 +1,52 @@
 # Conventions — NGL Accounting System
 
-## File Naming
-- Components: PascalCase — `MergeDashboard.tsx`, `FileDropZone.tsx`
-- Utilities: camelCase — `pdfMerger.ts`, `xlsxParser.ts`
-- Types file: `src/types/index.ts`
-- Routes: lowercase folders — `app/merge/page.tsx`
+## JavaScript (Web App)
 
-## TypeScript
-- Strict mode is ON — no `any` types.
-- Prefer `type` over `interface`.
-- Use `import type` for type-only imports.
-- Props defined inline with a named `type`:
-  ```ts
-  type FileDropZoneProps = {
-    onFilesSelected: (files: File[]) => void
-  }
-  ```
+### File Organization
+- ES modules with explicit imports/exports
+- Shared utilities in `app/assets/js/shared/`
+- Tool-specific code in `app/assets/js/tools/{tool-name}/`
+- Single entry point: `app.js` (loaded as `type="module"`)
 
-## Components
-- Functional components only — no class components.
-- Server Components are the default.
-- Add `"use client"` only when browser APIs are needed (file input, drag-and-drop, etc.).
-- `"use client"` must be the very first line of the file.
+### Naming
+- Files: kebab-case — `agent-client.js`, `invoice-sender.js`
+- Functions: camelCase — `invAddLog()`, `custLoadCustomers()`
+- Constants: UPPER_SNAKE_CASE — `LS_CUSTOMERS`, `LS_SEND_HISTORY`
+- DOM IDs: camelCase — `mergeToolView`, `invSendFilterWrap`
 
-## Styling
-- Tailwind utility classes directly in JSX.
-- Use the `cn()` utility for conditional class names.
-- Follow Industrial/Clean aesthetic (Shadcn/UI base).
+### State
+- Global state objects in `shared/state.js`
+- localStorage keys centralized in `shared/constants.js`
 
-## Logic
-- All PDF and Excel logic lives in `/src/utils` — never inside components.
-- Keep utility functions pure and independently testable.
+### Styling
+- Tailwind utility classes via CDN
+- Custom CSS in `assets/css/styles.css`
+- Modal visibility via `.open` CSS class toggle
 
-## Error Handling
-- Wrap all async operations in `try/catch`.
-- Log errors to the Status Log UI — never silently swallow them.
-- Skipped/failed files go to the "Failure Report" section.
+### Error Handling
+- Wrap async operations in try/catch
+- Log errors to Status Log UI — never silently swallow
+- Skipped/failed files go to "Failure Report" section
 
-## Constants
-- Named in `UPPER_SNAKE_CASE`.
+## Python (Agent Server)
 
-## Images
-- Always use Next.js `<Image>` — never `<img>`.
-- Always include `alt` and either `width`/`height` or `fill`.
+### File Organization
+- Large service files split into packages using mixin pattern
+- Each mixin file has its own imports (only what it uses)
+- `__init__.py` combines mixins and re-exports the main class
+
+### Naming
+- Files: snake_case — `qbo_browser.py`, `job_manager.py`
+- Classes: PascalCase — `QBOBrowser`, `TMSBrowser`
+- Private methods: `_prefixed` — `_debug()`, `_ensure_browser()`
+- Logger per module: `logging.getLogger("ngl.{module}")`
+
+### Config
+- All settings in `config.py`
+- Secrets in `.env` (loaded via python-dotenv)
+- DOM selectors in `selectors.json` / `tms_selectors.json`
+
+### Error Handling
+- Browser automation methods return structured result objects
+- Timeouts on all browser waits (never hang indefinitely)
+- Debug screenshots + HTML snapshots saved to `agent/debug/`

@@ -1,6 +1,7 @@
 """Job endpoints — create fetch jobs and stream progress."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -120,13 +121,30 @@ async def create_send_job(req: SendRequest):
 
 
 @router.post("/{job_id}/approve-send")
-async def approve_send(job_id: str):
-    """Approve sending the current invoice in test mode."""
+async def approve_send(job_id: str, request: Request):
+    """Approve sending the current invoice in test mode.
+
+    Accepts optional JSON body: { "ccOverride": ["email1", "email2"] }
+    to override the CC list for OEC POD emails.
+    """
     if not _job_manager:
         raise HTTPException(503, "Agent not initialized")
+
+    # Parse optional CC override from request body
+    cc_override: Optional[list[str]] = None
     try:
-        _job_manager.approve_current_send(job_id, approve=True)
-        return {"status": "approved", "jobId": job_id}
+        body = await request.json()
+        if body and "ccOverride" in body:
+            raw = body["ccOverride"]
+            if isinstance(raw, list):
+                cc_override = [e.strip() for e in raw if isinstance(e, str) and e.strip()]
+    except Exception:
+        pass  # No body or invalid JSON — that's fine, proceed without override
+
+    try:
+        _job_manager.approve_current_send(job_id, approve=True, cc_override=cc_override)
+        return {"status": "approved", "jobId": job_id,
+                "ccOverride": cc_override if cc_override else None}
     except ValueError as e:
         raise HTTPException(400, str(e))
 

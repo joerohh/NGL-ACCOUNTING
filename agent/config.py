@@ -6,18 +6,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Paths
-BASE_DIR = Path(__file__).resolve().parent
+# Paths — NGL_AGENT_DIR is set by PyInstaller runtime hook when running as bundled exe
+BASE_DIR = Path(os.environ["NGL_AGENT_DIR"]) if "NGL_AGENT_DIR" in os.environ else Path(__file__).resolve().parent
+# BUNDLE_DIR = where PyInstaller extracts read-only data files (_internal/ in packaged mode)
+# In dev mode, this is the same as BASE_DIR (agent/ folder).
+BUNDLE_DIR = Path(os.environ["NGL_BUNDLE_DIR"]) if "NGL_BUNDLE_DIR" in os.environ else BASE_DIR
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 BROWSER_DOWNLOADS_DIR = BASE_DIR / ".browser_downloads"  # temp dir for Playwright auto-downloads
 BROWSER_PROFILE_DIR = BASE_DIR / ".browser_profile"
-SELECTORS_FILE = BASE_DIR / "selectors.json"
+SELECTORS_FILE = BUNDLE_DIR / "selectors.json"
 JOB_STATE_DIR = BASE_DIR / ".job_state"
 DEBUG_DIR = BASE_DIR / "debug"
 OUTPUT_DIR = BASE_DIR / "output"  # Final merged PDFs saved here (no MOTW)
 DATA_DIR = BASE_DIR / "data"
 CUSTOMERS_FILE = DATA_DIR / "customers.json"
 AUDIT_LOG_FILE = DATA_DIR / "audit_log.jsonl"
+DO_SENDER_CACHE_FILE = DATA_DIR / "do_sender_cache.json"
+BACKUP_DIR = BASE_DIR / "backups"
+BACKUP_RETAIN_DAYS = 30  # keep last 30 daily backups
 
 # Ensure directories exist
 DOWNLOADS_DIR.mkdir(exist_ok=True)
@@ -27,6 +33,7 @@ JOB_STATE_DIR.mkdir(exist_ok=True)
 DEBUG_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 DATA_DIR.mkdir(exist_ok=True)
+BACKUP_DIR.mkdir(exist_ok=True)
 
 # Server
 HOST = "127.0.0.1"
@@ -35,8 +42,10 @@ ALLOWED_ORIGINS = [
     "null",                    # file:// origin
     "http://localhost",
     "http://localhost:8080",
+    "http://localhost:8787",
     "http://127.0.0.1",
     "http://127.0.0.1:8080",
+    "http://127.0.0.1:8787",
 ]
 
 # Claude API
@@ -56,6 +65,9 @@ QBO_RETRY_BACKOFF_S = 5.0       # initial backoff (doubles each retry)
 CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.80  # below this → flag for manual review
 CLASSIFICATION_DPI = 100                    # lower DPI = smaller image = cheaper API call
 MAX_BATCH_SIZE = 200                        # max containers per job
+CONTAINER_TIMEOUT_S = 120                   # max seconds per container in fetch jobs
+FETCH_CONCURRENCY = 2                       # max parallel container fetches (1 = sequential)
+SEND_TIMEOUT_S = 180                        # max seconds per invoice in send jobs (OEC/portal flows are slower)
 DAILY_API_CALL_LIMIT = 200                  # max Claude API calls per day (safety cap)
 API_USAGE_FILE = BASE_DIR / ".api_usage.json"  # tracks daily usage
 
@@ -67,18 +79,38 @@ GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 TRANZACT_USERNAME = os.getenv("TRANZACT_USERNAME", "")
 TRANZACT_PASSWORD = os.getenv("TRANZACT_PASSWORD", "")
 
+# QBO auto-login credentials
+QBO_EMAIL = os.getenv("QBO_EMAIL", "")
+QBO_PASSWORD = os.getenv("QBO_PASSWORD", "")
+
+# TMS auto-login credentials (Google SSO)
+TMS_EMAIL = os.getenv("TMS_EMAIL", "")
+TMS_PASSWORD = os.getenv("TMS_PASSWORD", "")
+
 # TMS portal (POD fetching for OEC flow)
 TMS_URL = "https://tms.ngltrans.net"
 TMS_LOGIN_URL = "https://tms.ngltrans.net/sign-in"
 TMS_PROFILE_DIR = BASE_DIR / ".tms_browser_profile"
 TMS_DOWNLOADS_DIR = BASE_DIR / ".tms_downloads"
 TMS_DEBUG_DIR = DEBUG_DIR / "tms"
-TMS_SELECTORS_FILE = BASE_DIR / "tms_selectors.json"
+TMS_SELECTORS_FILE = BUNDLE_DIR / "tms_selectors.json"
 TMS_ACTION_DELAY_S = 2.0  # seconds between TMS actions
+TMS_VIEWPORT = {"width": 1600, "height": 1000}  # fixed viewport to prevent layout shifts
 
 TMS_PROFILE_DIR.mkdir(exist_ok=True)
 TMS_DOWNLOADS_DIR.mkdir(exist_ok=True)
 TMS_DEBUG_DIR.mkdir(exist_ok=True)
+
+# Supabase (shared cloud database)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+# Web app auto-update — set this to a URL that hosts version.json + webapp.zip
+# Example: "https://yourserver.com/ngl-updates" or a GitHub Pages URL
+# The agent will check {WEB_UPDATE_URL}/version.json on startup and download
+# {WEB_UPDATE_URL}/webapp.zip if a newer version is available.
+WEB_UPDATE_URL = os.getenv("WEB_UPDATE_URL", "")
+WEBAPP_CACHE_DIR = BASE_DIR / "webapp-cache"
 
 # Auth token for local server (simple security)
 AUTH_TOKEN = os.getenv("NGL_AGENT_TOKEN", "ngl-local-dev-token")

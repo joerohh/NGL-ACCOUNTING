@@ -72,6 +72,13 @@ async def wait_for_qbo_login():
         raise HTTPException(500, f"Error waiting for login: {e}")
 
 
+@router.get("/selector-health")
+async def qbo_selector_health():
+    """Check if critical QBO DOM selectors are present on the current page."""
+    from services.health_check import check_qbo_selectors
+    return await check_qbo_selectors(_qbo_browser)
+
+
 @router.post("/shutdown")
 async def shutdown_server():
     """Gracefully shut down the agent server so Chrome saves cookies/session properly."""

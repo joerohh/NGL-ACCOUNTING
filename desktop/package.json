@@ -1,0 +1,66 @@
+{
+  "name": "ngl-accounting",
+  "version": "1.0.0",
+  "description": "NGL Accounting Service — Invoice management and document automation",
+  "main": "main.js",
+  "scripts": {
+    "start": "node dev-launch.js",
+    "dev": "node dev-launch.js",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "author": "NGL Trans",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.ngltrans.accounting",
+    "productName": "NGL Accounting",
+    "copyright": "Copyright (C) 2026 NGL Trans",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "../app/assets/images/ngl-desktop.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NGL Accounting"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.ico"
+    ],
+    "extraResources": [
+      {
+        "from": "../app",
+        "to": "webapp",
+        "filter": [
+          "**/*",
+          "!**/*.map"
+        ]
+      },
+      {
+        "from": "./agent-dist",
+        "to": "agent",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": false
+  }
+}

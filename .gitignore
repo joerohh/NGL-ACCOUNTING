@@ -11,6 +11,7 @@ __pycache__/
 # API keys — NEVER commit these
 .env
 agent/.env
+desktop/build-env/
 
 # Windows junk
 Thumbs.db
@@ -46,5 +47,27 @@ $RECYCLE.BIN/
 *.temp
 send-errors-*.txt
 
-# Node (in case npm is ever used)
+# Node
 node_modules/
+
+# Desktop build output
+desktop/dist/
+desktop/agent-dist/
+desktop/build-temp/
+
+# Runtime data — machine-specific, regenerated automatically
+agent/data/ngl.db
+agent/data/ngl.db-shm
+agent/data/ngl.db-wal
+agent/data/*.bak
+agent/data/do_sender_cache.json
+agent/data/archive/
+
+# Debug screenshots and HTML captures
+agent/debug/
+
+# Merged output PDFs
+agent/output/
+
+# Data backups (local only)
+agent/backups/

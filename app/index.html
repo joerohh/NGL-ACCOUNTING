@@ -12,6 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
+  <link rel="icon" href="assets/images/miniNGL Logo.ico" type="image/x-icon">
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 
@@ -24,7 +25,7 @@
 <nav class="sidebar">
   <!-- Logo -->
   <div class="sidebar-logo" onclick="switchTool('home')">
-    <img id="headerLogo" src="assets/images/ChatGPT Image Feb 23, 2026, 11_11_54 AM.png" alt="NGL Transportation Logo"
+    <img id="headerLogo" src="assets/images/NGL logo.png" alt="NGL Transportation Logo"
          onerror="this.style.display='none'; document.getElementById('logoFallback').style.display='flex';" />
     <div id="logoFallback" style="width:42px; height:42px; background:#0f172a; border-radius:10px; display:none; align-items:center; justify-content:center; margin:0 auto;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -59,23 +60,16 @@
       </svg>
       Customers
     </div>
-  </div>
 
-  <!-- Sidebar Bottom -->
-  <div class="sidebar-bottom">
-    <div class="sidebar-bottom-item" onclick="alert('Settings coming soon')">
+    <div class="sidebar-section-label" style="margin-top:16px;">System</div>
+    <div class="sidebar-nav-item" id="navSettings" onclick="switchTool('settings')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
       Settings
     </div>
-    <div class="sidebar-bottom-item" onclick="alert('Documentation and help resources coming soon')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>
-      Help
-    </div>
   </div>
+
 
   <!-- Sidebar Footer -->
   <div class="sidebar-footer">
@@ -736,8 +730,9 @@
               <div id="mergeModeGroup" style="display:flex; gap:4px; flex-wrap:wrap;">
                 <button class="merge-opt active" data-mode="per-container" onclick="setMergeMode('per-container')">Per Container</button>
                 <button class="merge-opt" data-mode="all-in-one" onclick="setMergeMode('all-in-one')">All in One</button>
-                <button class="merge-opt" data-mode="invoices-only" onclick="setMergeMode('invoices-only')">Invoices Only</button>
-                <button class="merge-opt" data-mode="pods-only" onclick="setMergeMode('pods-only')">PODs Only</button>
+                <button class="merge-opt" data-mode="invoice-only" onclick="setMergeMode('invoice-only')">Invoices Only</button>
+                <button class="merge-opt" data-mode="pod-only" onclick="setMergeMode('pod-only')">PODs Only</button>
+                <button class="merge-opt" data-mode="bl-only" onclick="setMergeMode('bl-only')">BLs Only</button>
               </div>
             </div>
             <div>
@@ -1186,14 +1181,140 @@
 </div>
 
 
+<!-- ═══════════════════════════════════════════ SETTINGS VIEW ═══════════════════════════════════════════ -->
+<div id="settingsView" style="display:none;">
+  <div style="max-width:640px; margin:0 auto; padding:24px;">
+    <h2 style="font-size:1.2rem; font-weight:700; color:#0f172a; margin-bottom:4px;">Settings</h2>
+    <p style="font-size:0.82rem; color:#64748b; margin-bottom:24px;">
+      Auto-login credentials for QBO and TMS. Saved locally in your agent's .env file.
+    </p>
+
+    <!-- QBO Credentials -->
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+        <div style="width:36px; height:36px; background:#fff7ed; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">QuickBooks Online</div>
+          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsQboStatus">Not configured</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Intuit Email</label>
+          <input type="email" id="settingsQboEmail" placeholder="your-email@company.com"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='#ea580c'" onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Password</label>
+          <input type="password" id="settingsQboPassword" placeholder="Enter password"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='#ea580c'" onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+      </div>
+    </div>
+
+    <!-- TMS Credentials -->
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+        <div style="width:36px; height:36px; background:#eff6ff; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">TMS Portal (Google SSO)</div>
+          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsTmsStatus">Not configured</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Google Email</label>
+          <input type="email" id="settingsTmsEmail" placeholder="your-email@ngltrans.net"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Password</label>
+          <input type="password" id="settingsTmsPassword" placeholder="Enter password"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Info banner -->
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; margin-bottom:16px; font-size:0.78rem; color:#15803d; line-height:1.5;">
+      <strong>How it works:</strong> Credentials are saved locally to your agent's .env file (never sent to the internet).
+      On startup, the agent auto-fills login forms. If your account requires 2FA, the Chrome window will
+      open for you to complete that step manually.
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" onclick="settingsSaveAndConnect()" id="settingsSaveBtn"
+        style="flex:1; justify-content:center; padding:10px 16px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+        </svg>
+        <span id="settingsSaveBtnText">Save & Connect</span>
+      </button>
+      <button class="btn btn-secondary" onclick="settingsLoad()" style="padding:10px 16px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Reload
+      </button>
+    </div>
+
+    <!-- Result message -->
+    <div id="settingsResultMsg" style="margin-top:12px; font-size:0.82rem; display:none;"></div>
+
+    <!-- Selector Health Checks -->
+    <div style="margin-top:28px; border-top:1px solid #e2e8f0; padding-top:24px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div>
+          <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0;">Selector Health</h3>
+          <p style="font-size:0.75rem; color:#94a3b8; margin:2px 0 0;">Check if QBO/TMS page elements are still working</p>
+        </div>
+        <button class="btn btn-secondary" onclick="runSelectorHealthCheck()" id="healthCheckBtn" style="padding:8px 14px; font-size:0.8rem;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Run Check
+        </button>
+      </div>
+      <div id="healthCheckResults" style="display:none;">
+        <div id="healthCheckQbo" style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:10px; font-size:0.8rem;"></div>
+        <div id="healthCheckTms" style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; font-size:0.8rem;"></div>
+      </div>
+    </div>
+
+    <!-- Notification Settings -->
+    <div style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:24px;">
+      <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 4px;">Notifications</h3>
+      <p style="font-size:0.75rem; color:#94a3b8; margin:0 0 14px;">Desktop alerts when something needs your attention</p>
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:0.85rem; color:#334155;">
+          <input type="checkbox" id="settingsNotifyEnabled" onchange="toggleNotifications(this.checked)"
+            style="width:18px; height:18px; accent-color:#ea580c;" />
+          Enable desktop notifications
+        </label>
+        <p style="font-size:0.72rem; color:#94a3b8; margin:6px 0 0 28px;">
+          Get notified when a session expires, a job fails, or the agent needs attention.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- ═══════════════════════════════════════════ SCRIPT ═══════════════════════════════════════════ -->
-<script src="assets/js/utils.js"></script>
-<script src="assets/js/state.js"></script>
-<script src="assets/js/agent-bridge.js"></script>
-<script src="assets/js/merge.js"></script>
-<script src="assets/js/invoice-sender.js"></script>
-<script src="assets/js/customers.js"></script>
-<script src="assets/js/app.js"></script>
+<script type="module" src="assets/js/app.js"></script>
 
 </div><!-- /main-content -->
 </div><!-- /app-layout -->

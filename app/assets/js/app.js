@@ -1,7 +1,15 @@
-'use strict';
 // ══════════════════════════════════════════════════════════════════
-//  ██ APP — Navigation, Init & Responsive Layout ██
+//  ██ APP — Navigation, Init & Responsive Layout (Entry Point) ██
 // ══════════════════════════════════════════════════════════════════
+import { state, invoiceState } from './shared/state.js';
+import { addLog, invAddLog } from './shared/log.js';
+import { setupDrop } from './shared/dom-helpers.js';
+import { LS_CUSTOMERS } from './shared/constants.js';
+import { agentHealthCheck } from './agent-ui.js';
+import { renderPdfQueue, setMode, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
+import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
+import { custLoadCustomers } from './tools/customers/customers.js';
+import { settingsLoad } from './tools/settings/settings.js';
 
 // Prevent browser from opening files dropped anywhere on the page
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -20,6 +28,7 @@ function switchTool(tool) {
   document.getElementById('mergeToolView').style.display = 'none';
   document.getElementById('invoiceSenderView').style.display = 'none';
   document.getElementById('customerView').style.display = 'none';
+  document.getElementById('settingsView').style.display = 'none';
 
   // Show selected view
   if (tool === 'home') {
@@ -33,6 +42,9 @@ function switchTool(tool) {
   } else if (tool === 'customers') {
     document.getElementById('customerView').style.display = '';
     custLoadCustomers();
+  } else if (tool === 'settings') {
+    document.getElementById('settingsView').style.display = '';
+    settingsLoad();
   }
 
   // Update sidebar subtitle
@@ -41,6 +53,7 @@ function switchTool(tool) {
     'merge': 'Merging Tool',
     'invoice-sender': 'Invoice Sender',
     'customers': 'Customer Management',
+    'settings': 'Settings',
   };
   document.getElementById('headerSubtitle').textContent = subtitles[tool] || '';
 
@@ -52,6 +65,7 @@ function switchTool(tool) {
   document.getElementById('navMerge').classList.toggle('active', tool === 'merge');
   document.getElementById('navInvoiceSender').classList.toggle('active', tool === 'invoice-sender');
   document.getElementById('navCustomers').classList.toggle('active', tool === 'customers');
+  document.getElementById('navSettings').classList.toggle('active', tool === 'settings');
 }
 
 // ── Home Dashboard Metrics ──
@@ -68,7 +82,7 @@ function refreshHomeMetrics() {
   // Emails sent — try to fetch from agent audit stats
   document.getElementById('metricSent').textContent = '--';
   if (state.agentConnected) {
-    fetch('http://localhost:8787/audit/stats')
+    agentBridge._authFetch('http://localhost:8787/audit/stats')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data && data.sent !== undefined) {
@@ -80,7 +94,7 @@ function refreshHomeMetrics() {
 
   // Customer count from localStorage
   try {
-    const custData = JSON.parse(localStorage.getItem('ngl_customers') || '{}');
+    const custData = JSON.parse(localStorage.getItem(LS_CUSTOMERS) || '{}');
     const activeCount = Object.values(custData).filter(c => c.active !== false).length;
     document.getElementById('metricCustomers').textContent = activeCount || '--';
   } catch {
@@ -106,22 +120,8 @@ document.addEventListener('click', function(e) {
 
 
 // ══════════════════════════════════════════════════════════
-//  DROP ZONE EVENTS
+//  DROP ZONE EVENTS  (setupDrop is in shared/dom-helpers.js)
 // ══════════════════════════════════════════════════════════
-function setupDrop(zoneId, onDrop) {
-  const zone = document.getElementById(zoneId);
-  if (!zone) { console.error('setupDrop: element not found:', zoneId); return; }
-
-  zone.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', e => { e.preventDefault(); if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    zone.classList.remove('drag-over');
-    if (e.dataTransfer && e.dataTransfer.files) onDrop(Array.from(e.dataTransfer.files));
-  });
-}
-
 setupDrop('excelDropZone', files => {
   const excel = files.find(f => /\.(xlsx|xls|csv)$/i.test(f.name));
   if (excel) handleExcelFile(excel);
@@ -157,23 +157,26 @@ applyResponsiveLayout();
 // ══════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════
-(function init() {
-  renderPdfQueue();
-  setMode('idle');
-  addLog('info', '// NGL Transportation Accounting v2.1');
-  addLog('info', '// 100% client-side — no files leave your machine');
-  addLog('info', '// Drop Excel for Auto Mode · Drop PDFs for Manual Mode');
-  addLog('info', '// AI Agent panel available — start agent with: python main.py');
+renderPdfQueue();
+setMode('idle');
+addLog('info', '// NGL Transportation Accounting v2.1');
+addLog('info', '// 100% client-side — no files leave your machine');
+addLog('info', '// Drop Excel for Auto Mode · Drop PDFs for Manual Mode');
+addLog('info', '// AI Agent panel available — start agent with: python main.py');
 
-  // Check agent health on load, then every 15 seconds
-  agentHealthCheck();
-  setInterval(agentHealthCheck, 15000);
+// Check agent health on load, then every 15 seconds
+agentHealthCheck();
+setInterval(agentHealthCheck, 15000);
 
-  // Start on home page
-  switchTool('home');
+// Start on home page
+switchTool('home');
 
-  // Initialize Invoice Sender drop zones
-  invInitDropZones();
-  invAddLog('info', '// Invoice Sending Tool ready');
-  invAddLog('info', '// Upload a CSV export and PDF attachments to get started');
-})();
+// Initialize Invoice Sender drop zones
+invInitDropZones();
+invAddLog('info', '// Invoice Sending Tool ready');
+invAddLog('info', '// Upload a CSV export and PDF attachments to get started');
+
+// ── Window assignments for inline HTML handlers ──
+window.switchTool = switchTool;
+window.toggleToolSwitcher = toggleToolSwitcher;
+window.refreshHomeMetrics = refreshHomeMetrics;
