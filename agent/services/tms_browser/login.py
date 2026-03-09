@@ -3,15 +3,15 @@
 import asyncio
 import logging
 
+from playwright.async_api import BrowserContext
+
 from config import (
     TMS_LOGIN_URL,
     TMS_PROFILE_DIR,
     TMS_DOWNLOADS_DIR,
     TMS_VIEWPORT,
 )
-from utils import kill_chrome_with_profile, save_cookies_async, restore_cookies
-
-from playwright.async_api import async_playwright
+from utils import save_cookies_async, restore_cookies
 
 logger = logging.getLogger("ngl.tms_browser")
 
@@ -22,57 +22,62 @@ class TMSLoginMixin:
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
-    async def init(self) -> None:
-        """Launch Chrome with a persistent profile (separate from QBO)."""
-        try:
-            if self._context:
-                await self._context.close()
-        except Exception:
-            pass
-        try:
-            if self._playwright:
-                await self._playwright.stop()
-        except Exception:
-            pass
+    def set_shared_browser(self, shared_browser) -> None:
+        """Store SharedBrowser reference for lazy context creation."""
+        self._shared_browser = shared_browser
 
-        kill_chrome_with_profile(TMS_PROFILE_DIR)
+    @property
+    def is_initialized(self) -> bool:
+        """True if TMS has an active browser context."""
+        return self._context is not None
 
+    async def init(self, *, context: BrowserContext = None, shared_browser=None) -> None:
+        """Initialize with a browser context from SharedBrowser.
+
+        If context is provided, uses it directly.
+        If not provided (lazy init / crash recovery), creates via shared_browser.
+        """
+        if shared_browser is not None:
+            self._shared_browser = shared_browser
+
+        # Clean stale downloads
         for f in TMS_DOWNLOADS_DIR.glob("*"):
             try:
                 f.unlink()
             except Exception:
                 pass
 
-        self._playwright = await async_playwright().start()
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            channel="chrome",
-            user_data_dir=str(TMS_PROFILE_DIR),
-            headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--disable-features=ClearDataOnExit",
-                "--hide-crash-restore-bubble",
-                "--disable-session-crashed-bubble",
-            ],
-            viewport=TMS_VIEWPORT,
-            accept_downloads=True,
-            downloads_path=str(TMS_DOWNLOADS_DIR),
-        )
+        # Accept provided context or create from shared browser
+        if context is not None:
+            self._context = context
+        elif hasattr(self, '_shared_browser') and self._shared_browser:
+            self._context = await self._shared_browser.get_or_create_context(
+                "tms",
+                viewport=TMS_VIEWPORT,
+                accept_downloads=True,
+            )
+        else:
+            raise RuntimeError("TMS init requires either a context or shared_browser reference")
 
         if self._context.pages:
             self._page = self._context.pages[0]
         else:
             self._page = await self._context.new_page()
 
+        # Restore saved session cookies
         cookie_file = TMS_PROFILE_DIR / "_session_cookies.json"
         restored = await restore_cookies(self._context, cookie_file)
         if restored:
             logger.info("TMS browser initialized with %d restored cookies", restored)
         else:
-            logger.info("TMS browser initialized (profile: %s)", TMS_PROFILE_DIR)
+            logger.info("TMS browser initialized (shared browser)")
 
     async def _ensure_browser(self) -> None:
-        """Re-launch Chrome if the browser/page has been closed or crashed."""
+        """Recreate context/page if the browser has crashed.
+
+        Also handles lazy initialization — if TMS was never init'd,
+        creates the context on demand via SharedBrowser.
+        """
         needs_relaunch = False
         if not self._page or not self._context:
             needs_relaunch = True
@@ -83,32 +88,31 @@ class TMSLoginMixin:
                 needs_relaunch = True
 
         if needs_relaunch:
-            logger.warning("TMS browser appears closed — relaunching...")
+            logger.warning("TMS browser needs recovery — reinitializing...")
+            if hasattr(self, '_shared_browser') and self._shared_browser:
+                await self._shared_browser.ensure_running()
             await self.init()
-            logger.info("TMS browser relaunched successfully")
+            logger.info("TMS browser recovered successfully")
 
     async def close(self) -> None:
-        """Shut down — save cookies first, then close properly."""
+        """Save cookies and close the TMS context.
+
+        Does NOT shut down Playwright — SharedBrowser owns that.
+        """
+        if not self._context:
+            return
         cookie_file = TMS_PROFILE_DIR / "_session_cookies.json"
         try:
-            if self._context:
-                await save_cookies_async(self._context, cookie_file)
+            await save_cookies_async(self._context, cookie_file)
         except Exception as e:
             logger.warning("Could not save TMS cookies: %s", e)
 
         try:
-            if self._context:
-                await self._context.close()
-        except Exception:
-            pass
-        try:
-            if self._playwright:
-                await self._playwright.stop()
+            await self._context.close()
         except Exception:
             pass
         self._context = None
         self._page = None
-        self._playwright = None
         logger.info("TMS browser closed (cookies saved)")
 
     # ------------------------------------------------------------------

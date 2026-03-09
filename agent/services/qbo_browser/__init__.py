@@ -46,7 +46,7 @@ class QBOBrowser(
     """Controls a persistent Chrome browser to interact with QuickBooks Online."""
 
     def __init__(self) -> None:
-        self._playwright = None
+        self._shared_browser = None  # SharedBrowser reference (for crash recovery)
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._selectors: dict = _load_selectors()

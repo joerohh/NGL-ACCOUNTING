@@ -34,7 +34,7 @@ if %errorlevel% neq 0 (
 
 REM Run PyInstaller
 echo   [INFO] Running PyInstaller (this takes a few minutes)...
-pyinstaller --distpath "%~dp0agent-dist" --workpath "%~dp0build-temp" --specpath "%~dp0" "%~dp0ngl-agent.spec" --noconfirm
+pyinstaller --distpath "%~dp0agent-dist" --workpath "%~dp0build-temp" "%~dp0ngl-agent.spec" --noconfirm
 
 if %errorlevel% neq 0 (
     echo.
@@ -49,4 +49,3 @@ echo     Agent build complete!
 echo     Output: desktop\agent-dist\ngl-agent\
 echo   ============================================
 echo.
-pause

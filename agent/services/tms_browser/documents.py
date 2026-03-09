@@ -132,7 +132,7 @@ class TMSDocumentsMixin:
                     logger.info("[GRID_DO_SENDER] Row fields: %s", list(data.keys()))
                     for key, val in data.items():
                         norm = key.upper().replace(' ', '').replace('_', '')
-                        if 'DOSENDER' in norm or norm == 'DOSEND':
+                        if 'DOSENDER' in norm or norm == 'DOSEND' or norm == 'SENDTO':
                             val_str = str(val).strip()
                             if val_str and '@' in val_str:
                                 match = re.search(
@@ -496,7 +496,8 @@ class TMSDocumentsMixin:
     # ------------------------------------------------------------------
     # Standalone DO SENDER fetch
     # ------------------------------------------------------------------
-    async def fetch_do_sender_email(self, container_number: str) -> Optional[str]:
+    async def fetch_do_sender_email(self, container_number: str,
+                                    invoice_number: str = "") -> Optional[str]:
         """Search TMS for a container and extract the D/O SENDER email.
 
         Standalone version — navigates to the work order first.
@@ -505,9 +506,12 @@ class TMSDocumentsMixin:
         2. Navigate to work order detail page and extract from Detail Info tab (fallback)
         """
         container_number = container_number.strip()
-        logger.info("[DO_SENDER_FETCH] Standalone fetch: container='%s'", container_number)
+        logger.info("[DO_SENDER_FETCH] Standalone fetch: container='%s' invoice='%s'",
+                    container_number, invoice_number)
 
-        work_order_url = await self.search_container(container_number)
+        work_order_url = await self.search_container(
+            container_number, invoice_number=invoice_number
+        )
 
         # Tier 1: Grid-extracted DO SENDER (captured during search_container filtering)
         if self._grid_do_sender:

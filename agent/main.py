@@ -9,18 +9,18 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 
 from config import (
-    HOST, PORT, BASE_DIR, BUNDLE_DIR, ALLOWED_ORIGINS, AUTH_TOKEN, CLAUDE_API_KEY,
+    HOST, PORT, BASE_DIR, BUNDLE_DIR, ALLOWED_ORIGINS, CLAUDE_API_KEY,
     DAILY_API_CALL_LIMIT, GMAIL_ADDRESS, GMAIL_APP_PASSWORD,
     TRANZACT_USERNAME, TRANZACT_PASSWORD,
     DEBUG_DIR, DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS,
     SELECTORS_FILE, TMS_SELECTORS_FILE,
     WEB_UPDATE_URL, WEBAPP_CACHE_DIR,
 )
-from routers import jobs, files, qbo, customers, audit, tms, settings
+from routers import auth, jobs, files, qbo, customers, audit, tms, settings
+from services.shared_browser import SharedBrowser
 from services.qbo_browser import QBOBrowser
 from services.tms_browser import TMSBrowser
 from services.claude_classifier import ClaudeClassifier
@@ -37,6 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger("ngl.main")
 
 # ── Shared instances ─────────────────────────────────────────────────
+shared_browser = SharedBrowser()
 qbo_browser = QBOBrowser()
 tms_browser = TMSBrowser()
 classifier = None
@@ -93,9 +94,10 @@ async def _session_keepalive_loop():
                     _session_alerts["qbo_needs_login"] = True
                     _notify("QBO Error", f"Session reconnect failed: {e}")
 
-            # TMS keep-alive
-            tms_alive = await tms_browser.keep_alive()
-            if not tms_alive:
+            # TMS keep-alive — skip if TMS context hasn't been created yet (lazy init)
+            if not tms_browser.is_initialized:
+                pass  # TMS not active yet — nothing to keep alive
+            elif not (tms_alive := await tms_browser.keep_alive()):
                 logger.warning("TMS session lost — attempting auto-reconnect...")
                 try:
                     reconnected = await tms_browser.auto_login()
@@ -165,16 +167,27 @@ async def lifespan(app: FastAPI):
     cleanup_old_debug_files(DEBUG_DIR)
     backup_data_files(DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS)
 
-    # Init Playwright browsers
-    await qbo_browser.init()
-    logger.info("QBO browser ready")
+    # Init shared Playwright browser (single Chrome process for QBO + TMS)
+    from config import BROWSER_HEADLESS, BROWSER_DOWNLOADS_DIR, TMS_DOWNLOADS_DIR, TMS_VIEWPORT
+    from utils import cleanup_old_profiles
 
-    try:
-        await tms_browser.init()
-        logger.info("TMS browser ready")
-    except Exception as e:
-        logger.error("TMS browser failed to start: %s", e)
-        logger.error("Close any Chrome windows using the TMS profile and restart the agent")
+    await shared_browser.start(headless=BROWSER_HEADLESS)
+    logger.info("Shared browser started (1 Chrome process for all automation)")
+
+    # Clean dead Chrome profile cache from old launch_persistent_context() usage
+    cleanup_old_profiles()
+
+    # Create QBO context and initialize
+    qbo_ctx = await shared_browser.create_context("qbo",
+        viewport={"width": 1920, "height": 960},
+        accept_downloads=True,
+    )
+    await qbo_browser.init(context=qbo_ctx, shared_browser=shared_browser)
+    logger.info("QBO browser ready (shared context)")
+
+    # TMS: lazy initialization — context created on first use
+    tms_browser.set_shared_browser(shared_browser)
+    logger.info("TMS browser ready (lazy — context created on first use)")
 
     # Init Claude classifier
     if CLAUDE_API_KEY:
@@ -231,19 +244,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("QBO session check failed: %s", e)
 
-    try:
-        tms_logged_in = tms_browser.is_logged_in()
-        if tms_logged_in:
-            logger.info("TMS session restored — already logged in!")
-        else:
-            logger.info("TMS session not active — attempting auto-login...")
-            auto_ok = await tms_browser.auto_login()
-            if auto_ok:
-                logger.info("TMS auto-login successful!")
-            else:
-                logger.info("TMS auto-login needs manual step — manual login required")
-    except Exception as e:
-        logger.warning("TMS session check failed: %s", e)
+    # TMS session check skipped — TMS uses lazy initialization.
+    # Context will be created on first TMS operation (login checked then).
+    logger.info("TMS session check deferred (lazy init — will check on first use)")
 
     logger.info("=" * 50)
     logger.info("  Agent is live! Open http://localhost:%d in your browser.", PORT)
@@ -259,8 +262,9 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down agent server...")
     if portal_uploader:
         await portal_uploader.close()
-    await tms_browser.close()
-    await qbo_browser.close()
+    await tms_browser.close()     # saves TMS cookies (if initialized)
+    await qbo_browser.close()     # saves QBO cookies
+    await shared_browser.close()  # kills the ONE Chrome process + Playwright
     from services.database import close_db
     close_db()
     logger.info("Goodbye!")
@@ -274,54 +278,91 @@ app = FastAPI(
 )
 
 # No-cache for JS/CSS — prevents stale browser caching during development
-class NoCacheStaticMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response: Response = await call_next(request)
-        path = request.url.path
-        if path.endswith(('.js', '.css', '.html')):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-        return response
+# Uses raw ASGI middleware instead of BaseHTTPMiddleware (which can deadlock under load)
+class NoCacheStaticMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path", "")
+        needs_nocache = path.endswith(('.js', '.css', '.html'))
+
+        async def send_with_headers(message):
+            if needs_nocache and message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"cache-control", b"no-cache, no-store, must-revalidate"))
+                headers.append((b"pragma", b"no-cache"))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
-# Auth middleware — validates Bearer token on API routes
-# Exempts: health check, auth/token bootstrap, static file serving, and OPTIONS (CORS preflight)
-_AUTH_EXEMPT_PREFIXES = ("/health", "/auth/")
-_AUTH_EXEMPT_EXACT = frozenset()
+# Auth middleware — validates JWT tokens on API routes
+# Exempts: health check, public auth endpoints, static file serving, and OPTIONS (CORS preflight)
+_AUTH_EXEMPT_PATHS = ("/health", "/auth/token", "/auth/login")
 
 
-class AuthTokenMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
+class AuthTokenMiddleware:
+    """Raw ASGI auth middleware — validates JWT on API routes.
+    Uses pure ASGI instead of BaseHTTPMiddleware to avoid event loop deadlocks.
+    """
+    _API_PREFIXES = ("/jobs", "/files", "/qbo", "/tms", "/customers", "/audit", "/settings", "/auth/")
 
-        # Skip auth for: OPTIONS preflight, exempt paths, static assets (served by mount)
-        if request.method == "OPTIONS":
-            return await call_next(request)
-        if any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
-            return await call_next(request)
-        # Static files (HTML/JS/CSS/images) are served by the mounted StaticFiles app.
-        # API routes all start with known prefixes — check if this is an API route.
-        api_prefixes = ("/jobs", "/files", "/qbo", "/tms", "/customers", "/audit", "/settings")
-        if not any(path.startswith(p) for p in api_prefixes):
-            return await call_next(request)
+    def __init__(self, app):
+        self.app = app
 
-        # Check Authorization header: "Bearer <token>"
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-            if token == AUTH_TOKEN:
-                return await call_next(request)
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
 
-        # Check query parameter (needed for EventSource/SSE which can't set headers)
-        token_param = request.query_params.get("token", "")
-        if token_param == AUTH_TOKEN:
-            return await call_next(request)
+        path = scope.get("path", "")
+        method = scope.get("method", "GET")
 
-        return JSONResponse(status_code=401, content={"detail": "Invalid or missing auth token"})
+        # Skip auth for: OPTIONS preflight, exempt paths, non-API routes
+        if method == "OPTIONS":
+            return await self.app(scope, receive, send)
+        if any(path.startswith(p) for p in _AUTH_EXEMPT_PATHS):
+            return await self.app(scope, receive, send)
+        if not any(path.startswith(p) for p in self._API_PREFIXES):
+            return await self.app(scope, receive, send)
+
+        # Extract token from Authorization header or query param (for SSE)
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode()
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if not token:
+            qs = scope.get("query_string", b"").decode()
+            from urllib.parse import parse_qs
+            token = parse_qs(qs).get("token", [""])[0]
+
+        if not token:
+            resp = JSONResponse(status_code=401, content={"detail": "Missing auth token"})
+            return await resp(scope, receive, send)
+
+        from routers.auth import decode_jwt
+        payload = decode_jwt(token)
+        if not payload:
+            resp = JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+            return await resp(scope, receive, send)
+
+        # Inject user into scope state so route handlers can access it
+        if "state" not in scope:
+            scope["state"] = {}
+        scope["state"]["user"] = payload
+        return await self.app(scope, receive, send)
 
 
-app.add_middleware(NoCacheStaticMiddleware)
-app.add_middleware(AuthTokenMiddleware)
+# Auth middleware — only active when NGL_AUTH_ENABLED=true in .env
+from config import AUTH_ENABLED
+if AUTH_ENABLED:
+    app.add_middleware(AuthTokenMiddleware)
+    logger.info("Auth middleware ENABLED — login required for API routes")
+else:
+    logger.info("Auth middleware DISABLED — all API routes are open (local dev mode)")
 
 # CORS — allow the HTML app to call us (localhost only)
 app.add_middleware(
@@ -333,6 +374,7 @@ app.add_middleware(
 )
 
 # Mount routers
+app.include_router(auth.router)
 app.include_router(jobs.router)
 app.include_router(files.router)
 app.include_router(qbo.router)
@@ -340,16 +382,6 @@ app.include_router(customers.router)
 app.include_router(audit.router)
 app.include_router(tms.router)
 app.include_router(settings.router)
-
-
-@app.get("/auth/token")
-async def get_auth_token():
-    """Return the auth token for the web UI to use.
-
-    Protected by CORS — only same-origin requests can reach this.
-    The token is then sent as a Bearer header on all subsequent API calls.
-    """
-    return {"token": AUTH_TOKEN}
 
 
 @app.get("/health")
@@ -371,7 +403,7 @@ async def health():
         "status": "ok",
         "service": "ngl-agent",
         "qbo_browser": "initialized",
-        "tms_browser": "initialized",
+        "tms_browser": "initialized" if tms_browser.is_initialized else "lazy_pending",
         "classifier": "ready" if classifier else "no_api_key",
         "session_alerts": alerts,
         **usage_info,

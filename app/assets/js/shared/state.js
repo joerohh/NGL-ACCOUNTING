@@ -13,6 +13,7 @@ export const state = {
   logCollapsed: true,
   agentConnected: false,
   _agentCustomersSynced: false,  // true after first customer sync to agent
+  currentUser: null,   // { id, username, displayName, role } — set after login
   activeJobId: null,
   mergeMode: 'per-container',   // 'per-container' | 'all-in-one' | 'invoices-only' | 'pods-only'
   sortOrder: 'excel',           // 'excel' | 'container' | 'invoice'

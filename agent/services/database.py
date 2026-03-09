@@ -101,6 +101,11 @@ def init_db() -> None:
 
     logger.info("Database schema initialized: %s", DB_FILE)
 
+    # Seed default admin user if no users exist (first-run bootstrap)
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    if user_count == 0:
+        _seed_default_admin(conn)
+
     # Migrate existing data files if the tables are empty
     _migrate_if_needed(conn)
 
@@ -125,14 +130,18 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
 
 def _seed_default_admin(conn: sqlite3.Connection) -> None:
     """Create a default admin account on first run."""
+    import os
     now = datetime.now(timezone.utc).isoformat()
-    pw_hash = bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode("utf-8")
+    admin_user = os.getenv("NGL_ADMIN_USERNAME", "admin")
+    admin_pass = os.getenv("NGL_ADMIN_PASSWORD", "admin")
+    admin_name = os.getenv("NGL_ADMIN_DISPLAY", "Admin")
+    pw_hash = bcrypt.hashpw(admin_pass.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     conn.execute("""
         INSERT INTO users (username, display_name, password_hash, role, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, 1, ?, ?)
-    """, ("admin", "Administrator", pw_hash, "admin", now, now))
+    """, (admin_user, admin_name, pw_hash, "admin", now, now))
     conn.commit()
-    logger.info("Seeded default admin user (username: admin, password: admin) — CHANGE THIS!")
+    logger.info("Seeded default admin user: %s", admin_user)
 
 
 def _migrate_if_needed(conn: sqlite3.Connection) -> None:

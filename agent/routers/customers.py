@@ -214,6 +214,9 @@ async def import_customers(req: BulkImportRequest):
         data = _apply_method_fields(data)
         items.append(data)
 
-    result = bulk_import_customers(items)
+    # Run in thread pool to avoid blocking the event loop
+    # (Supabase client uses synchronous httpx calls)
+    import asyncio
+    result = await asyncio.to_thread(bulk_import_customers, items)
     logger.info("Bulk import: %d created, %d updated", result["created"], result["updated"])
     return {"status": "ok", **result}

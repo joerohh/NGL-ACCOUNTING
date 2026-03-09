@@ -51,6 +51,7 @@ export const CONTAINER_ALIASES = [
 export const INVOICE_ALIASES = [
   'invoicenumber', 'invoice', 'invoiceid', 'invoiceno',
   'inv', 'invno', 'invnumber', 'invnum', 'invid',
+  'docnumber', 'docno',
 ];
 
 export function findColumnKey(headers, aliases) {

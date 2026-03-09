@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════
-//  SETTINGS — Credentials management page
+//  SETTINGS — Credentials, user management, notifications
 // ══════════════════════════════════════════════════════════
 import { state } from '../../shared/state.js';
 import { agentBridge } from '../../shared/agent-client.js';
@@ -7,6 +7,15 @@ import { agentHealthCheck } from '../../agent-ui.js';
 
 export async function settingsLoad() {
   loadNotificationState();
+
+  // Show/hide admin-only sections
+  const user = agentBridge.getCurrentUser();
+  const isAdmin = user && user.role === 'admin';
+  const userMgmt = document.getElementById('userManagementSection');
+  if (userMgmt) userMgmt.style.display = isAdmin ? '' : 'none';
+
+  // Load user list if admin
+  if (isAdmin && state.agentConnected) loadUserList();
 
   if (!state.agentConnected) {
     document.getElementById('settingsQboStatus').textContent = 'Agent offline';
@@ -190,8 +199,150 @@ function loadNotificationState() {
   if (checkbox) checkbox.checked = enabled;
 }
 
+// ── User Management (admin only) ──
+async function loadUserList() {
+  const container = document.getElementById('userList');
+  if (!container) return;
+
+  const result = await agentBridge.listUsers();
+  if (result.error) {
+    container.innerHTML = `<div style="color:#dc2626; font-size:0.82rem;">Failed to load users: ${result.error}</div>`;
+    return;
+  }
+
+  const users = result.users || [];
+  const currentUser = agentBridge.getCurrentUser();
+
+  container.innerHTML = users.map(u => {
+    const isYou = currentUser && currentUser.id === u.id;
+    const statusColor = u.active ? '#16a34a' : '#94a3b8';
+    const statusText = u.active ? 'Active' : 'Inactive';
+    const roleBadge = u.role === 'admin'
+      ? '<span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600;">ADMIN</span>'
+      : '<span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600;">OPERATOR</span>';
+
+    return `
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; display:flex; align-items:center; gap:12px;">
+        <div style="width:32px; height:32px; background:${u.active ? '#f0f9ff' : '#f1f5f9'}; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${u.active ? '#3b82f6' : '#94a3b8'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; font-size:0.88rem; color:#0f172a;">
+            ${u.displayName || u.username}${isYou ? ' <span style="color:#94a3b8; font-weight:400;">(you)</span>' : ''}
+          </div>
+          <div style="font-size:0.75rem; color:#64748b;">@${u.username} &middot; <span style="color:${statusColor};">${statusText}</span></div>
+        </div>
+        ${roleBadge}
+        ${!isYou ? `
+          <button onclick="window.openEditUserModal(${u.id}, '${u.username}', '${(u.displayName || '').replace(/'/g, "\\'")}', '${u.role}', ${u.active})"
+            style="background:none; border:none; cursor:pointer; color:#64748b; padding:4px;" title="Edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        ` : ''}
+      </div>`;
+  }).join('');
+}
+
+function openAddUserModal() {
+  document.getElementById('userModalTitle').textContent = 'Add User';
+  document.getElementById('userModalId').value = '';
+  document.getElementById('userModalUsername').value = '';
+  document.getElementById('userModalUsername').disabled = false;
+  document.getElementById('userModalDisplayName').value = '';
+  document.getElementById('userModalPassword').value = '';
+  document.getElementById('userModalPassword').placeholder = 'Enter password';
+  document.getElementById('userModalPwHint').style.display = 'none';
+  document.getElementById('userModalRole').value = 'operator';
+  document.getElementById('userModalError').style.display = 'none';
+  document.getElementById('userModal').classList.add('open');
+}
+
+function openEditUserModal(id, username, displayName, role, active) {
+  document.getElementById('userModalTitle').textContent = 'Edit User';
+  document.getElementById('userModalId').value = id;
+  document.getElementById('userModalUsername').value = username;
+  document.getElementById('userModalUsername').disabled = true;
+  document.getElementById('userModalDisplayName').value = displayName;
+  document.getElementById('userModalPassword').value = '';
+  document.getElementById('userModalPassword').placeholder = '(unchanged)';
+  document.getElementById('userModalPwHint').style.display = '';
+  document.getElementById('userModalRole').value = role;
+  document.getElementById('userModalError').style.display = 'none';
+  document.getElementById('userModal').classList.add('open');
+}
+
+async function saveUser() {
+  const id = document.getElementById('userModalId').value;
+  const username = document.getElementById('userModalUsername').value.trim();
+  const displayName = document.getElementById('userModalDisplayName').value.trim();
+  const password = document.getElementById('userModalPassword').value;
+  const role = document.getElementById('userModalRole').value;
+  const errorEl = document.getElementById('userModalError');
+
+  if (!id && !username) {
+    errorEl.textContent = 'Username is required'; errorEl.style.display = ''; return;
+  }
+  if (!id && password.length < 4) {
+    errorEl.textContent = 'Password must be at least 4 characters'; errorEl.style.display = ''; return;
+  }
+
+  let result;
+  if (id) {
+    // Edit existing
+    const data = { displayName, role };
+    if (password) data.password = password;
+    result = await agentBridge.updateUser(id, data);
+  } else {
+    // Create new
+    result = await agentBridge.createUser({ username, password, displayName, role });
+  }
+
+  if (result.error) {
+    errorEl.textContent = result.error; errorEl.style.display = ''; return;
+  }
+
+  document.getElementById('userModal').classList.remove('open');
+  loadUserList();
+  settingsShowResult(id ? 'User updated.' : 'User created.', true);
+}
+
+async function doChangePassword() {
+  const current = document.getElementById('changeCurrentPw').value;
+  const newPw = document.getElementById('changeNewPw').value;
+  const resultEl = document.getElementById('changePwResult');
+
+  if (!current || !newPw) {
+    resultEl.textContent = 'Both fields are required.';
+    resultEl.style.color = '#dc2626'; resultEl.style.display = ''; return;
+  }
+  if (newPw.length < 4) {
+    resultEl.textContent = 'New password must be at least 4 characters.';
+    resultEl.style.color = '#dc2626'; resultEl.style.display = ''; return;
+  }
+
+  const result = await agentBridge.changePassword(current, newPw);
+  if (result.error) {
+    resultEl.textContent = result.error;
+    resultEl.style.color = '#dc2626'; resultEl.style.display = ''; return;
+  }
+
+  resultEl.textContent = 'Password changed successfully!';
+  resultEl.style.color = '#16a34a'; resultEl.style.display = '';
+  document.getElementById('changeCurrentPw').value = '';
+  document.getElementById('changeNewPw').value = '';
+  setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
+}
+
 // ── Window assignments for inline HTML handlers ──
 window.settingsSaveAndConnect = settingsSaveAndConnect;
 window.settingsLoad = settingsLoad;
 window.runSelectorHealthCheck = runSelectorHealthCheck;
 window.toggleNotifications = toggleNotifications;
+window.openAddUserModal = openAddUserModal;
+window.openEditUserModal = openEditUserModal;
+window.saveUser = saveUser;
+window.doChangePassword = doChangePassword;

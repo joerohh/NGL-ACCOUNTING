@@ -65,12 +65,20 @@ class FetchJobMixin:
             page: Playwright page to use for this container (for parallel workers).
         """
         # Step 1: Search for the invoice in QBO
+        # Determine what to search — prefer invoice number, fall back to container number
+        search_term = container.invoice_number or container.container_number
+        if not container.invoice_number:
+            logger.warning(
+                "No invoice number for container %s — searching by container number instead",
+                container.container_number,
+            )
+
         await self._emit(job, "searching", {
             "containerNumber": container.container_number,
-            "invoiceNumber": container.invoice_number,
+            "invoiceNumber": search_term,
         })
 
-        invoice_url = await self._qbo.search_invoice(container.invoice_number, page=page)
+        invoice_url = await self._qbo.search_invoice(search_term, page=page)
         if not invoice_url:
             result.error = f"Invoice {container.invoice_number} not found in QBO"
             await self._emit(job, "not_found", {

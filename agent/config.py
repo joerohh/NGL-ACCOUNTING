@@ -52,6 +52,9 @@ ALLOWED_ORIGINS = [
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
+# Browser (shared Playwright instance)
+BROWSER_HEADLESS = False  # set True to run Chrome headless (no visible window)
+
 # QBO
 QBO_BASE_URL = "https://app.qbo.intuit.com"
 QBO_LOGIN_URL = "https://qbo.intuit.com/app/homepage"
@@ -114,3 +117,5 @@ WEBAPP_CACHE_DIR = BASE_DIR / "webapp-cache"
 
 # Auth token for local server (simple security)
 AUTH_TOKEN = os.getenv("NGL_AGENT_TOKEN", "ngl-local-dev-token")
+# Set to True to enforce JWT login (disabled until auth UI is fully tested)
+AUTH_ENABLED = os.getenv("NGL_AUTH_ENABLED", "false").lower() in ("true", "1", "yes")

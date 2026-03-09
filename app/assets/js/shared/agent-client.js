@@ -5,27 +5,94 @@
 import { state } from './state.js';
 import { uid, triggerDownload } from './utils.js';
 import { addLog } from './log.js';
-import { LS_CUSTOMERS } from './constants.js';
+import { LS_CUSTOMERS, LS_AUTH_TOKEN, LS_AUTH_USER } from './constants.js';
 
 export const agentBridge = {
   baseUrl: 'http://localhost:8787',
-  _authToken: null,  // fetched from /auth/token on first connect
+  _authToken: null,  // JWT from login
+  _currentUser: null,  // { id, username, displayName, role }
 
   // Hooks — set by other modules to break circular dependencies
   hooks: {
     onFileInjected: null,  // (name, blob) => void — called when a file is injected from agent
+    onAuthRequired: null,  // () => void — called when login is needed
+    onAuthSuccess: null,   // (user) => void — called after successful login
   },
 
   // ── Auth helpers ──
-  async _ensureToken() {
-    if (this._authToken) return;
+  _loadSavedAuth() {
     try {
-      const res = await fetch(this.baseUrl + '/auth/token', { signal: AbortSignal.timeout(3000) });
+      this._authToken = localStorage.getItem(LS_AUTH_TOKEN);
+      const u = localStorage.getItem(LS_AUTH_USER);
+      if (u) this._currentUser = JSON.parse(u);
+    } catch { /* corrupt localStorage */ }
+  },
+
+  _saveAuth(token, user) {
+    this._authToken = token;
+    this._currentUser = user;
+    if (token) {
+      localStorage.setItem(LS_AUTH_TOKEN, token);
+      localStorage.setItem(LS_AUTH_USER, JSON.stringify(user));
+    }
+  },
+
+  _clearAuth() {
+    this._authToken = null;
+    this._currentUser = null;
+    localStorage.removeItem(LS_AUTH_TOKEN);
+    localStorage.removeItem(LS_AUTH_USER);
+  },
+
+  isLoggedIn() {
+    return !!this._authToken;
+  },
+
+  getCurrentUser() {
+    return this._currentUser;
+  },
+
+  async login(username, password) {
+    try {
+      const res = await fetch(this.baseUrl + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Login failed' };
+      }
+      const data = await res.json();
+      this._saveAuth(data.token, data.user);
+      return { user: data.user };
+    } catch (e) {
+      return { error: 'Cannot connect to agent: ' + e.message };
+    }
+  },
+
+  logout() {
+    this._clearAuth();
+    if (this.hooks.onAuthRequired) this.hooks.onAuthRequired();
+  },
+
+  async validateSession() {
+    if (!this._authToken) return false;
+    try {
+      const res = await this._authFetch(this.baseUrl + '/auth/me');
       if (res.ok) {
         const data = await res.json();
-        this._authToken = data.token;
+        this._currentUser = data.user;
+        localStorage.setItem(LS_AUTH_USER, JSON.stringify(data.user));
+        return true;
       }
-    } catch { /* agent offline — token will be fetched on next health check */ }
+      // Token expired or invalid
+      this._clearAuth();
+      return false;
+    } catch {
+      // Agent offline — keep token, assume valid (will re-check when agent is back)
+      return !!this._authToken;
+    }
   },
 
   _authHeaders(extra = {}) {
@@ -41,7 +108,6 @@ export const agentBridge = {
 
   async checkHealth() {
     try {
-      await this._ensureToken();
       const res = await fetch(this.baseUrl + '/health', { signal: AbortSignal.timeout(3000) });
       if (!res.ok) return null;
       return await res.json();
@@ -558,6 +624,71 @@ export const agentBridge = {
         body: JSON.stringify({ enabled }),
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  // ── User Management (admin) ──
+  async listUsers() {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/auth/users');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async createUser(data) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Failed to create user' };
+      }
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async updateUser(userId, data) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/auth/users/' + userId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Failed to update user' };
+      }
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async deleteUser(userId) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/auth/users/' + userId, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Failed to deactivate user' };
+      }
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Failed to change password' };
+      }
       return await res.json();
     } catch (e) { return { error: e.message }; }
   },

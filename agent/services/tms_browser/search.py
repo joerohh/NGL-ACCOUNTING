@@ -14,6 +14,140 @@ class TMSSearchMixin:
     """Grid filtering, detail page navigation, container search."""
 
     # ------------------------------------------------------------------
+    # Stage 1b: Ensure correct location + type tab based on invoice prefix
+    # ------------------------------------------------------------------
+    async def _ensure_correct_location(self, invoice_number: str) -> bool:
+        """Switch the TMS location dropdown and IMPORT/EXPORT tab if needed.
+
+        Reads the invoice number prefix (e.g. 'LM' = LA Import, 'PE' = PHX Export)
+        and ensures the UI matches before grid filtering.
+        Returns True if the page is ready, False on failure.
+        """
+        target_loc, url_seg, tab_text = self.parse_invoice_prefix(invoice_number)
+        if not target_loc:
+            logger.info("[LOCATION] Could not parse prefix from invoice '%s' — skipping", invoice_number)
+            return True  # non-fatal, proceed with whatever is currently selected
+
+        logger.info("[LOCATION] Invoice '%s' → location=%s, tab=%s", invoice_number, target_loc, tab_text)
+
+        # ── Check current location dropdown value ──
+        current_loc = await self._page.evaluate("""() => {
+            // The dropdown button text shows the current location (LA, PHX, etc.)
+            const btns = document.querySelectorAll('button, [role="button"], div.cursor-pointer');
+            const locs = ['LA', 'PHX', 'HOU', 'SAV', 'MOB'];
+            for (const btn of btns) {
+                const text = (btn.textContent || '').trim().toUpperCase();
+                if (locs.includes(text)) return text;
+            }
+            // Also check for a select/dropdown with the value
+            for (const sel of document.querySelectorAll('select')) {
+                const val = (sel.value || '').trim().toUpperCase();
+                if (locs.includes(val)) return val;
+            }
+            return null;
+        }""")
+
+        logger.info("[LOCATION] Current location: %s, target: %s", current_loc, target_loc)
+
+        # ── Switch location if needed ──
+        if current_loc != target_loc:
+            switched = await self._page.evaluate("""(target) => {
+                // Step 1: Open the dropdown by clicking the current location button
+                const locs = ['LA', 'PHX', 'HOU', 'SAV', 'MOB'];
+                const btns = document.querySelectorAll('button, [role="button"], div.cursor-pointer');
+                let dropdownBtn = null;
+                for (const btn of btns) {
+                    const text = (btn.textContent || '').trim().toUpperCase();
+                    if (locs.includes(text)) { dropdownBtn = btn; break; }
+                }
+                if (!dropdownBtn) return { opened: false, reason: 'no dropdown button found' };
+
+                dropdownBtn.click();
+                return { opened: true };
+            }""", target_loc)
+
+            if not switched or not switched.get("opened"):
+                logger.warning("[LOCATION] Could not open location dropdown: %s", switched)
+                return True  # non-fatal
+
+            await asyncio.sleep(0.8)
+
+            # Click the target location in the dropdown menu
+            clicked = await self._page.evaluate("""(target) => {
+                // Look for dropdown items / menu items containing the target text
+                const candidates = document.querySelectorAll(
+                    '[role="menuitem"], [role="option"], li, div, span, button'
+                );
+                for (const el of candidates) {
+                    const text = (el.textContent || '').trim().toUpperCase();
+                    if (text === target) {
+                        el.click();
+                        return { clicked: true, text: text };
+                    }
+                }
+                return { clicked: false };
+            }""", target_loc)
+
+            if clicked and clicked.get("clicked"):
+                logger.info("[LOCATION] Switched to %s", target_loc)
+                await asyncio.sleep(2)  # wait for grid to reload
+            else:
+                logger.warning("[LOCATION] Could not click '%s' in dropdown", target_loc)
+                return True  # non-fatal
+
+        # ── Switch IMPORT/EXPORT tab if needed ──
+        current_tab = await self._page.evaluate("""() => {
+            const tabs = document.querySelectorAll('a, button, span, div');
+            for (const el of tabs) {
+                const text = (el.textContent || '').trim().toUpperCase();
+                if ((text === 'IMPORT' || text === 'EXPORT') &&
+                    (el.classList.contains('active') ||
+                     el.classList.contains('Mui-selected') ||
+                     el.getAttribute('aria-selected') === 'true' ||
+                     el.closest('.font-bold, .font-semibold, [class*="active"]'))) {
+                    return text;
+                }
+            }
+            // Fallback: check URL
+            if (window.location.pathname.includes('/imp')) return 'IMPORT';
+            if (window.location.pathname.includes('/exp')) return 'EXPORT';
+            return null;
+        }""")
+
+        logger.info("[LOCATION] Current tab: %s, target: %s", current_tab, tab_text)
+
+        if current_tab != tab_text:
+            tab_clicked = await self._page.evaluate("""(tabText) => {
+                const candidates = document.querySelectorAll('a, button, span, div');
+                for (const el of candidates) {
+                    const text = (el.textContent || '').trim().toUpperCase();
+                    if (text === tabText) {
+                        el.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""", tab_text)
+
+            if tab_clicked:
+                logger.info("[LOCATION] Switched to %s tab", tab_text)
+                await asyncio.sleep(2)  # wait for grid to reload
+            else:
+                # Fallback: direct URL navigation
+                base = self._page.url.split("//")[0] + "//" + self._page.url.split("//")[1].split("/")[0]
+                try:
+                    await self._page.goto(
+                        base + "/main/" + url_seg,
+                        wait_until="domcontentloaded", timeout=15000,
+                    )
+                    await asyncio.sleep(2)
+                    logger.info("[LOCATION] Switched to %s tab via URL", tab_text)
+                except Exception as e:
+                    logger.warning("[LOCATION] URL fallback failed: %s", e)
+
+        return True
+
+    # ------------------------------------------------------------------
     # Stage 2: Sidebar Navigation to MAIN page
     # ------------------------------------------------------------------
     async def _navigate_to_main_page(self) -> bool:
@@ -590,11 +724,13 @@ class TMSSearchMixin:
     # ------------------------------------------------------------------
     # Container Search (orchestrator for grid filter + WO nav)
     # ------------------------------------------------------------------
-    async def search_container(self, container_number: str) -> Optional[str]:
+    async def search_container(self, container_number: str,
+                               invoice_number: str = "") -> Optional[str]:
         """Search TMS for a container number and navigate to its work order.
 
         Flow:
         1. Navigate to MAIN page via sidebar
+        1b. Switch location dropdown + IMPORT/EXPORT tab based on invoice prefix
         2. Type container number into the CONT# column filter (AG Grid)
         3. Wait for grid to filter down to matching rows
         4. Extract DO SENDER from grid data (stored in self._grid_do_sender)
@@ -615,8 +751,8 @@ class TMSSearchMixin:
         vp = await self._page.evaluate(
             "() => `${window.innerWidth}x${window.innerHeight}`"
         )
-        logger.info("TMS search starting: container='%s' (len=%d) viewport=%s",
-                     container_number, len(container_number), vp)
+        logger.info("TMS search starting: container='%s' invoice='%s' (len=%d) viewport=%s",
+                     container_number, invoice_number, len(container_number), vp)
 
         if not self.is_logged_in():
             logger.error("TMS not logged in — cannot search")
@@ -629,6 +765,10 @@ class TMSSearchMixin:
                 ctx = await self._debug_rich("main_page_fail")
                 self._make_error("navigate_to_main", "Failed to reach MAIN page", ctx)
                 return None
+
+            # Step 1b: Switch location + IMPORT/EXPORT tab based on invoice prefix
+            if invoice_number:
+                await self._ensure_correct_location(invoice_number)
 
             await asyncio.sleep(2)
 

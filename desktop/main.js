@@ -183,19 +183,62 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // F5 / Ctrl+R to refresh the page
+  // F5 / Ctrl+R to refresh, F12 / Ctrl+Shift+I for DevTools
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.key === "F5" || (input.control && input.key.toLowerCase() === "r")) {
       mainWindow.webContents.reload();
       event.preventDefault();
     }
+    if (input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i")) {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
   });
 
-  // Minimize to tray instead of closing
+  // Confirm before closing — shows themed in-app modal
+  let closeConfirmPending = false;
   mainWindow.on("close", (e) => {
     if (!isQuitting) {
       e.preventDefault();
-      mainWindow.hide();
+      if (closeConfirmPending) return; // don't stack modals
+      closeConfirmPending = true;
+      mainWindow.webContents.executeJavaScript(`
+        new Promise(resolve => {
+          // Overlay
+          const ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease';
+          // Modal
+          const m = document.createElement('div');
+          m.style.cssText = 'background:#fff;border-radius:16px;padding:32px 36px 28px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;animation:scaleIn .2s ease';
+          // Icon
+          m.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">'
+            + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>'
+            + '<h3 style="margin:0 0 8px;font-size:1.15rem;font-weight:700;color:#0f172a">Exit NGL Accounting?</h3>'
+            + '<p style="margin:0 0 24px;font-size:0.85rem;color:#64748b;line-height:1.5">The agent server will shut down and any active jobs will be stopped.</p>'
+            + '<div style="display:flex;gap:10px;justify-content:center">'
+            + '<button id="_nglStay" style="flex:1;padding:10px 0;border:1px solid #e2e8f0;background:#fff;border-radius:10px;font-size:0.85rem;font-weight:600;color:#475569;cursor:pointer;transition:all .15s">Cancel</button>'
+            + '<button id="_nglExit" style="flex:1;padding:10px 0;border:none;background:#ea580c;border-radius:10px;font-size:0.85rem;font-weight:600;color:#fff;cursor:pointer;transition:all .15s">Exit</button></div>';
+          ov.appendChild(m);
+          document.body.appendChild(ov);
+          // Animations
+          const style = document.createElement('style');
+          style.textContent = '@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes scaleIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}#_nglStay:hover{background:#f8fafc;border-color:#cbd5e1}#_nglExit:hover{background:#dc4a0a}';
+          document.head.appendChild(style);
+          // Handlers
+          const cleanup = (val) => { ov.remove(); style.remove(); resolve(val); };
+          document.getElementById('_nglExit').onclick = () => cleanup(true);
+          document.getElementById('_nglStay').onclick = () => cleanup(false);
+          ov.onclick = (e) => { if (e.target === ov) cleanup(false); };
+        })
+      `).then((shouldExit) => {
+        closeConfirmPending = false;
+        if (shouldExit) {
+          isQuitting = true;
+          mainWindow.close();
+        }
+      }).catch(() => {
+        closeConfirmPending = false;
+      });
     }
   });
 

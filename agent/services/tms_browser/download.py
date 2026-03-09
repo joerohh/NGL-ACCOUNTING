@@ -257,14 +257,18 @@ class TMSDownloadMixin:
     # High-level: Fetch POD for a container
     # ------------------------------------------------------------------
     async def fetch_pod_for_container(
-        self, container_number: str, download_dir: Path
+        self, container_number: str, download_dir: Path,
+        invoice_number: str = ""
     ) -> Optional[Path]:
         """End-to-end: search container → Documents tab → find POD → download."""
-        result = await self.fetch_pod_and_do_sender(container_number, download_dir)
+        result = await self.fetch_pod_and_do_sender(
+            container_number, download_dir, invoice_number=invoice_number
+        )
         return result[0]
 
     async def fetch_pod_and_do_sender(
-        self, container_number: str, download_dir: Path
+        self, container_number: str, download_dir: Path,
+        invoice_number: str = ""
     ) -> tuple[Optional[Path], Optional[str]]:
         """Single TMS trip: search → grab DO SENDER → Document tab → download POD.
 
@@ -282,7 +286,7 @@ class TMSDownloadMixin:
             pass
 
         # Step 1: Search for the container
-        work_order_url = await self.search_container(container_number)
+        work_order_url = await self.search_container(container_number, invoice_number=invoice_number)
         if not work_order_url:
             grid_email = self._grid_do_sender
             if grid_email:

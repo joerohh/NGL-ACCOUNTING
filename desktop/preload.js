@@ -7,10 +7,13 @@
 
 const { contextBridge } = require("electron");
 
+let appVersion = "1.0.0";
+try { appVersion = require("./package.json").version; } catch { /* packaged mode */ }
+
 contextBridge.exposeInMainWorld("nglDesktop", {
   /** True when running inside the Electron shell (vs. plain browser). */
   isDesktop: true,
 
   /** App version from package.json. */
-  version: require("./package.json").version,
+  version: appVersion,
 });

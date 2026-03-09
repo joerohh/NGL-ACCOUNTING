@@ -55,7 +55,7 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
     """Controls a persistent Chrome browser to interact with the NGL TMS portal."""
 
     def __init__(self) -> None:
-        self._playwright = None
+        self._shared_browser = None  # SharedBrowser reference (for lazy init / crash recovery)
         self._context = None
         self._page = None
         self._selectors: dict = _load_selectors()
@@ -221,21 +221,23 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
     # ------------------------------------------------------------------
     # Work Order Validation
     # ------------------------------------------------------------------
-    def validate_work_order(self, work_order_text: str) -> dict:
-        """Parse work order prefix to determine office and type."""
-        result = {"valid": False, "office": None, "type": None}
-        if not work_order_text or len(work_order_text) < 2:
-            return result
+    # Location code → dropdown label, Type code → URL segment + tab text
+    LOCATION_MAP = {"L": "LA", "P": "PHX", "H": "HOU", "S": "SAV", "M": "MOB"}
+    TYPE_MAP = {"M": ("imp", "IMPORT"), "E": ("exp", "EXPORT")}
 
-        prefix = work_order_text.strip().upper()[:2]
-        offices = {"L": "Los Angeles", "P": "Phoenix", "H": "Houston"}
-        types = {"M": "Import", "X": "Export"}
+    def parse_invoice_prefix(self, invoice_number: str) -> tuple:
+        """Parse invoice number prefix to determine location and type.
 
-        if prefix[0] in offices and prefix[1] in types:
-            result["valid"] = True
-            result["office"] = offices[prefix[0]]
-            result["type"] = types[prefix[1]]
-
-        return result
+        Returns (location_code, url_segment, tab_text) or (None, None, None).
+        E.g. 'LM1234' → ('LA', 'imp', 'IMPORT'), 'PE5678' → ('PHX', 'exp', 'EXPORT')
+        """
+        if not invoice_number or len(invoice_number) < 2:
+            return None, None, None
+        prefix = invoice_number.strip().upper()[:2]
+        loc = self.LOCATION_MAP.get(prefix[0])
+        type_info = self.TYPE_MAP.get(prefix[1])
+        if loc and type_info:
+            return loc, type_info[0], type_info[1]
+        return None, None, None
 
 

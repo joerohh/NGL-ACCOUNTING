@@ -19,6 +19,10 @@ PER_USER_KEYS = {
     "QBO_PASSWORD",
     "TMS_EMAIL",
     "TMS_PASSWORD",
+    "NGL_ADMIN_USERNAME",
+    "NGL_ADMIN_PASSWORD",
+    "NGL_ADMIN_DISPLAY",
+    "GITHUB_PAT",
 }
 
 def main():

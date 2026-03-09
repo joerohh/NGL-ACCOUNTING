@@ -238,7 +238,8 @@ class SendOECFlowMixin:
                         "containerNumber": invoice.container_number,
                     })
                     tms_pod, tms_do_sender = await self._tms.fetch_pod_and_do_sender(
-                        invoice.container_number, temp_dir
+                        invoice.container_number, temp_dir,
+                        invoice_number=invoice.invoice_number,
                     )
                     logger.info("[OEC_TMS] fetch_pod_and_do_sender returned: pod=%s, do_sender='%s'",
                                 tms_pod.name if tms_pod else None,
@@ -280,7 +281,8 @@ class SendOECFlowMixin:
                         "containerNumber": invoice.container_number,
                     })
                     tms_do_sender = await self._tms.fetch_do_sender_email(
-                        invoice.container_number
+                        invoice.container_number,
+                        invoice_number=invoice.invoice_number,
                     )
                     logger.info("[OEC_TMS] fetch_do_sender_email returned: '%s'",
                                 tms_do_sender or "")

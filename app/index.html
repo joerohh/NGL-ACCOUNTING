@@ -13,13 +13,105 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <link rel="icon" href="assets/images/miniNGL Logo.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 
 <body>
 
+<!-- ═══════════════════════════════════════════ LOGIN SCREEN ═══════════════════════════════════════════ -->
+<style>
+  #loginScreen { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+  #loginScreen input::placeholder { color: #94a3b8; }
+  #loginScreen .login-input:focus { border-color: #F26522 !important; box-shadow: 0 0 0 3px rgba(242,101,34,0.1); }
+  #loginScreen .login-btn { transition: all 0.25s ease; }
+  #loginScreen .login-btn:hover { background: #d95a1b !important; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(242,101,34,0.3); }
+  #loginScreen .login-btn:active { transform: translateY(0); }
+
+  /* Right panel overlay */
+  #loginScreen .hero-panel { position: relative; overflow: hidden; }
+  #loginScreen .hero-panel::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.5) 50%, rgba(242,101,34,0.1) 100%);
+    z-index: 1;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 768px) {
+    #loginScreen .login-split { flex-direction: column !important; }
+    #loginScreen .login-left { width: 100% !important; min-height: auto !important; padding: 40px 28px !important; }
+    #loginScreen .hero-panel { display: none !important; }
+  }
+</style>
+
+<div id="loginScreen" style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:9999; margin:0; padding:0;">
+  <div class="login-split" style="display:flex; width:100%; height:100%;">
+
+    <!-- ── LEFT SIDE: Login Form (40%) ── -->
+    <div class="login-left" style="width:40%; min-width:380px; background:#f8fafc; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 40px; position:relative;">
+
+      <!-- Logo + Branding -->
+      <div style="text-align:center; margin-bottom:36px;">
+        <img src="assets/images/NGL logo.png" alt="NGL" style="width:64px; height:64px; border-radius:14px; margin:0 auto 16px; display:block; box-shadow:0 2px 12px rgba(0,0,0,0.08);"
+             onerror="this.style.display='none'" />
+        <h1 style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0; letter-spacing:0.03em;">NGL Transportation</h1>
+        <p style="font-size:0.8rem; font-weight:600; color:#F26522; margin:6px 0 0; letter-spacing:0.12em; text-transform:uppercase;">Accounting</p>
+      </div>
+
+      <!-- Form -->
+      <div style="width:100%; max-width:320px;">
+        <div style="margin-bottom:20px;">
+          <label style="font-size:0.7rem; font-weight:600; color:#64748b; display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.08em;">Username</label>
+          <input type="text" id="loginUsername" placeholder="Enter username" autocomplete="username" class="login-input"
+            style="width:100%; padding:12px 16px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:0.9rem; font-family:inherit; outline:none; box-sizing:border-box; background:#ffffff; color:#0f172a; transition:all 0.2s ease;" />
+        </div>
+        <div style="margin-bottom:28px;">
+          <label style="font-size:0.7rem; font-weight:600; color:#64748b; display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.08em;">Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password" class="login-input"
+            style="width:100%; padding:12px 16px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:0.9rem; font-family:inherit; outline:none; box-sizing:border-box; background:#ffffff; color:#0f172a; transition:all 0.2s ease;"
+            onkeydown="if(event.key==='Enter')window.doLogin&&window.doLogin()" />
+        </div>
+
+        <button onclick="window.doLogin&&window.doLogin()" id="loginBtn" class="login-btn"
+          style="width:100%; padding:13px; background:#F26522; color:#fff; border:none; border-radius:10px; font-size:0.92rem; font-weight:700; font-family:inherit; cursor:pointer; letter-spacing:0.02em;">
+          <span id="loginBtnText">Sign In</span>
+        </button>
+        <div id="loginError" style="margin-top:12px; font-size:0.82rem; color:#dc2626; text-align:center; display:none;"></div>
+      </div>
+
+      <!-- Agent status badge — bottom of left panel -->
+      <div id="loginAgentStatus" style="position:absolute; bottom:24px; left:50%; transform:translateX(-50%); font-size:0.68rem; color:#94a3b8; background:#f1f5f9; border:1px solid #e2e8f0; padding:5px 14px; border-radius:20px; white-space:nowrap;">
+        Connecting to agent...
+      </div>
+    </div>
+
+    <!-- ── RIGHT SIDE: Hero Image (60%) ── -->
+    <div class="hero-panel" style="flex:1; background:#0f172a; display:flex; align-items:center; justify-content:center;">
+      <!-- Truck image as background -->
+      <img src="assets/images/ngl truck.png" alt="" style="position:absolute; width:55%; max-width:650px; opacity:0.12; filter:blur(1px); z-index:0; pointer-events:none;"
+           onerror="this.style.display='none'" />
+
+      <!-- Brand message overlay -->
+      <div style="position:relative; z-index:2; text-align:center; padding:40px; max-width:500px;">
+        <div style="width:80px; height:3px; background:#F26522; margin:0 auto 28px; border-radius:2px;"></div>
+        <h2 style="font-size:2.2rem; font-weight:800; color:#f1f5f9; margin:0 0 16px; line-height:1.2; letter-spacing:-0.01em;">
+          Welcome to NGL's<br>Accounting Suite
+        </h2>
+        <p style="font-size:0.95rem; color:#94a3b8; margin:0; line-height:1.7;">
+          Streamline your accounting workflow with intelligent automation, document management, and seamless QuickBooks integration.
+        </p>
+        <div style="width:80px; height:3px; background:#F26522; margin:28px auto 0; border-radius:2px; opacity:0.5;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
 <!-- ═══════════════════════════════════════════ LAYOUT ═══════════════════════════════════════════ -->
-<div class="app-layout">
+<div class="app-layout" style="display:none;" id="appLayout">
 
 <!-- ── Left Sidebar ── -->
 <nav class="sidebar">
@@ -70,6 +162,28 @@
     </div>
   </div>
 
+
+  <!-- User Info -->
+  <div id="sidebarUserInfo" style="padding:10px 16px; border-top:1px solid #1e293b; margin-top:auto;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div style="width:28px; height:28px; background:#334155; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div id="sidebarDisplayName" style="font-size:0.78rem; color:#e2e8f0; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</div>
+        <div id="sidebarUserRole" style="font-size:0.65rem; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">—</div>
+      </div>
+      <button onclick="window.doLogout&&window.doLogout()" title="Sign out"
+        style="background:none; border:none; cursor:pointer; padding:4px; color:#64748b;"
+        onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#64748b'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 
   <!-- Sidebar Footer -->
   <div class="sidebar-footer">
@@ -1062,7 +1176,7 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
         </svg>
-        Send via QBO
+        Send Invoices
       </button>
 
       <button id="invAuditLogBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem;" onclick="invLoadAuditLog()">
@@ -1309,6 +1423,93 @@
         </p>
       </div>
     </div>
+
+    <!-- User Management (admin only) -->
+    <div id="userManagementSection" style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:24px; display:none;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div>
+          <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0;">User Management</h3>
+          <p style="font-size:0.75rem; color:#94a3b8; margin:2px 0 0;">Add, edit, or deactivate user accounts</p>
+        </div>
+        <button class="btn btn-primary" onclick="window.openAddUserModal&&window.openAddUserModal()" style="padding:8px 14px; font-size:0.8rem;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add User
+        </button>
+      </div>
+      <div id="userList" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+
+    <!-- Change Password -->
+    <div style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:24px;">
+      <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 4px;">Change Password</h3>
+      <p style="font-size:0.75rem; color:#94a3b8; margin:0 0 14px;">Update your account password</p>
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px;">
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div>
+            <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Current Password</label>
+            <input type="password" id="changeCurrentPw" placeholder="Enter current password"
+              style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">New Password</label>
+            <input type="password" id="changeNewPw" placeholder="Enter new password"
+              style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
+          </div>
+          <button class="btn btn-secondary" onclick="window.doChangePassword&&window.doChangePassword()" style="padding:8px 14px; align-self:flex-start;">
+            Update Password
+          </button>
+          <div id="changePwResult" style="font-size:0.82rem; display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add/Edit User Modal ── -->
+<div id="userModal" class="modal-overlay">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h3 id="userModalTitle" style="margin:0; font-size:1rem; font-weight:700;">Add User</h3>
+      <button class="modal-close" onclick="document.getElementById('userModal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <input type="hidden" id="userModalId" value="" />
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Username</label>
+          <input type="text" id="userModalUsername" placeholder="e.g. john"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Display Name</label>
+          <input type="text" id="userModalDisplayName" placeholder="e.g. John Smith"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Password</label>
+          <input type="password" id="userModalPassword" placeholder="Enter password"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
+          <div id="userModalPwHint" style="font-size:0.7rem; color:#94a3b8; margin-top:3px; display:none;">Leave blank to keep current password</div>
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Role</label>
+          <select id="userModalRole"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box; background:#fff;">
+            <option value="operator">Operator</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding:14px 20px; display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="document.getElementById('userModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="window.saveUser&&window.saveUser()" id="userModalSaveBtn">Save</button>
+    </div>
+    <div id="userModalError" style="padding:0 20px 14px; font-size:0.82rem; color:#dc2626; display:none;"></div>
   </div>
 </div>
 

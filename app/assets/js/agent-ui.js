@@ -360,7 +360,8 @@ async function agentFetchMissing() {
     return;
   }
 
-  addLog('info', `[Agent] Fetching ${missing.length} containers with missing documents`);
+  const withInv = missing.filter(m => m.invoiceNumber);
+  addLog('info', `[Agent] Fetching ${missing.length} containers (${withInv.length} with invoice numbers, ${missing.length - withInv.length} will search by container #)`);
 
   // Show immediate UI feedback BEFORE the server call
   const fetchBtn = document.getElementById('fetchMissingBtn');

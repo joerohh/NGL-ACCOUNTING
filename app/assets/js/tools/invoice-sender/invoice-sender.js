@@ -707,9 +707,19 @@ async function invSendViaQBO() {
       inv.validationStatus === 'ready' && inv.sendStatus === 'sent'
     );
     if (alreadySent.length > 0) {
-      invAddLog('info', 'All ready invoices have already been sent (' + alreadySent.length + ' total). Nothing to resend.');
+      const msg = 'All ready invoices have already been sent (' + alreadySent.length + ' total).';
+      invAddLog('info', msg);
+      alert(msg);
     } else {
-      invAddLog('error', 'No invoices are ready to send. Check customer matching in the table.');
+      const noMatch = invoiceState.invoices.filter(inv => inv.validationStatus === 'no_match').length;
+      const noEmail = invoiceState.invoices.filter(inv => inv.validationStatus === 'no_email').length;
+      const pending = invoiceState.invoices.filter(inv => inv.validationStatus === 'pending').length;
+      let msg = 'No invoices are ready to send.';
+      if (noMatch > 0) msg += '\n• ' + noMatch + ' have no customer match (check Customer Code column)';
+      if (noEmail > 0) msg += '\n• ' + noEmail + ' are missing email addresses';
+      if (pending > 0) msg += '\n• ' + pending + ' are still pending validation';
+      invAddLog('error', msg.replace(/\n/g, ' '));
+      alert(msg);
     }
     return;
   }
@@ -725,17 +735,8 @@ async function invSendViaQBO() {
     return;
   }
 
-  // Sync customer profiles to agent before sending — the backend needs them
-  // to look up emails, CC/BCC, sendMethod for each invoice
-  try {
-    const allCustomers = Object.values(agentBridge._custRead());
-    if (allCustomers.length > 0) {
-      invAddLog('info', 'Syncing ' + allCustomers.length + ' customer profiles to agent...');
-      await agentBridge.importCustomers(allCustomers);
-    }
-  } catch (e) {
-    invAddLog('warning', 'Customer sync to agent failed: ' + e.message + ' — agent may skip invoices');
-  }
+  // Customer profiles are already synced to the agent on startup and via
+  // the Customer Manager — no need to re-import on every send click.
 
   // Build request — include subject from Excel (or fallback template)
   let invoicePayload = toSend.map(inv => ({
@@ -1065,7 +1066,7 @@ function invShowSendProgress() {
     : '';
   panel.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-      <strong style="font-size:0.9rem;">Sending Invoices via QBO${testBadge}</strong>
+      <strong style="font-size:0.9rem;">Sending Invoices${testBadge}</strong>
       <button class="btn btn-secondary" style="padding:5px 12px; font-size:0.78rem;" onclick="invPauseSendJob()">Pause</button>
     </div>
     <div style="background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden;">

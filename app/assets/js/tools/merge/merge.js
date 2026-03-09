@@ -145,7 +145,8 @@ export async function handleExcelFile(file) {
     if (invoiceKey) {
       addLog('info', `Matched invoice column: "${invoiceKey}"`);
     } else {
-      addLog('warning', 'No invoice number column found — agent auto-fetch will be limited');
+      addLog('warning', `No invoice number column found — agent will search by container number instead`);
+      addLog('info', `Available columns: ${headers.join(', ')}`);
     }
 
     // Parse rows — deduplicate by container number

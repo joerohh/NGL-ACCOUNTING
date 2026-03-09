@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from playwright.async_api import async_playwright
+from playwright.async_api import BrowserContext
 
 from config import (
     BROWSER_PROFILE_DIR,
@@ -11,7 +11,7 @@ from config import (
     QBO_BASE_URL,
     QBO_LOGIN_URL,
 )
-from utils import kill_chrome_with_profile, save_cookies_async, restore_cookies
+from utils import save_cookies_async, restore_cookies
 
 logger = logging.getLogger("ngl.qbo_browser")
 
@@ -22,22 +22,15 @@ class QBOLoginMixin:
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
-    async def init(self) -> None:
-        """Launch Google Chrome with a persistent profile (cookies survive restarts)."""
-        # Clean up any previous instance
-        try:
-            if self._context:
-                await self._context.close()
-        except Exception:
-            pass
-        try:
-            if self._playwright:
-                await self._playwright.stop()
-        except Exception:
-            pass
+    async def init(self, *, context: BrowserContext = None, shared_browser=None) -> None:
+        """Initialize with a browser context from SharedBrowser.
 
-        # Kill orphaned Chrome processes that may be locking the profile directory
-        kill_chrome_with_profile(BROWSER_PROFILE_DIR)
+        If context is provided, uses it directly (normal startup).
+        If not provided (crash recovery), recreates via shared_browser.
+        """
+        # Store shared browser reference for crash recovery
+        if shared_browser is not None:
+            self._shared_browser = shared_browser
 
         # Clean stale browser downloads from previous sessions
         for f in BROWSER_DOWNLOADS_DIR.glob("*"):
@@ -46,23 +39,14 @@ class QBOLoginMixin:
             except Exception:
                 pass
 
-        self._playwright = await async_playwright().start()
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            channel="chrome",  # Use installed Google Chrome instead of bundled Chromium
-            user_data_dir=str(BROWSER_PROFILE_DIR),
-            headless=False,  # user needs to see the browser for first login
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                # Prevent Chrome from clearing cookies / session data
-                "--disable-features=ClearDataOnExit",
-                # Don't show "Chrome didn't shut down correctly" bar after force-kill
-                "--hide-crash-restore-bubble",
-                "--disable-session-crashed-bubble",
-            ],
-            viewport={"width": 1920, "height": 960},
-            accept_downloads=True,
-            downloads_path=str(BROWSER_DOWNLOADS_DIR),
-        )
+        # Accept provided context or recreate from shared browser
+        if context is not None:
+            self._context = context
+        elif hasattr(self, '_shared_browser') and self._shared_browser:
+            self._context = await self._shared_browser.get_or_create_context("qbo")
+        else:
+            raise RuntimeError("QBO init requires either a context or shared_browser reference")
+
         # Use first page or create one
         if self._context.pages:
             self._page = self._context.pages[0]
@@ -75,31 +59,31 @@ class QBOLoginMixin:
         if restored:
             logger.info("QBO browser initialized with %d restored cookies", restored)
         else:
-            logger.info("QBO browser initialized (profile: %s)", BROWSER_PROFILE_DIR)
+            logger.info("QBO browser initialized (shared browser)")
 
     async def _ensure_browser(self) -> None:
-        """Re-launch Chrome if the browser/page has been closed or crashed."""
+        """Recreate context/page if the browser has crashed."""
         needs_relaunch = False
         if not self._page or not self._context:
             needs_relaunch = True
         else:
             try:
-                # Actually try to use the page — evaluate JS to confirm it's alive
                 await self._page.evaluate("() => true")
             except Exception:
                 needs_relaunch = True
 
         if needs_relaunch:
-            logger.warning("Browser appears closed — relaunching Chrome...")
+            logger.warning("QBO browser appears closed — recovering...")
+            # Ensure the shared browser process is alive
+            if hasattr(self, '_shared_browser') and self._shared_browser:
+                await self._shared_browser.ensure_running()
             await self.init()
-            logger.info("Browser relaunched successfully")
+            logger.info("QBO browser recovered successfully")
 
     async def close(self) -> None:
-        """Shut down browser — save cookies first, then close properly.
+        """Save cookies and close the QBO context.
 
-        We save all cookies (including session-only ones) to a JSON file so they
-        can be restored on next startup.  Then we close the context properly so
-        Chrome doesn't leave orphaned processes locking the profile directory.
+        Does NOT shut down Playwright — SharedBrowser owns that.
         """
         cookie_file = BROWSER_PROFILE_DIR / "_session_cookies.json"
         try:
@@ -113,14 +97,8 @@ class QBOLoginMixin:
                 await self._context.close()
         except Exception:
             pass
-        try:
-            if self._playwright:
-                await self._playwright.stop()
-        except Exception:
-            pass
         self._context = None
         self._page = None
-        self._playwright = None
         logger.info("QBO browser closed (cookies saved)")
 
     # ------------------------------------------------------------------

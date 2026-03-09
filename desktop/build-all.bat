@@ -26,6 +26,11 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM Read and apply version
+set /p BUILD_VER=<VERSION
+echo   [INFO] Building version: v%BUILD_VER%
+node bump-version.js
+
 REM Step 2: Install npm dependencies (if needed)
 echo   [2/3] Installing Electron dependencies...
 if not exist "node_modules" (
@@ -34,19 +39,24 @@ if not exist "node_modules" (
 
 REM Step 3: Build the Electron installer
 echo   [3/3] Building Electron installer...
-npm run build
+call npx electron-builder --win
 
-if %errorlevel% neq 0 (
+REM Check if the installer file was actually created
+if exist "dist\NGL_ACCOUNTING_INSTALLER_v%BUILD_VER%.0.exe" (
+    REM Bump version for next build
+    node bump-version.js --bump
+
+    set /p NEXT_VER=<VERSION
     echo.
-    echo   [ERROR] Electron build failed!
-    pause
-    exit /b 1
+    echo   ============================================
+    echo     Build complete!  v%BUILD_VER%
+    echo     Installer: desktop\dist\NGL_ACCOUNTING_INSTALLER_v%BUILD_VER%.0.exe
+    echo     Next build will be v!NEXT_VER!
+    echo   ============================================
+) else (
+    echo.
+    echo   [ERROR] Electron build failed — installer not found!
 )
 
-echo.
-echo   ============================================
-echo     Build complete!
-echo     Installer: desktop\dist\NGL Accounting Setup *.exe
-echo   ============================================
 echo.
 pause

@@ -126,6 +126,34 @@ async def restore_cookies(context, cookie_file: Path) -> int:
     return 0
 
 
+def cleanup_old_profiles() -> None:
+    """Remove dead Chrome profile cache from old launch_persistent_context() usage.
+
+    Since we switched to SharedBrowser (browser.new_context()), the profile
+    directories only need the _session_cookies.json file. Everything else
+    (Chrome cache, GPU cache, Local Storage, etc.) is dead weight.
+    Runs once on startup to reclaim disk space (can be 100-300 MB).
+    """
+    from config import BROWSER_PROFILE_DIR, TMS_PROFILE_DIR
+    for profile_dir in [BROWSER_PROFILE_DIR, TMS_PROFILE_DIR]:
+        if not profile_dir.exists():
+            continue
+        cleaned = 0
+        for item in list(profile_dir.iterdir()):
+            if item.name == "_session_cookies.json":
+                continue  # keep the cookie file
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                else:
+                    item.unlink()
+                cleaned += 1
+            except OSError:
+                pass
+        if cleaned:
+            logger.info("Cleaned %d old profile items from %s", cleaned, profile_dir.name)
+
+
 def cleanup_old_debug_files(debug_dir: Path, max_age_days: int = 7) -> int:
     """Delete debug screenshots/HTML older than max_age_days.
 

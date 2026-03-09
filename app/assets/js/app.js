@@ -1,10 +1,11 @@
 // ══════════════════════════════════════════════════════════════════
-//  ██ APP — Navigation, Init & Responsive Layout (Entry Point) ██
+//  APP — Navigation, Init, Responsive Layout & Auth Gate
 // ══════════════════════════════════════════════════════════════════
 import { state, invoiceState } from './shared/state.js';
 import { addLog, invAddLog } from './shared/log.js';
 import { setupDrop } from './shared/dom-helpers.js';
 import { LS_CUSTOMERS } from './shared/constants.js';
+import { agentBridge } from './shared/agent-client.js';
 import { agentHealthCheck } from './agent-ui.js';
 import { renderPdfQueue, setMode, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
@@ -14,6 +15,156 @@ import { settingsLoad } from './tools/settings/settings.js';
 // Prevent browser from opening files dropped anywhere on the page
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
 document.addEventListener('drop', function(e) { e.preventDefault(); });
+
+
+// ══════════════════════════════════════════════════════════
+//  AUTH GATE — login before showing the app
+// ══════════════════════════════════════════════════════════
+
+function showLogin() {
+  document.getElementById('loginScreen').style.display = '';
+  document.getElementById('appLayout').style.display = 'none';
+}
+
+function showApp(user) {
+  state.currentUser = user;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appLayout').style.display = '';
+
+  // Update sidebar user info
+  const nameEl = document.getElementById('sidebarDisplayName');
+  const roleEl = document.getElementById('sidebarUserRole');
+  if (nameEl) nameEl.textContent = user.displayName || user.username;
+  if (roleEl) roleEl.textContent = user.role;
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errorEl = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  const btnText = document.getElementById('loginBtnText');
+
+  if (!username || !password) {
+    errorEl.textContent = 'Enter your username and password.';
+    errorEl.style.display = '';
+    return;
+  }
+
+  btn.disabled = true;
+  btnText.textContent = 'Signing in...';
+  errorEl.style.display = 'none';
+
+  const result = await agentBridge.login(username, password);
+
+  btn.disabled = false;
+  btnText.textContent = 'Sign In';
+
+  if (result.error) {
+    errorEl.textContent = result.error;
+    errorEl.style.display = '';
+    return;
+  }
+
+  showApp(result.user);
+  initApp();
+}
+
+function doLogout() {
+  agentBridge.logout();
+  state.currentUser = null;
+  showLogin();
+  // Clear password field for next login
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').style.display = 'none';
+}
+
+// Auth hooks — agentBridge calls these when session expires
+agentBridge.hooks.onAuthRequired = showLogin;
+
+// Global handlers for inline onclick
+window.doLogin = doLogin;
+window.doLogout = doLogout;
+
+
+// ══════════════════════════════════════════════════════════
+//  STARTUP — try to restore session, else show login
+// ══════════════════════════════════════════════════════════
+
+async function startup() {
+  // Check if agent is running first
+  const statusEl = document.getElementById('loginAgentStatus');
+
+  agentBridge._loadSavedAuth();
+
+  const health = await agentBridge.checkHealth();
+  if (health) {
+    if (statusEl) { statusEl.textContent = 'Agent connected'; statusEl.style.color = '#16a34a'; }
+    state.agentConnected = true;
+  } else {
+    if (statusEl) { statusEl.textContent = 'Agent offline — start the agent server first'; statusEl.style.color = '#dc2626'; }
+    state.agentConnected = false;
+  }
+
+  // Check if the server requires login (auth middleware may be disabled)
+  let authRequired = true;
+  if (state.agentConnected) {
+    try {
+      const res = await fetch(agentBridge.baseUrl + '/auth/token');
+      if (res.ok) {
+        const data = await res.json();
+        authRequired = !!data.loginRequired;
+      }
+    } catch { /* assume auth required if we can't check */ }
+  }
+
+  // If auth is not enforced, skip login and go straight to app
+  if (!authRequired) {
+    showApp({ username: 'local', displayName: 'Local User', role: 'admin' });
+    initApp();
+    return;
+  }
+
+  // Try to restore existing session
+  if (agentBridge.isLoggedIn()) {
+    const valid = await agentBridge.validateSession();
+    if (valid) {
+      showApp(agentBridge.getCurrentUser());
+      initApp();
+      return;
+    }
+  }
+
+  // No valid session — show login
+  showLogin();
+  // Focus username field
+  document.getElementById('loginUsername').focus();
+}
+
+let _appInitialized = false;
+
+function initApp() {
+  if (_appInitialized) return;
+  _appInitialized = true;
+
+  renderPdfQueue();
+  setMode('idle');
+  addLog('info', '// NGL Transportation Accounting v2.1');
+  addLog('info', '// 100% client-side — no files leave your machine');
+  addLog('info', '// Drop Excel for Auto Mode · Drop PDFs for Manual Mode');
+
+  // Check agent health on load, then every 15 seconds
+  agentHealthCheck();
+  setInterval(agentHealthCheck, 15000);
+
+  // Start on home page
+  switchTool('home');
+
+  // Initialize Invoice Sender drop zones
+  invInitDropZones();
+  invAddLog('info', '// Invoice Sending Tool ready');
+  invAddLog('info', '// Upload a CSV export and PDF attachments to get started');
+}
 
 
 // ── Tool Navigation ──
@@ -154,29 +305,10 @@ window.addEventListener('resize', applyResponsiveLayout);
 applyResponsiveLayout();
 
 
-// ══════════════════════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════════════════════
-renderPdfQueue();
-setMode('idle');
-addLog('info', '// NGL Transportation Accounting v2.1');
-addLog('info', '// 100% client-side — no files leave your machine');
-addLog('info', '// Drop Excel for Auto Mode · Drop PDFs for Manual Mode');
-addLog('info', '// AI Agent panel available — start agent with: python main.py');
-
-// Check agent health on load, then every 15 seconds
-agentHealthCheck();
-setInterval(agentHealthCheck, 15000);
-
-// Start on home page
-switchTool('home');
-
-// Initialize Invoice Sender drop zones
-invInitDropZones();
-invAddLog('info', '// Invoice Sending Tool ready');
-invAddLog('info', '// Upload a CSV export and PDF attachments to get started');
-
 // ── Window assignments for inline HTML handlers ──
 window.switchTool = switchTool;
 window.toggleToolSwitcher = toggleToolSwitcher;
 window.refreshHomeMetrics = refreshHomeMetrics;
+
+// ── Boot ──
+startup();
