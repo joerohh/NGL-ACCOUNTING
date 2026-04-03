@@ -51,6 +51,39 @@ def kill_chrome_with_profile(profile_dir: Path) -> None:
         logger.debug("Chrome cleanup skipped: %s", e)
 
 
+def kill_orphaned_playwright_chrome() -> None:
+    """Kill orphaned Chrome processes spawned by Playwright.
+
+    Since SharedBrowser uses launch() (not launch_persistent_context()),
+    Chrome doesn't have --user-data-dir in its command line. Instead,
+    we identify Playwright-spawned Chrome by the --disable-blink-features
+    flag (which normal user Chrome doesn't have).
+
+    Only kills Chrome processes whose parent PID no longer exists
+    (truly orphaned — not Chrome actively used by a running agent).
+    """
+    try:
+        cmd = (
+            "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+            "Where-Object { $_.CommandLine -and "
+            "$_.CommandLine.Contains('--disable-blink-features=AutomationControlled') -and "
+            "(-not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue)) } | "
+            "ForEach-Object { "
+            "Write-Output \"Killing orphaned Playwright Chrome PID $($_.ProcessId)\"; "
+            "Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
+            capture_output=True, timeout=15, text=True,
+        )
+        if result.stdout.strip():
+            logger.info("Cleaned up orphaned Playwright Chrome: %s", result.stdout.strip())
+        else:
+            logger.debug("No orphaned Playwright Chrome processes found")
+    except Exception as e:
+        logger.debug("Playwright Chrome cleanup skipped: %s", e)
+
+
 def save_cookies(context, cookie_file: Path) -> None:
     """Save browser cookies to a JSON file for session persistence."""
     try:

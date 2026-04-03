@@ -115,10 +115,18 @@ function startAgent() {
   agentProcess.on("exit", (code) => {
     log(`Agent exited with code ${code}`);
     if (!isQuitting && !agentIsExternal) {
-      dialog.showErrorBox(
-        "NGL Accounting — Agent Stopped",
-        `The agent server stopped unexpectedly (code ${code}).\nThe app will close.`
-      );
+      let title = "NGL Accounting — Agent Stopped";
+      let message;
+      if (code === 2) {
+        message = "Port 8787 is already in use by another process.\n\n"
+          + "This usually means a previous agent didn't shut down cleanly.\n"
+          + "Open Task Manager and end any 'ngl-agent' or 'python' processes, then try again.";
+      } else {
+        message = `The agent server stopped unexpectedly (code ${code}).\n\n`
+          + "This can happen if Chrome crashed or was closed externally.\n"
+          + "Reopen the app to restart the agent.";
+      }
+      dialog.showErrorBox(title, message);
       app.quit();
     }
   });

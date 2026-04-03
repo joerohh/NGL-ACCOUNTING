@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import os
+import socket
+import sys
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -35,6 +37,17 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("ngl.main")
+
+
+# ── Global exception handler — prevents silent crashes ──────────────
+def _handle_unhandled_exception(loop, context):
+    """Catch unhandled async exceptions so they don't crash the server."""
+    exc = context.get("exception")
+    msg = context.get("message", "")
+    if exc:
+        logger.error("Unhandled async exception: %s — %s", msg, exc, exc_info=exc)
+    else:
+        logger.error("Unhandled async error: %s", msg)
 
 # ── Shared instances ─────────────────────────────────────────────────
 shared_browser = SharedBrowser()
@@ -195,6 +208,11 @@ def _migrate_data_to_appdata():
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     global classifier, email_sender, portal_uploader, job_manager
+
+    # Install global exception handler to catch unhandled async errors
+    # (e.g., Playwright internal failures) instead of crashing the server
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(_handle_unhandled_exception)
 
     logger.info("=" * 50)
     logger.info("  NGL Agent Server starting on %s:%d", HOST, PORT)
@@ -492,7 +510,27 @@ else:
 
 
 # ── Run ──────────────────────────────────────────────────────────────
+def _port_in_use(port: int) -> bool:
+    """Check if a port is already bound (another agent instance running)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return False
+        except OSError:
+            return True
+
+
 if __name__ == "__main__":
+    if _port_in_use(PORT):
+        logger.error(
+            "Port %d is already in use — another agent instance may be running. "
+            "Close it first or check Task Manager for orphaned python/ngl-agent processes.",
+            PORT,
+        )
+        # Wait briefly so the log message is visible in Electron's captured stderr
+        import time; time.sleep(2)
+        sys.exit(2)  # exit code 2 = port conflict (distinct from crash code 1)
+
     uvicorn.run(
         app,
         host=HOST,

@@ -35,9 +35,10 @@ class SharedBrowser:
         self._headless = headless
 
         # Kill orphaned Chrome processes from previous runs
-        from utils import kill_chrome_with_profile
+        from utils import kill_chrome_with_profile, kill_orphaned_playwright_chrome
         kill_chrome_with_profile(BROWSER_PROFILE_DIR)
         kill_chrome_with_profile(TMS_PROFILE_DIR)
+        kill_orphaned_playwright_chrome()
 
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
@@ -64,9 +65,12 @@ class SharedBrowser:
 
     async def _on_disconnected(self) -> None:
         """Handle browser process crash — relaunch and recreate contexts."""
-        logger.warning("Shared browser disconnected — will relaunch on next operation")
-        self._browser = None
-        self._contexts.clear()
+        try:
+            logger.warning("Shared browser disconnected — will relaunch on next operation")
+            self._browser = None
+            self._contexts.clear()
+        except Exception as e:
+            logger.error("Error in browser disconnect handler: %s", e)
 
     # ------------------------------------------------------------------
     # Context management
