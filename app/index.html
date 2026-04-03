@@ -74,6 +74,13 @@
             onkeydown="if(event.key==='Enter')window.doLogin&&window.doLogin()" />
         </div>
 
+        <!-- Remember me -->
+        <label style="display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer; user-select:none;">
+          <input type="checkbox" id="loginRememberMe"
+            style="width:16px; height:16px; accent-color:#F26522; cursor:pointer; margin:0;" />
+          <span style="font-size:0.82rem; font-weight:500; color:#64748b;">Remember me</span>
+        </label>
+
         <button onclick="window.doLogin&&window.doLogin()" id="loginBtn" class="login-btn"
           style="width:100%; padding:13px; background:#F26522; color:#fff; border:none; border-radius:10px; font-size:0.92rem; font-weight:700; font-family:inherit; cursor:pointer; letter-spacing:0.02em;">
           <span id="loginBtnText">Sign In</span>

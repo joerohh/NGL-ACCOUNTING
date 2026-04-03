@@ -1,6 +1,6 @@
 {
   "name": "ngl-accounting",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "description": "NGL Accounting Service — Invoice management and document automation",
   "main": "main.js",
   "scripts": {

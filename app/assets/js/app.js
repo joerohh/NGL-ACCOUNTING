@@ -4,7 +4,7 @@
 import { state, invoiceState } from './shared/state.js';
 import { addLog, invAddLog } from './shared/log.js';
 import { setupDrop } from './shared/dom-helpers.js';
-import { LS_CUSTOMERS } from './shared/constants.js';
+import { LS_CUSTOMERS, LS_REMEMBER_ME } from './shared/constants.js';
 import { agentBridge } from './shared/agent-client.js';
 import { agentHealthCheck } from './agent-ui.js';
 import { renderPdfQueue, setMode, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
@@ -66,6 +66,14 @@ async function doLogin() {
     return;
   }
 
+  // Save credentials if "Remember me" is checked
+  const rememberMe = document.getElementById('loginRememberMe').checked;
+  if (rememberMe) {
+    localStorage.setItem(LS_REMEMBER_ME, btoa(JSON.stringify({ u: username, p: password })));
+  } else {
+    localStorage.removeItem(LS_REMEMBER_ME);
+  }
+
   showApp(result.user);
   initApp();
 }
@@ -73,9 +81,11 @@ async function doLogin() {
 function doLogout() {
   agentBridge.logout();
   state.currentUser = null;
+  localStorage.removeItem(LS_REMEMBER_ME);
   showLogin();
-  // Clear password field for next login
+  // Clear password field and uncheck remember me for next login
   document.getElementById('loginPassword').value = '';
+  document.getElementById('loginRememberMe').checked = false;
   document.getElementById('loginError').style.display = 'none';
 }
 
@@ -135,8 +145,27 @@ async function startup() {
     }
   }
 
+  // Try auto-login from "Remember me" saved credentials
+  const saved = localStorage.getItem(LS_REMEMBER_ME);
+  if (saved && state.agentConnected) {
+    try {
+      const { u, p } = JSON.parse(atob(saved));
+      const result = await agentBridge.login(u, p);
+      if (!result.error) {
+        showApp(result.user);
+        initApp();
+        return;
+      }
+      // Saved credentials invalid — clear them
+      localStorage.removeItem(LS_REMEMBER_ME);
+    } catch {
+      localStorage.removeItem(LS_REMEMBER_ME);
+    }
+  }
+
   // No valid session — show login
   showLogin();
+  // Pre-check "Remember me" if credentials were previously saved (but expired)
   // Focus username field
   document.getElementById('loginUsername').focus();
 }
