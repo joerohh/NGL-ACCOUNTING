@@ -23,6 +23,7 @@ class ContainerItem(BaseModel):
 
 class FetchRequest(BaseModel):
     containers: list[ContainerItem]
+    doc_types: list[str] = ["invoice", "pod"]
 
 
 class SendInvoiceItem(BaseModel):
@@ -50,7 +51,7 @@ async def create_fetch_job(req: FetchRequest):
 
     containers = [c.model_dump() for c in req.containers]
     try:
-        job = _job_manager.create_job(containers)
+        job = _job_manager.create_job(containers, doc_types=req.doc_types)
     except ValueError as e:
         raise HTTPException(400, str(e))
     _job_manager.start_job(job.id)

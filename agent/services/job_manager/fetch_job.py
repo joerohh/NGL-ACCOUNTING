@@ -18,7 +18,7 @@ logger = logging.getLogger("ngl.job_manager")
 class FetchJobMixin:
     """Handles fetch job lifecycle: create, start, process containers."""
 
-    def create_job(self, containers: list[dict]):
+    def create_job(self, containers: list[dict], *, doc_types=None):
         """Create a new fetch job from a list of {containerNumber, invoiceNumber}."""
         from services.job_manager import ContainerRequest, Job
 
@@ -36,9 +36,9 @@ class FetchJobMixin:
             )
             for c in containers
         ]
-        job = Job(job_id, requests)
+        job = Job(job_id, requests, doc_types=doc_types)
         self._jobs[job_id] = job
-        logger.info("Created job %s for %d containers", job_id, len(requests))
+        logger.info("Created job %s for %d containers (doc_types=%s)", job_id, len(requests), job.doc_types)
         return job
 
     def get_job(self, job_id: str):
@@ -64,8 +64,10 @@ class FetchJobMixin:
         Args:
             page: Playwright page to use for this container (for parallel workers).
         """
-        # Step 1: Search for the invoice in QBO
-        # Determine what to search — prefer invoice number, fall back to container number
+        want_invoice = "invoice" in job.doc_types
+        want_pod = "pod" in job.doc_types
+
+        # Step 1: Search for the invoice in QBO (always needed — POD is an attachment on the invoice page)
         search_term = container.invoice_number or container.container_number
         if not container.invoice_number:
             logger.warning(
@@ -87,73 +89,73 @@ class FetchJobMixin:
             })
             return
 
-        # Step 2: Download the invoice PDF
-        await self._emit(job, "downloading_invoice", {
-            "containerNumber": container.container_number,
-        })
-
-        inv_path = await self._qbo.download_invoice_pdf(job.download_dir, page=page)
-        if inv_path:
-            # Rename immediately to container-specific name (prevents conflicts in parallel mode)
-            new_name = f"{container.container_number}_invoice.pdf"
-            new_path = job.download_dir / new_name
-            inv_path.rename(new_path)
-            strip_motw(new_path)
-            result.invoice_file = new_name
-
-            # Classify with Claude (can run while other workers use the browser)
-            await self._emit(job, "classifying", {
+        # Step 2: Download the invoice PDF (only if invoice type is requested)
+        if want_invoice:
+            await self._emit(job, "downloading_invoice", {
                 "containerNumber": container.container_number,
-                "file": new_name,
             })
-            classification = await self._classifier.classify(new_path)
 
-            if classification.needs_review:
-                result.needs_review = True
-                await self._emit(job, "review_needed", {
+            inv_path = await self._qbo.download_invoice_pdf(job.download_dir, page=page)
+            if inv_path:
+                new_name = f"{container.container_number}_invoice.pdf"
+                new_path = job.download_dir / new_name
+                inv_path.rename(new_path)
+                strip_motw(new_path)
+                result.invoice_file = new_name
+
+                # Classify with Claude
+                await self._emit(job, "classifying", {
                     "containerNumber": container.container_number,
                     "file": new_name,
-                    "classified_as": classification.doc_type,
-                    "confidence": classification.confidence,
                 })
-        else:
-            result.error = "Failed to download invoice PDF"
-            await self._emit(job, "download_failed", {
+                classification = await self._classifier.classify(new_path)
+
+                if classification.needs_review:
+                    result.needs_review = True
+                    await self._emit(job, "review_needed", {
+                        "containerNumber": container.container_number,
+                        "file": new_name,
+                        "classified_as": classification.doc_type,
+                        "confidence": classification.confidence,
+                    })
+            else:
+                result.error = "Failed to download invoice PDF"
+                await self._emit(job, "download_failed", {
+                    "containerNumber": container.container_number,
+                    "type": "invoice",
+                })
+
+        # Step 3: Check for POD attachment (only if POD type is requested)
+        if want_pod:
+            await self._emit(job, "checking_pod", {
                 "containerNumber": container.container_number,
-                "type": "invoice",
             })
 
-        # Step 3: Check for POD attachment
-        await self._emit(job, "checking_pod", {
-            "containerNumber": container.container_number,
-        })
+            await asyncio.sleep(QBO_ACTION_DELAY_S)
+            pod_path = await self._qbo.find_and_download_pod(job.download_dir, page=page)
 
-        await asyncio.sleep(QBO_ACTION_DELAY_S)
-        pod_path = await self._qbo.find_and_download_pod(job.download_dir, page=page)
+            if pod_path:
+                new_name = f"{container.container_number}_pod.pdf"
+                new_path = job.download_dir / new_name
+                pod_path.rename(new_path)
+                strip_motw(new_path)
+                result.pod_file = new_name
 
-        if pod_path:
-            # Rename immediately to container-specific name
-            new_name = f"{container.container_number}_pod.pdf"
-            new_path = job.download_dir / new_name
-            pod_path.rename(new_path)
-            strip_motw(new_path)
-            result.pod_file = new_name
+                # Classify POD
+                pod_classification = await self._classifier.classify(new_path)
+                if pod_classification.needs_review:
+                    result.needs_review = True
 
-            # Classify POD
-            pod_classification = await self._classifier.classify(new_path)
-            if pod_classification.needs_review:
-                result.needs_review = True
-
-            await self._emit(job, "pod_found", {
-                "containerNumber": container.container_number,
-                "file": new_name,
-            })
-        else:
-            result.pod_missing = True
-            await self._emit(job, "pod_missing", {
-                "containerNumber": container.container_number,
-                "message": f"No POD found in QBO for container {container.container_number}",
-            })
+                await self._emit(job, "pod_found", {
+                    "containerNumber": container.container_number,
+                    "file": new_name,
+                })
+            else:
+                result.pod_missing = True
+                await self._emit(job, "pod_missing", {
+                    "containerNumber": container.container_number,
+                    "message": f"No POD found in QBO for container {container.container_number}",
+                })
 
         # Step 4: Emit container complete
         await self._emit(job, "container_complete", {
@@ -350,6 +352,7 @@ class FetchJobMixin:
 
         await self._emit(job, "job_complete", {
             "total": job.total,
+            "docTypes": job.doc_types,
             "invoicesDownloaded": sum(1 for r in job.results if r.invoice_file),
             "podsDownloaded": sum(1 for r in job.results if r.pod_file),
             "podsMissing": pod_missing_count,

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
 from config import (
-    HOST, PORT, BASE_DIR, BUNDLE_DIR, ALLOWED_ORIGINS, CLAUDE_API_KEY,
+    HOST, PORT, BASE_DIR, BUNDLE_DIR, APPDATA_DIR, ALLOWED_ORIGINS, CLAUDE_API_KEY,
     DAILY_API_CALL_LIMIT, GMAIL_ADDRESS, GMAIL_APP_PASSWORD,
     TRANZACT_USERNAME, TRANZACT_PASSWORD,
     DEBUG_DIR, DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS,
@@ -131,6 +131,60 @@ async def _session_keepalive_loop():
             return
 
 
+def _db_is_empty(db_path):
+    """Check if a DB file is missing, tiny, or has no customers."""
+    if not db_path.exists():
+        return True
+    if db_path.stat().st_size < 1024:  # less than 1KB = basically empty
+        return True
+    try:
+        import sqlite3
+        conn = sqlite3.connect(str(db_path))
+        count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        conn.close()
+        return count == 0
+    except Exception:
+        return True
+
+
+def _migrate_data_to_appdata():
+    """One-time migration: seed DB from bundled data or copy from old install dir."""
+    import shutil
+    new_data = APPDATA_DIR / "data"
+    new_data.mkdir(parents=True, exist_ok=True)
+
+    existing_db = new_data / "ngl.db"
+
+    if _db_is_empty(existing_db):
+        # Try 1: copy from old install dir (upgrade from pre-1.2)
+        old_data = BASE_DIR / "data"
+        if old_data.is_dir() and (old_data / "ngl.db").exists() and not _db_is_empty(old_data / "ngl.db"):
+            logger.info("Migrating data from old install dir: %s", old_data)
+            for f in old_data.iterdir():
+                dest = new_data / f.name
+                if f.is_file():
+                    shutil.copy2(f, dest)
+                elif f.is_dir() and not dest.exists():
+                    shutil.copytree(f, dest)
+                logger.info("  Copied: %s", f.name)
+        # Try 2: seed from bundled seed-data (fresh install)
+        else:
+            seed_db = BUNDLE_DIR / "seed-data" / "ngl.db"
+            if seed_db.exists():
+                logger.info("Seeding database from bundled data: %s", seed_db)
+                shutil.copy2(seed_db, new_data / "ngl.db")
+            else:
+                logger.warning("No seed database found at %s", seed_db)
+
+    # Migrate browser profiles
+    for name in [".browser_profile", ".tms_browser_profile"]:
+        old = BASE_DIR / name
+        new = APPDATA_DIR / name
+        if old.is_dir() and not new.exists():
+            logger.info("Migrating %s to AppData...", name)
+            shutil.copytree(old, new)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
@@ -144,8 +198,13 @@ async def lifespan(app: FastAPI):
     import sys as _sys
     _is_frozen = getattr(_sys, "frozen", False)
     logger.info("Packaged mode: %s", _is_frozen)
-    logger.info("BASE_DIR (writable):   %s", BASE_DIR)
+    logger.info("BASE_DIR (install):    %s", BASE_DIR)
+    logger.info("APPDATA_DIR (persist): %s", APPDATA_DIR)
     logger.info("BUNDLE_DIR (bundled):  %s", BUNDLE_DIR)
+
+    # ── One-time migration: copy data from old install dir to AppData ──
+    if _is_frozen and APPDATA_DIR != BASE_DIR:
+        _migrate_data_to_appdata()
     if not SELECTORS_FILE.exists():
         logger.error("MISSING: %s — QBO automation will fail!", SELECTORS_FILE)
     if not TMS_SELECTORS_FILE.exists():

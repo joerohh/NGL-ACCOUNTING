@@ -142,12 +142,12 @@ export const agentBridge = {
     } catch (e) { return { status: 'error', error: e.message }; }
   },
 
-  async fetchMissing(containers) {
+  async fetchMissing(containers, docTypes) {
     try {
       const res = await this._authFetch(this.baseUrl + '/jobs/fetch-missing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ containers }),
+        body: JSON.stringify({ containers, doc_types: docTypes }),
       });
       return await res.json();
     } catch (e) { return { error: e.message }; }

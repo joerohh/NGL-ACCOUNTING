@@ -1,6 +1,6 @@
 {
   "name": "ngl-accounting",
-  "version": "1.1.0",
+  "version": "1.4.0",
   "description": "NGL Accounting Service — Invoice management and document automation",
   "main": "main.js",
   "scripts": {
@@ -11,6 +11,9 @@
   },
   "author": "NGL Trans",
   "license": "UNLICENSED",
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
   "devDependencies": {
     "electron": "^33.4.11",
     "electron-builder": "^25.0.0"
@@ -62,6 +65,14 @@
         ]
       }
     ],
-    "asar": false
+    "asar": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "joerohh",
+        "repo": "NGL-ACCOUNTING"
+      }
+    ],
+    "forceCodeSigning": false
   }
 }

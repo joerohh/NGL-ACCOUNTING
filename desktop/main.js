@@ -21,6 +21,7 @@ const path = _path;
 const fs = _fs;
 const { spawn } = require("child_process");
 const http = require("http");
+const { autoUpdater } = require("electron-updater");
 
 // ── Debug logging to file ──────────────────────────────────────────
 let _logFile = null;
@@ -130,9 +131,11 @@ function stopAgent() {
 }
 
 /**
- * Poll localhost:8787/health until it responds (max ~30 seconds).
+ * Poll localhost:8787/health until it responds (max ~90 seconds).
+ * Agent startup is heavy: Playwright browser launch, QBO auto-login,
+ * DB init, web-update check, etc. 30s is too tight on slower machines.
  */
-function waitForAgent(retries = 30) {
+function waitForAgent(retries = 90) {
   return new Promise((resolve, reject) => {
     let attempts = 0;
     const check = () => {
@@ -321,22 +324,158 @@ app.whenReady().then(async () => {
 
   startAgent();
 
+  // Show a splash window while the agent boots
+  let splash = new BrowserWindow({
+    width: 380,
+    height: 200,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    icon: iconPath,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+    <html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;
+      font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;background:rgba(255,255,255,0.97);
+      border-radius:16px;border:1px solid #e2e8f0;user-select:none;-webkit-app-region:drag">
+      <div style="text-align:center">
+        <div style="font-size:1.2rem;font-weight:700;color:#0f172a;margin-bottom:8px">NGL Accounting</div>
+        <div style="font-size:0.82rem;color:#64748b;margin-bottom:16px">Starting agent server...</div>
+        <div style="width:180px;height:4px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin:0 auto">
+          <div style="width:40%;height:100%;background:#ea580c;border-radius:4px;animation:slide 1.2s ease-in-out infinite"></div>
+        </div>
+      </div>
+      <style>@keyframes slide{0%{margin-left:0;width:40%}50%{margin-left:30%;width:50%}100%{margin-left:60%;width:40%}}</style>
+    </body></html>
+  `)}`);
+
   try {
     await waitForAgent();
     log("Agent is ready!");
   } catch (err) {
+    if (splash && !splash.isDestroyed()) splash.close();
     dialog.showErrorBox(
       "NGL Accounting — Startup Error",
-      "The agent server did not start in time.\nPlease try again."
+      "The agent server did not start in time.\n\n"
+      + "This can happen if Chrome/Playwright is slow to launch or if another\n"
+      + "instance is already using port 8787.\n\n"
+      + "Try closing any other NGL windows and restarting."
     );
     stopAgent();
     app.quit();
     return;
   }
 
+  if (splash && !splash.isDestroyed()) splash.close();
+
   createWindow();
   createTray();
+
+  // Check for updates in production only
+  if (!isDev) {
+    setupAutoUpdater();
+  }
 });
+
+// ── Auto-update ───────────────────────────────────────────────────
+
+function setupAutoUpdater() {
+  autoUpdater.logger = {
+    info: (msg) => log(`[updater] ${msg}`),
+    warn: (msg) => log(`[updater-warn] ${msg}`),
+    error: (msg) => log(`[updater-error] ${msg}`),
+    debug: (msg) => log(`[updater-debug] ${msg}`),
+  };
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-available", (info) => {
+    log(`[updater] Update available: v${info.version}`);
+    // Show themed in-app update prompt
+    if (!mainWindow) return;
+    mainWindow.webContents.executeJavaScript(`
+      new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease';
+        const m = document.createElement('div');
+        m.style.cssText = 'background:#fff;border-radius:16px;padding:32px 36px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;animation:scaleIn .2s ease';
+        m.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">'
+          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>'
+          + '<h3 style="margin:0 0 8px;font-size:1.15rem;font-weight:700;color:#0f172a">Update Available</h3>'
+          + '<p style="margin:0 0 24px;font-size:0.85rem;color:#64748b;line-height:1.5">Version ${info.version} is ready to download. The app will continue working while it downloads.</p>'
+          + '<div style="display:flex;gap:10px;justify-content:center">'
+          + '<button id="_nglSkip" style="flex:1;padding:10px 0;border:1px solid #e2e8f0;background:#fff;border-radius:10px;font-size:0.85rem;font-weight:600;color:#475569;cursor:pointer;transition:all .15s">Later</button>'
+          + '<button id="_nglDl" style="flex:1;padding:10px 0;border:none;background:#ea580c;border-radius:10px;font-size:0.85rem;font-weight:600;color:#fff;cursor:pointer;transition:all .15s">Download</button></div>';
+        ov.appendChild(m);
+        document.body.appendChild(ov);
+        const style = document.createElement('style');
+        style.textContent = '@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes scaleIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}#_nglSkip:hover{background:#f8fafc;border-color:#cbd5e1}#_nglDl:hover{background:#dc4a0a}';
+        document.head.appendChild(style);
+        const cleanup = (val) => { ov.remove(); style.remove(); resolve(val); };
+        document.getElementById('_nglDl').onclick = () => cleanup(true);
+        document.getElementById('_nglSkip').onclick = () => cleanup(false);
+        ov.onclick = (e) => { if (e.target === ov) cleanup(false); };
+      })
+    `).then((shouldDownload) => {
+      if (shouldDownload) {
+        autoUpdater.downloadUpdate();
+      }
+    }).catch(() => {});
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    log(`[updater] Update downloaded: v${info.version}`);
+    if (!mainWindow) return;
+    mainWindow.webContents.executeJavaScript(`
+      new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease';
+        const m = document.createElement('div');
+        m.style.cssText = 'background:#fff;border-radius:16px;padding:32px 36px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;animation:scaleIn .2s ease';
+        m.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:#ECFDF5;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">'
+          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>'
+          + '<h3 style="margin:0 0 8px;font-size:1.15rem;font-weight:700;color:#0f172a">Update Ready</h3>'
+          + '<p style="margin:0 0 24px;font-size:0.85rem;color:#64748b;line-height:1.5">Version ${info.version} has been downloaded. Restart now to apply the update?</p>'
+          + '<div style="display:flex;gap:10px;justify-content:center">'
+          + '<button id="_nglLater" style="flex:1;padding:10px 0;border:1px solid #e2e8f0;background:#fff;border-radius:10px;font-size:0.85rem;font-weight:600;color:#475569;cursor:pointer;transition:all .15s">Later</button>'
+          + '<button id="_nglRestart" style="flex:1;padding:10px 0;border:none;background:#16a34a;border-radius:10px;font-size:0.85rem;font-weight:600;color:#fff;cursor:pointer;transition:all .15s">Restart Now</button></div>';
+        ov.appendChild(m);
+        document.body.appendChild(ov);
+        const style = document.createElement('style');
+        style.textContent = '@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes scaleIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}#_nglLater:hover{background:#f8fafc;border-color:#cbd5e1}#_nglRestart:hover{background:#15803d}';
+        document.head.appendChild(style);
+        const cleanup = (val) => { ov.remove(); style.remove(); resolve(val); };
+        document.getElementById('_nglRestart').onclick = () => cleanup(true);
+        document.getElementById('_nglLater').onclick = () => cleanup(false);
+        ov.onclick = (e) => { if (e.target === ov) cleanup(false); };
+      })
+    `).then((shouldRestart) => {
+      if (shouldRestart) {
+        isQuitting = true;
+        autoUpdater.quitAndInstall();
+      }
+    }).catch(() => {});
+  });
+
+  autoUpdater.on("error", (err) => {
+    log(`[updater] Error: ${err.message}`);
+    // Silently fail — user gets the update next launch
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    log("[updater] App is up to date.");
+  });
+
+  // Check 10 seconds after startup (let the app finish loading)
+  setTimeout(() => {
+    log("[updater] Checking for updates...");
+    autoUpdater.checkForUpdates().catch((err) => {
+      log(`[updater] Check failed: ${err.message}`);
+    });
+  }, 10000);
+}
 
 app.on("before-quit", () => {
   isQuitting = true;

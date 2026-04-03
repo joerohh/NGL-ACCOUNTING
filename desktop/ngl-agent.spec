@@ -41,6 +41,8 @@ a = Analysis(
         # Agent data files
         (str(AGENT_DIR / "selectors.json"), "."),
         (str(AGENT_DIR / "tms_selectors.json"), "."),
+        # Seed database (copied to AppData on first launch if no DB exists)
+        (str(AGENT_DIR / "data" / "ngl.db"), "seed-data"),
         # Shared .env with baked-in secrets (created by build script)
         (str(Path(SPECPATH) / "build-env"), "."),
         # Playwright driver (node.exe + JS package)

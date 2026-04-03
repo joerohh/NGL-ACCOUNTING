@@ -339,15 +339,25 @@ async function agentFetchMissing() {
     return;
   }
 
-  // Find containers with missing invoices or PODs
+  // Read selected doc types from checkboxes
+  const docTypes = [];
+  if (document.getElementById('fetchTypeInvoice')?.checked) docTypes.push('invoice');
+  if (document.getElementById('fetchTypePod')?.checked) docTypes.push('pod');
+  if (document.getElementById('fetchTypeBl')?.checked) docTypes.push('bl');
+
+  if (docTypes.length === 0) {
+    addLog('error', '[Agent] Select at least one document type to fetch');
+    return;
+  }
+
+  // Find containers missing any of the selected doc types
   const missing = [];
   for (const row of state.excelRows) {
     const matched = state.pdfs.filter(p =>
       p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
     );
-    const hasInvoice = matched.some(p => classifyPdf(p.name) === 'invoice');
-    const hasPod     = matched.some(p => classifyPdf(p.name) === 'pod');
-    if (!hasInvoice || !hasPod) {
+    const isMissing = docTypes.some(type => !matched.some(p => classifyPdf(p.name) === type));
+    if (isMissing) {
       missing.push({
         containerNumber: row.containerNumber,
         invoiceNumber: row.invoiceNumber || '',
@@ -355,13 +365,14 @@ async function agentFetchMissing() {
     }
   }
 
+  const typeLabel = docTypes.map(t => t.toUpperCase()).join(' + ');
   if (missing.length === 0) {
-    addLog('success', '[Agent] All containers have both Invoice and POD — nothing to fetch!');
+    addLog('success', `[Agent] All containers have ${typeLabel} — nothing to fetch!`);
     return;
   }
 
   const withInv = missing.filter(m => m.invoiceNumber);
-  addLog('info', `[Agent] Fetching ${missing.length} containers (${withInv.length} with invoice numbers, ${missing.length - withInv.length} will search by container #)`);
+  addLog('info', `[Agent] Fetching ${typeLabel} for ${missing.length} containers (${withInv.length} with invoice numbers, ${missing.length - withInv.length} will search by container #)`);
 
   // Show immediate UI feedback BEFORE the server call
   const fetchBtn = document.getElementById('fetchMissingBtn');
@@ -377,7 +388,7 @@ async function agentFetchMissing() {
   progressCount.textContent = '';
 
   // Start the fetch job
-  const result = await agentBridge.fetchMissing(missing);
+  const result = await agentBridge.fetchMissing(missing, docTypes);
   if (result.error) {
     addLog('error', '[Agent] Failed to start fetch: ' + result.error);
     resetFetchButton();
@@ -468,8 +479,10 @@ async function handleAgentEvent(event, jobId) {
       let statusText = '';
       let statusColor = '#16a34a';
       if (r.invoiceFile) statusText += 'Invoice \u2713 ';
-      if (r.podFile) statusText += 'POD \u2713';
-      if (r.podMissing) { statusText += 'POD Missing'; statusColor = '#d97706'; }
+      if (r.podFile) statusText += 'POD \u2713 ';
+      if (r.podMissing) { statusText += 'POD Missing '; statusColor = '#d97706'; }
+      statusText = statusText.trim();
+      if (!statusText) statusText = 'Done';
       if (r.error) { statusText = r.error; statusColor = '#dc2626'; }
       updateAgentStatus(event.containerNumber, statusText, statusColor, true);
 
@@ -500,10 +513,14 @@ async function handleAgentEvent(event, jobId) {
       state.activeJobId = null;
       break;
 
-    case 'job_complete':
+    case 'job_complete': {
       addLog('info', `[Agent] ──── Fetch Complete ────`);
-      addLog('success', `[Agent] Invoices: ${event.invoicesDownloaded} · PODs: ${event.podsDownloaded}`);
-      if (event.podsMissing > 0)
+      const types = event.docTypes || ['invoice', 'pod'];
+      const parts = [];
+      if (types.includes('invoice')) parts.push(`Invoices: ${event.invoicesDownloaded}`);
+      if (types.includes('pod')) parts.push(`PODs: ${event.podsDownloaded}`);
+      addLog('success', `[Agent] ${parts.join(' · ')}`);
+      if (types.includes('pod') && event.podsMissing > 0)
         addLog('warning', `[Agent] PODs Missing: ${event.podsMissing} — not found in QBO`);
       if (event.errors > 0)
         addLog('error', `[Agent] Errors: ${event.errors}`);
@@ -511,6 +528,7 @@ async function handleAgentEvent(event, jobId) {
       state.activeJobId = null;
       renderContainerGroups();
       break;
+    }
 
     case 'connection_warning':
       addLog('warning', '[Agent] ' + event.message);

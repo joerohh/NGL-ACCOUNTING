@@ -263,7 +263,7 @@ class QBODownloadMixin:
                 text = (await link.inner_text()).strip().lower()
             except Exception:
                 continue
-            if text.endswith(".pdf") and ("_it." in text or "invoice" in text):
+            if text.endswith(".pdf") and "invoice" in text:
                 logger.info("Found invoice attachment: %s", text)
                 return await self._download_attachment(link, download_dir, "invoice",
                                                        original_filename=text, page=p)

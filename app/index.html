@@ -1024,6 +1024,14 @@
             <span id="classifierUsage"></span>
           </div>
 
+          <!-- Fetch Doc Type Filter -->
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+            <span style="font-size:0.75rem; font-weight:600; color:#64748b;">Fetch:</span>
+            <label class="doc-check-label"><input type="checkbox" id="fetchTypeInvoice" value="invoice" checked> Invoice</label>
+            <label class="doc-check-label"><input type="checkbox" id="fetchTypePod" value="pod" checked> POD</label>
+            <label class="doc-check-label" style="opacity:0.45; cursor:not-allowed;" title="Coming soon"><input type="checkbox" id="fetchTypeBl" value="bl" disabled> BL</label>
+          </div>
+
           <!-- Action Buttons Row -->
           <div style="display:flex; gap:8px; margin-bottom:12px;">
             <button class="btn btn-primary" id="fetchMissingBtn" style="flex:1; justify-content:center;" onclick="agentFetchMissing()" disabled>

@@ -115,9 +115,11 @@ class SendResult:
 class Job:
     """Represents a background fetch job."""
 
-    def __init__(self, job_id: str, containers: list[ContainerRequest]) -> None:
+    def __init__(self, job_id: str, containers: list[ContainerRequest],
+                 doc_types=None) -> None:
         self.id = job_id
         self.containers = containers
+        self.doc_types = doc_types or ["invoice", "pod"]
         self.status = "pending"  # pending, running, paused, completed, failed
         self.progress = 0
         self.total = len(containers)
