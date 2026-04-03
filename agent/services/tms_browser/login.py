@@ -77,17 +77,25 @@ class TMSLoginMixin:
 
         Also handles lazy initialization — if TMS was never init'd,
         creates the context on demand via SharedBrowser.
+        Uses a lock to prevent multiple concurrent recoveries.
         """
-        needs_relaunch = False
-        if not self._page or not self._context:
-            needs_relaunch = True
-        else:
+        # Quick check without lock
+        if self._page and self._context:
             try:
                 await self._page.evaluate("() => true")
+                return
             except Exception:
-                needs_relaunch = True
+                pass
 
-        if needs_relaunch:
+        async with self._recovery_lock:
+            # Re-check inside lock — another coroutine may have recovered already
+            if self._page and self._context:
+                try:
+                    await self._page.evaluate("() => true")
+                    return
+                except Exception:
+                    pass
+
             logger.warning("TMS browser needs recovery — reinitializing...")
             if hasattr(self, '_shared_browser') and self._shared_browser:
                 await self._shared_browser.ensure_running()

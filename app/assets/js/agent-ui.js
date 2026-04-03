@@ -601,7 +601,7 @@ window.__nglAgent = {
 
   getState() {
     return {
-      mode: state.mode,
+      hasExcel: state.excelRows.length > 0,
       mergeMode: state.mergeMode,
       sortOrder: state.sortOrder,
       pdfCount: state.pdfs.length,

@@ -195,9 +195,9 @@
   <!-- Sidebar Footer -->
   <div class="sidebar-footer">
     <div id="mergeToolControls" style="display:none; flex-direction:column; gap:6px; align-items:center;">
-      <span id="modeBadge" class="mode-badge mode-idle" style="font-size:0.68rem;">
-        <span id="modeDot" class="badge-dot idle-dot"></span>
-        <span id="modeLabel">Idle</span>
+      <span id="modeBadge" class="mode-badge mode-ready" style="font-size:0.68rem;">
+        <span id="modeDot" class="badge-dot ready-dot"></span>
+        <span id="modeLabel">Ready</span>
       </span>
       <button class="btn btn-secondary" style="padding:5px 10px; font-size:0.72rem; width:100%; justify-content:center;" onclick="clearAll()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -783,7 +783,7 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
-          Step 1 — Excel Manifest <span style="color:#94a3b8; font-weight:400; text-transform:none; letter-spacing:0;">(Optional — enables Auto Mode)</span>
+          Step 1 — Excel Manifest <span style="color:#94a3b8; font-weight:400; text-transform:none; letter-spacing:0;">(Optional — enables container matching)</span>
         </div>
 
         <div id="excelDropZone" class="drop-zone" onclick="document.getElementById('excelInput').click()">
@@ -842,16 +842,11 @@
       <!-- ── Action Buttons ── -->
       <div id="actionArea">
 
-        <!-- Idle hint -->
-        <div id="idleHint" style="text-align:center; padding:16px 0; color:#94a3b8; font-size:0.9rem; line-height:1.7;">
-          Upload an <span style="color:#ea580c; font-weight:600;">Excel file</span> for Auto Mode<br>or drop <span style="color:#16a34a; font-weight:600;">PDF files</span> for Manual Mode
-        </div>
+        <!-- Merge Actions (adapts based on uploaded files) -->
+        <div id="mergeActions" style="display:none; flex-direction:column; gap:8px;">
 
-        <!-- Auto Mode Actions -->
-        <div id="autoActions" style="display:none; flex-direction:column; gap:8px;">
-
-          <!-- Merge Options Panel -->
-          <div id="mergeOptionsPanel" style="padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
+          <!-- Merge Options Panel (visible when Excel is loaded) -->
+          <div id="mergeOptionsPanel" style="display:none; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
             <div style="margin-bottom:10px;">
               <div style="font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Merge Mode</div>
               <div id="mergeModeGroup" style="display:flex; gap:4px; flex-wrap:wrap;">
@@ -872,29 +867,21 @@
             </div>
           </div>
 
-          <button id="runAutoBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="runAutoMerge()">
+          <!-- Merge button (label adapts) -->
+          <button id="mergeBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="runMerge()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
             </svg>
-            Run Auto Merge
+            Merge &amp; Download
           </button>
+          <div id="reorderHint" style="font-size:0.8rem; color:#94a3b8; text-align:center; display:none;">Drag cards to reorder before merging</div>
+
           <button id="saveOutputBtn" class="btn btn-success" style="width:100%; justify-content:center; display:none;" onclick="saveMergedOutput()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
             </svg>
             Save to Folder
           </button>
-        </div>
-
-        <!-- Manual Mode Actions -->
-        <div id="manualActions" style="display:none;">
-          <button id="quickMergeBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="runManualMerge()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
-            </svg>
-            Quick Merge &amp; Download
-          </button>
-          <div style="font-size:0.8rem; color:#94a3b8; text-align:center; margin-top:7px;">Drag cards above to reorder before merging</div>
         </div>
 
       </div><!-- /actionArea -->
@@ -926,13 +913,13 @@
         </div>
 
         <div id="queueWrapper">
-          <!-- Manual Mode: sortable PDF cards -->
+          <!-- Sortable PDF cards -->
           <div id="pdfQueue"></div>
-          <!-- Auto Mode: container groups -->
+          <!-- Container groups (when Excel loaded) -->
           <div id="containerGroupsView" style="display:none;"></div>
         </div>
 
-        <!-- Failure Report (auto mode) -->
+        <!-- Failure Report -->
         <div id="failureReport" style="display:none; margin-top:10px;">
           <div style="font-size:0.85rem; font-weight:700; color:#dc2626; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

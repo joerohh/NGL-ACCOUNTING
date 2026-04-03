@@ -53,6 +53,7 @@ class QBOBrowser(
         self._debug_step = 0  # auto-incrementing step counter for debug files
         self._worker_pages: list[Page] = []
         self._page_pool: Optional[asyncio.Queue] = None
+        self._recovery_lock = asyncio.Lock()  # prevents concurrent browser recovery
 
     # ------------------------------------------------------------------
     # Debug helpers
@@ -94,14 +95,16 @@ class QBOBrowser(
             try:
                 await page.evaluate("() => true")
             except Exception:
+                # Check if pool was invalidated by a recovery
+                if not self._page_pool:
+                    raise RuntimeError("Worker page invalidated — browser was recovered")
                 raise RuntimeError("Worker page is no longer available")
         else:
             await self._ensure_browser()
 
     async def create_worker_pages(self, count: int) -> None:
         """Create additional browser pages for parallel fetch operations."""
-        if not self._context:
-            raise RuntimeError("Browser not initialized — call init() first")
+        await self._ensure_browser()  # make sure context is alive first
         self._worker_pages = []
         self._page_pool = asyncio.Queue()
         # Main page goes into the pool too

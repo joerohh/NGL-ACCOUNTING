@@ -21,19 +21,20 @@ const DOC_TYPES = [
 agentBridge.hooks.onFileInjected = function(name) {
   addLog('success', `[Agent] Injected: ${name}`);
   renderPdfQueue();
-  if (state.mode === 'auto') renderContainerGroups();
-  updateQueueCount();
+  if (state.excelRows.length > 0) renderContainerGroups();
+  updateUI();
 };
 
 // ── Merge Mode & Sort Controls ──
 const RUN_BTN_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+const MERGE_BTN_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>';
 
 function setMergeMode(mode) {
   state.mergeMode = mode;
   document.querySelectorAll('#mergeModeGroup .merge-opt').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
-  updateRunButtonLabel();
+  updateMergeButtonLabel();
 }
 
 function setSortOrder(order) {
@@ -43,64 +44,77 @@ function setSortOrder(order) {
   });
 }
 
-function updateRunButtonLabel() {
-  const btn = document.getElementById('runAutoBtn');
+function updateMergeButtonLabel() {
+  const btn = document.getElementById('mergeBtn');
   if (!btn || state.isProcessing) return;
+
+  const hasExcel = state.excelRows.length > 0;
+  if (!hasExcel) {
+    btn.innerHTML = `${MERGE_BTN_SVG} Merge &amp; Download`;
+    return;
+  }
+
   const labels = {
-    'per-container': 'Run Auto Merge',
+    'per-container': 'Run Merge',
     'all-in-one':    'Merge All Into One PDF',
     ...Object.fromEntries(DOC_TYPES.map(dt => [`${dt.key}-only`, `Merge ${dt.plural} Only`])),
   };
-  btn.innerHTML = `${RUN_BTN_SVG} ${labels[state.mergeMode] || 'Run Auto Merge'}`;
+  btn.innerHTML = `${RUN_BTN_SVG} ${labels[state.mergeMode] || 'Run Merge'}`;
 }
 
 // ── Logging: addLog, clearLog, toggleLog, setProgress → shared/log.js ──
 
 
-// ── Mode Management ──
-export function setMode(mode) {
-  state.mode = mode;
+// ── UI State Management ──
+// No explicit "modes" — the UI adapts based on what files are present.
+export function updateUI() {
+  const hasExcel = state.excelRows.length > 0;
+  const hasPdfs  = state.pdfs.length > 0;
+  const hasFiles = hasExcel || hasPdfs;
+
   const badge = document.getElementById('modeBadge');
   const dot   = document.getElementById('modeDot');
   const label = document.getElementById('modeLabel');
+
+  const mergeActions  = document.getElementById('mergeActions');
+  const optionsPanel  = document.getElementById('mergeOptionsPanel');
+  const reorderHint   = document.getElementById('reorderHint');
+  const pdfQueue      = document.getElementById('pdfQueue');
+  const groupsView    = document.getElementById('containerGroupsView');
+
+  // Badge — Ready / Processing
   badge.className = 'mode-badge';
-
-  const idleHint     = document.getElementById('idleHint');
-  const autoActions  = document.getElementById('autoActions');
-  const manualActions= document.getElementById('manualActions');
-  const pdfQueue     = document.getElementById('pdfQueue');
-  const groupsView   = document.getElementById('containerGroupsView');
-
-  if (mode === 'idle') {
-    badge.classList.add('mode-idle');
-    dot.className = 'badge-dot idle-dot';
-    label.textContent = 'Idle';
-    idleHint.style.display = '';
-    autoActions.style.display = 'none';
-    manualActions.style.display = 'none';
-    pdfQueue.style.display = '';
-    groupsView.style.display = 'none';
-  } else if (mode === 'auto') {
-    badge.classList.add('mode-auto');
-    dot.className = 'badge-dot auto-dot';
-    label.textContent = 'Auto Mode';
-    idleHint.style.display = 'none';
-    autoActions.style.display = 'flex';
-    manualActions.style.display = 'none';
-    pdfQueue.style.display = 'none';
-    groupsView.style.display = '';
-  } else if (mode === 'manual') {
-    badge.classList.add('mode-manual');
-    dot.className = 'badge-dot manual-dot';
-    label.textContent = 'Manual Mode';
-    idleHint.style.display = 'none';
-    autoActions.style.display = 'none';
-    manualActions.style.display = '';
-    pdfQueue.style.display = '';
-    groupsView.style.display = 'none';
+  if (state.isProcessing) {
+    badge.classList.add('mode-processing');
+    dot.className = 'badge-dot processing-dot';
+    label.textContent = 'Processing';
+  } else {
+    badge.classList.add('mode-ready');
+    dot.className = 'badge-dot ready-dot';
+    label.textContent = 'Ready';
   }
 
+  // Action area — show when any files are present
+  mergeActions.style.display = hasFiles ? 'flex' : 'none';
+
+  // Options panel — only when Excel is loaded
+  optionsPanel.style.display = hasExcel ? '' : 'none';
+
+  // Reorder hint — only when merging PDFs without Excel
+  reorderHint.style.display = (!hasExcel && hasPdfs) ? '' : 'none';
+
+  // Queue view — container groups when Excel loaded, PDF cards otherwise
+  pdfQueue.style.display = hasExcel ? 'none' : '';
+  groupsView.style.display = hasExcel ? '' : 'none';
+
+  // Update merge button label
+  updateMergeButtonLabel();
   updateQueueCount();
+}
+
+// Keep setMode as a thin wrapper for backward compatibility during init
+export function setMode(_mode) {
+  updateUI();
 }
 
 export function updateQueueCount() {
@@ -187,8 +201,8 @@ export async function handleExcelFile(file) {
     document.getElementById('excelFileSub').textContent =
       `${parsed.length} containers` + (invCount ? ` · ${invCount} invoice numbers` : '');
 
-    setMode('auto');
     renderContainerGroups();
+    updateUI();
     addLog('info', 'Now upload the PDF documents to match against these containers');
 
   } catch (err) {
@@ -207,8 +221,8 @@ function removeExcel() {
   document.getElementById('saveOutputBtn').style.display = 'none';
   state.mergeResults = [];
 
-  setMode(state.pdfs.length > 0 ? 'manual' : 'idle');
-  addLog('info', 'Excel manifest removed — switched to Manual Mode');
+  updateUI();
+  addLog('info', 'Excel manifest removed');
 }
 
 
@@ -230,23 +244,20 @@ export function handlePdfFiles(files) {
   state.pdfs.push(...newPdfs);
   addLog('info', `Added ${newPdfs.length} PDF${newPdfs.length !== 1 ? 's' : ''} to queue`);
 
-  if (state.mode !== 'auto') setMode('manual');
-
   renderPdfQueue();
-  if (state.mode === 'auto') renderContainerGroups();
-  updateQueueCount();
+  if (state.excelRows.length > 0) renderContainerGroups();
+  updateUI();
 }
 
 function removePdf(id) {
   state.pdfs = state.pdfs.filter(p => p.id !== id);
   renderPdfQueue();
-  if (state.mode === 'auto') renderContainerGroups();
-  updateQueueCount();
-  if (state.pdfs.length === 0 && state.mode === 'manual') setMode('idle');
+  if (state.excelRows.length > 0) renderContainerGroups();
+  updateUI();
 }
 
 
-// ── Rendering — PDF Queue (Manual Mode) ──
+// ── Rendering — PDF Queue ──
 const ICON_PDF = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
 const ICON_GRIP = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>`;
 const ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
@@ -291,7 +302,7 @@ export function renderPdfQueue() {
 }
 
 
-// ── Rendering — Container Groups (Auto Mode) ──
+// ── Rendering — Container Groups ──
 export function classifyPdf(name) {
   for (const dt of DOC_TYPES) {
     if (dt.pattern.test(name)) return dt.key;
@@ -702,6 +713,15 @@ async function mergeByType(rows, failures, bufferMap, matchIndex, type) {
 }
 
 
+// ── Unified Merge Entry Point ──
+async function runMerge() {
+  if (state.excelRows.length > 0) {
+    runAutoMerge();
+  } else {
+    runManualMerge();
+  }
+}
+
 // ── Auto Merge ──
 async function runAutoMerge() {
   if (state.isProcessing) return;
@@ -710,8 +730,9 @@ async function runAutoMerge() {
 
   state.isProcessing = true;
   state.mergeResults = [];
+  updateUI();
 
-  const btn = document.getElementById('runAutoBtn');
+  const btn = document.getElementById('mergeBtn');
   btn.disabled = true;
   btn.innerHTML = `<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Processing…`;
 
@@ -724,7 +745,7 @@ async function runAutoMerge() {
     ...Object.fromEntries(DOC_TYPES.map(dt => [`${dt.key}-only`, `${dt.plural} Only`])),
   };
   const sortLabel = { 'excel': 'Excel order', 'container': 'Container #', 'invoice': 'Invoice #' };
-  addLog('info', `──── Auto Merge started (${modeLabel[state.mergeMode]}, sort: ${sortLabel[state.sortOrder]}) ────`);
+  addLog('info', `──── Merge started (${modeLabel[state.mergeMode]}, sort: ${sortLabel[state.sortOrder]}) ────`);
 
   const t0 = performance.now();
 
@@ -768,8 +789,8 @@ async function runAutoMerge() {
   }
 
   btn.disabled = false;
-  updateRunButtonLabel();
   state.isProcessing = false;
+  updateUI();
 }
 
 function renderFailureReport(failures) {
@@ -791,13 +812,14 @@ async function runManualMerge() {
   if (!state.pdfs.length) { addLog('error', 'No PDFs in queue'); return; }
 
   state.isProcessing = true;
+  updateUI();
 
-  const btn = document.getElementById('quickMergeBtn');
+  const btn = document.getElementById('mergeBtn');
   btn.disabled = true;
   btn.innerHTML = `<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Merging…`;
 
   setProgress(30, `Merging ${state.pdfs.length} PDFs…`);
-  addLog('info', `Manual merge: ${state.pdfs.length} file${state.pdfs.length !== 1 ? 's' : ''} in order:`);
+  addLog('info', `Merging ${state.pdfs.length} file${state.pdfs.length !== 1 ? 's' : ''} in order:`);
   state.pdfs.forEach((p, i) => addLog('info', `  ${i + 1}. ${p.name}`));
 
   try {
@@ -820,8 +842,8 @@ async function runManualMerge() {
 
   setTimeout(() => setProgress(null), 1500);
   btn.disabled = false;
-  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg> Quick Merge &amp; Download`;
   state.isProcessing = false;
+  updateUI();
 }
 
 
@@ -887,8 +909,7 @@ function clearAll() {
   if (state.sortableInstance) { state.sortableInstance.destroy(); state.sortableInstance = null; }
 
   setProgress(null);
-  setMode('idle');
-  updateRunButtonLabel();
+  updateUI();
   addLog('info', 'All files cleared — ready for new job');
 }
 
@@ -898,8 +919,7 @@ window.removeExcel = removeExcel;
 window.handlePdfInputChange = handlePdfInputChange;
 window.setMergeMode = setMergeMode;
 window.setSortOrder = setSortOrder;
-window.runAutoMerge = runAutoMerge;
+window.runMerge = runMerge;
 window.saveMergedOutput = saveMergedOutput;
-window.runManualMerge = runManualMerge;
 window.clearAll = clearAll;
 window.removePdf = removePdf;

@@ -8,7 +8,7 @@ import { escHtml } from './shared/utils.js';
 import { LS_CUSTOMERS, LS_REMEMBER_ME } from './shared/constants.js';
 import { agentBridge } from './shared/agent-client.js';
 import { agentHealthCheck } from './agent-ui.js';
-import { renderPdfQueue, setMode, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
+import { renderPdfQueue, updateUI, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
@@ -178,10 +178,10 @@ function initApp() {
   _appInitialized = true;
 
   renderPdfQueue();
-  setMode('idle');
+  updateUI();
   addLog('info', '// NGL Transportation Accounting v2.1');
   addLog('info', '// 100% client-side — no files leave your machine');
-  addLog('info', '// Drop Excel for Auto Mode · Drop PDFs for Manual Mode');
+  addLog('info', '// Drop an Excel manifest + PDFs to merge by container, or just drop PDFs to combine');
 
   // Check agent health on load, then every 15 seconds
   agentHealthCheck();

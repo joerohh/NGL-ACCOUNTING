@@ -5,7 +5,6 @@
 // ── Merge tool state ──
 export const state = {
   activeTool: 'home',  // 'home' | 'merge' | 'invoice-sender'
-  mode: 'idle',        // 'idle' | 'auto' | 'manual'
   pdfs: [],            // Array<{id, name, size, file}>
   excelRows: [],       // Array<{containerNumber, invoiceNumber?}>
   mergeResults: [],    // Array<{containerNumber, bytes, filename, subfolder}>
@@ -15,7 +14,7 @@ export const state = {
   _agentCustomersSynced: false,  // true after first customer sync to agent
   currentUser: null,   // { id, username, displayName, role } — set after login
   activeJobId: null,
-  mergeMode: 'per-container',   // 'per-container' | 'all-in-one' | 'invoices-only' | 'pods-only'
+  mergeMode: 'per-container',   // 'per-container' | 'all-in-one' | '{type}-only'
   sortOrder: 'excel',           // 'excel' | 'container' | 'invoice'
   _workersFailed: false,        // true if Web Workers unavailable (fallback to sequential)
   sortableInstance: null,        // SortableJS instance for manual merge

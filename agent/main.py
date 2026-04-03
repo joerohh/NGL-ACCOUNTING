@@ -75,24 +75,30 @@ async def _session_keepalive_loop():
     await asyncio.sleep(60)  # Wait 1 min after startup before first check
     while True:
         try:
-            # QBO keep-alive
-            qbo_alive = await qbo_browser.keep_alive()
-            if not qbo_alive:
-                logger.warning("QBO session lost — attempting auto-reconnect...")
-                try:
-                    reconnected = await qbo_browser.auto_login()
-                    if reconnected:
-                        logger.info("QBO auto-reconnect successful!")
-                        _session_alerts["qbo_needs_login"] = False
-                    else:
-                        logger.warning("QBO auto-reconnect failed — opening login page")
+            # QBO keep-alive — skip if a job is actively using the browser
+            has_running_job = job_manager and any(
+                j.status == "running" for j in job_manager._jobs.values()
+            )
+            if has_running_job:
+                logger.debug("Skipping QBO keep-alive — job is running")
+            else:
+                qbo_alive = await qbo_browser.keep_alive()
+                if not qbo_alive:
+                    logger.warning("QBO session lost — attempting auto-reconnect...")
+                    try:
+                        reconnected = await qbo_browser.auto_login()
+                        if reconnected:
+                            logger.info("QBO auto-reconnect successful!")
+                            _session_alerts["qbo_needs_login"] = False
+                        else:
+                            logger.warning("QBO auto-reconnect failed — opening login page")
+                            _session_alerts["qbo_needs_login"] = True
+                            await qbo_browser.open_login_page()
+                            _notify("QBO Session Expired", "Auto-reconnect failed. Please log in manually.")
+                    except Exception as e:
+                        logger.error("QBO auto-reconnect error: %s", e)
                         _session_alerts["qbo_needs_login"] = True
-                        await qbo_browser.open_login_page()
-                        _notify("QBO Session Expired", "Auto-reconnect failed. Please log in manually.")
-                except Exception as e:
-                    logger.error("QBO auto-reconnect error: %s", e)
-                    _session_alerts["qbo_needs_login"] = True
-                    _notify("QBO Error", f"Session reconnect failed: {e}")
+                        _notify("QBO Error", f"Session reconnect failed: {e}")
 
             # TMS keep-alive — skip if TMS context hasn't been created yet (lazy init)
             if not tms_browser.is_initialized:
@@ -431,6 +437,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(NoCacheStaticMiddleware)
 
 # Mount routers
 app.include_router(auth.router)

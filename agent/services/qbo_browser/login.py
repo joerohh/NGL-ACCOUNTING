@@ -62,18 +62,36 @@ class QBOLoginMixin:
             logger.info("QBO browser initialized (shared browser)")
 
     async def _ensure_browser(self) -> None:
-        """Recreate context/page if the browser has crashed."""
-        needs_relaunch = False
-        if not self._page or not self._context:
-            needs_relaunch = True
-        else:
+        """Recreate context/page if the browser has crashed.
+
+        Uses a lock to prevent multiple concurrent callers from each
+        launching their own recovery (which corrupts page/context state).
+        """
+        # Quick check without lock — if everything looks fine, skip entirely
+        if self._page and self._context:
             try:
                 await self._page.evaluate("() => true")
+                return  # browser is alive, nothing to do
             except Exception:
-                needs_relaunch = True
+                pass  # fall through to locked recovery
 
-        if needs_relaunch:
+        async with self._recovery_lock:
+            # Re-check inside the lock — another coroutine may have already recovered
+            if self._page and self._context:
+                try:
+                    await self._page.evaluate("() => true")
+                    return  # recovered by another coroutine while we waited
+                except Exception:
+                    pass
+
             logger.warning("QBO browser appears closed — recovering...")
+
+            # Invalidate worker page pool (pages belong to the dead context)
+            if self._page_pool or self._worker_pages:
+                logger.warning("Invalidating worker page pool (stale context)")
+                self._worker_pages = []
+                self._page_pool = None
+
             # Ensure the shared browser process is alive
             if hasattr(self, '_shared_browser') and self._shared_browser:
                 await self._shared_browser.ensure_running()

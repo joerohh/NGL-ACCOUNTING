@@ -62,6 +62,7 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
         self._debug_step = 0
         self._last_do_sender_strategy: str = ""
         self._grid_do_sender: Optional[str] = None  # DO SENDER from grid (before navigation)
+        self._recovery_lock = asyncio.Lock()  # prevents concurrent browser recovery
 
     # ------------------------------------------------------------------
     # Debug
