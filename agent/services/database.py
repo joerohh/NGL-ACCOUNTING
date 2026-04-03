@@ -713,6 +713,20 @@ def _maybe_use_supabase() -> None:
             get_all_customers_dict as sb_all_dict,
             bulk_import_customers as sb_bulk_import,
             migrate_to_supabase,
+            # Audit log
+            write_audit_entry as sb_write_audit,
+            query_audit_log as sb_query_audit,
+            audit_stats as sb_audit_stats,
+            get_all_audit_entries as sb_get_all_audit,
+            migrate_audit_to_supabase,
+            # Users
+            sb_authenticate_user,
+            sb_get_user_by_id,
+            sb_list_users,
+            sb_create_user,
+            sb_update_user,
+            sb_delete_user,
+            migrate_users_to_supabase,
         )
     except Exception as e:
         logger.error("Failed to import supabase_client: %s", e)
@@ -722,13 +736,36 @@ def _maybe_use_supabase() -> None:
     try:
         existing_cloud = sb_list("", False)
         if not existing_cloud:
-            # SQLite still has the local data — read it before overriding
             local_customers = list_customers("", False)
             if local_customers:
                 count = migrate_to_supabase(local_customers)
                 logger.info("One-time migration: pushed %d customers to Supabase", count)
     except Exception as e:
-        logger.warning("Supabase migration check failed (will use cloud anyway): %s", e)
+        logger.warning("Supabase customer migration failed (will use cloud anyway): %s", e)
+
+    # One-time migration: push SQLite audit entries to Supabase
+    try:
+        test_audit = sb_query_audit(limit=1)
+        if test_audit["total"] == 0:
+            local_audit = get_all_audit_entries()
+            if local_audit:
+                count = migrate_audit_to_supabase(local_audit)
+                logger.info("One-time migration: pushed %d audit entries to Supabase", count)
+    except Exception as e:
+        logger.warning("Supabase audit migration failed (will use cloud anyway): %s", e)
+
+    # One-time migration: push SQLite users to Supabase
+    try:
+        cloud_users = sb_list_users(False)
+        if not cloud_users:
+            conn = _get_conn()
+            local_rows = conn.execute("SELECT * FROM users").fetchall()
+            if local_rows:
+                raw_users = [dict(r) for r in local_rows]
+                count = migrate_users_to_supabase(raw_users)
+                logger.info("One-time migration: pushed %d users to Supabase", count)
+    except Exception as e:
+        logger.warning("Supabase user migration failed (will use cloud anyway): %s", e)
 
     # Override module-level customer functions
     import services.database as _self
@@ -740,4 +777,21 @@ def _maybe_use_supabase() -> None:
     _self.soft_delete_customer = sb_delete
     _self.get_all_customers_dict = sb_all_dict
     _self.bulk_import_customers = sb_bulk_import
+
+    # Override audit log functions
+    _self.write_audit_entry = sb_write_audit
+    _self.query_audit_log = sb_query_audit
+    _self.audit_stats = sb_audit_stats
+    _self.get_all_audit_entries = sb_get_all_audit
+
+    # Override user functions
+    _self.authenticate_user = sb_authenticate_user
+    _self.get_user_by_id = sb_get_user_by_id
+    _self.list_users = sb_list_users
+    _self.create_user = sb_create_user
+    _self.update_user = sb_update_user
+    _self.delete_user = sb_delete_user
+
     logger.info("Customer data source: Supabase (%s)", SUPABASE_URL)
+    logger.info("Audit log data source: Supabase")
+    logger.info("User data source: Supabase")

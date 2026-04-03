@@ -393,13 +393,14 @@ function setupAutoUpdater() {
 
   autoUpdater.on("update-available", (info) => {
     log(`[updater] Update available: v${info.version}`);
-    // Show themed in-app update prompt
     if (!mainWindow) return;
     mainWindow.webContents.executeJavaScript(`
       new Promise(resolve => {
         const ov = document.createElement('div');
+        ov.id = '_nglUpdateOverlay';
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease';
         const m = document.createElement('div');
+        m.id = '_nglUpdateModal';
         m.style.cssText = 'background:#fff;border-radius:16px;padding:32px 36px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;animation:scaleIn .2s ease';
         m.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">'
           + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>'
@@ -420,14 +421,55 @@ function setupAutoUpdater() {
       })
     `).then((shouldDownload) => {
       if (shouldDownload) {
+        // Show progress bar UI
+        mainWindow.webContents.executeJavaScript(`
+          (() => {
+            const ov = document.createElement('div');
+            ov.id = '_nglProgressOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center';
+            const m = document.createElement('div');
+            m.style.cssText = 'background:#fff;border-radius:16px;padding:32px 36px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;text-align:center';
+            m.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">'
+              + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>'
+              + '<h3 style="margin:0 0 8px;font-size:1.15rem;font-weight:700;color:#0f172a">Downloading Update</h3>'
+              + '<p id="_nglDlStatus" style="margin:0 0 16px;font-size:0.85rem;color:#64748b">Starting download...</p>'
+              + '<div style="width:100%;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:8px">'
+              + '<div id="_nglDlBar" style="width:0%;height:100%;background:linear-gradient(90deg,#ea580c,#f97316);border-radius:4px;transition:width 0.3s ease"></div></div>'
+              + '<p id="_nglDlPct" style="margin:0;font-size:0.8rem;font-weight:600;color:#0f172a">0%</p>';
+            ov.appendChild(m);
+            document.body.appendChild(ov);
+          })()
+        `).catch(() => {});
         autoUpdater.downloadUpdate();
       }
     }).catch(() => {});
   });
 
+  autoUpdater.on("download-progress", (progress) => {
+    const pct = Math.round(progress.percent);
+    const mbDone = (progress.transferred / 1048576).toFixed(1);
+    const mbTotal = (progress.total / 1048576).toFixed(1);
+    log(`[updater] Download: ${pct}% (${mbDone}/${mbTotal} MB)`);
+    if (!mainWindow) return;
+    mainWindow.webContents.executeJavaScript(`
+      (() => {
+        const bar = document.getElementById('_nglDlBar');
+        const pctEl = document.getElementById('_nglDlPct');
+        const status = document.getElementById('_nglDlStatus');
+        if (bar) bar.style.width = '${pct}%';
+        if (pctEl) pctEl.textContent = '${pct}%';
+        if (status) status.textContent = '${mbDone} MB / ${mbTotal} MB';
+      })()
+    `).catch(() => {});
+  });
+
   autoUpdater.on("update-downloaded", (info) => {
     log(`[updater] Update downloaded: v${info.version}`);
     if (!mainWindow) return;
+    // Remove progress overlay
+    mainWindow.webContents.executeJavaScript(`
+      (() => { const el = document.getElementById('_nglProgressOverlay'); if (el) el.remove(); })()
+    `).catch(() => {});
     mainWindow.webContents.executeJavaScript(`
       new Promise(resolve => {
         const ov = document.createElement('div');
