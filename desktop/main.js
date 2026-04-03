@@ -61,6 +61,7 @@ let mainWindow = null;
 let tray = null;
 let agentProcess = null;
 let isQuitting = false;
+let agentIsExternal = false; // true if agent was already running when Electron started
 
 // ── Agent lifecycle ────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function startAgent() {
 
   agentProcess.on("exit", (code) => {
     log(`Agent exited with code ${code}`);
-    if (!isQuitting) {
+    if (!isQuitting && !agentIsExternal) {
       dialog.showErrorBox(
         "NGL Accounting — Agent Stopped",
         `The agent server stopped unexpectedly (code ${code}).\nThe app will close.`
@@ -322,7 +323,22 @@ app.whenReady().then(async () => {
   log(`userData: ${app.getPath("userData")}`);
   log(`logFile: ${_logFile}`);
 
-  startAgent();
+  // Check if agent is already running (e.g. started from terminal)
+  const agentAlreadyRunning = await new Promise((resolve) => {
+    const req = http.get(`${AGENT_URL}/health`, (res) => {
+      resolve(res.statusCode === 200);
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+
+  if (agentAlreadyRunning) {
+    log("Agent already running on port 8787 — skipping spawn");
+    agentIsExternal = true;
+  } else {
+    startAgent();
+  }
 
   // Show a splash window while the agent boots
   let splash = new BrowserWindow({

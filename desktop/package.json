@@ -31,7 +31,7 @@
           ]
         }
       ],
-      "icon": "../app/assets/images/ngl-desktop.ico",
+      "icon": "icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
