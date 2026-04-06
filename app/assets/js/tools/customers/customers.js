@@ -227,13 +227,20 @@ async function custSave() {
     return;
   }
 
+  const action = custState.editingCode ? 'Updated' : 'Added';
+  custShowToast(`${action} ${result.code || code} — Saved to cloud`, 'success');
+
   custCloseModal();
   custLoadCustomers();
 }
 
 async function custDelete(code) {
   if (!confirm('Deactivate customer ' + code + '? They can be reactivated later.')) return;
-  await agentBridge.deleteCustomer(code);
+  const result = await agentBridge.deleteCustomer(code);
+  if (result.error) {
+    alert('Error: ' + result.error);
+    return;
+  }
   custLoadCustomers();
 }
 
@@ -628,6 +635,44 @@ window.custReactivate = custReactivate;
 window.custHandleTagKey = custHandleTagKey;
 window.custFlushTagInput = custFlushTagInput;
 window.custSendMethodChanged = custSendMethodChanged;
+// ── Toast Notification ──
+function custShowToast(message, type = 'success') {
+  const existing = document.getElementById('custToast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'custToast';
+  const isSuccess = type === 'success';
+  toast.style.cssText = `
+    position: fixed; bottom: 24px; right: 24px; z-index: 10000;
+    padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    color: #fff; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: flex; align-items: center; gap: 8px;
+    background: ${isSuccess ? '#16a34a' : '#d97706'};
+    animation: custToastIn 0.3s ease-out;
+  `;
+
+  const icon = isSuccess ? '\u2601\uFE0F' : '\uD83D\uDCBE';
+  toast.textContent = `${icon} ${message}`;
+  document.body.appendChild(toast);
+
+  // Add animation keyframes if not already present
+  if (!document.getElementById('custToastStyle')) {
+    const style = document.createElement('style');
+    style.id = 'custToastStyle';
+    style.textContent = `
+      @keyframes custToastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes custToastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(20px); } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  setTimeout(() => {
+    toast.style.animation = 'custToastOut 0.3s ease-in forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
 window.custSetDocMode = custSetDocMode;
 window.custDocCheckChanged = custDocCheckChanged;
 window.custAddOrGroup = custAddOrGroup;

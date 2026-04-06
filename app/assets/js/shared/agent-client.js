@@ -360,95 +360,76 @@ export const agentBridge = {
     const codeUpper = (data.code || '').trim().toUpperCase();
     if (!codeUpper) return { error: 'Customer code is required' };
 
-    // Try agent first (source of truth when connected)
-    if (state.agentConnected) {
-      try {
-        const res = await this._authFetch(this.baseUrl + '/customers', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        if (res.ok) {
-          const created = await res.json();
-          // Sync back to localStorage
-          const all = this._custRead();
-          all[codeUpper] = created;
-          this._custWrite(all);
-          return created;
-        }
-        const err = await res.json().catch(() => ({}));
-        return { error: err.detail || 'Agent create failed (HTTP ' + res.status + ')' };
-      } catch (e) {
-        // Agent unreachable — fall through to localStorage
-      }
+    if (!state.agentConnected) {
+      return { error: 'Agent is offline — cannot save to cloud. Please make sure the agent is running and try again.' };
     }
 
-    // Fallback: localStorage only
-    const now = this._nowIso();
-    const cust = {
-      code: codeUpper, name: (data.name || '').trim(),
-      emails: data.emails || [], ccEmails: data.ccEmails || [], bccEmails: data.bccEmails || [],
-      requiredDocs: data.requiredDocs || [],
-      sendMethod: this._normalizeSendMethod(data.sendMethod),
-      notes: (data.notes || '').trim(), active: true, createdAt: now, updatedAt: now,
-    };
-    this._applyMethodFields(cust, data);
-    const all = this._custRead();
-    if (all[codeUpper]) return { error: 'Customer already exists: ' + codeUpper };
-    all[codeUpper] = cust;
-    this._custWrite(all);
-    return cust;
+    try {
+      const res = await this._authFetch(this.baseUrl + '/customers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        // Sync back to localStorage
+        const all = this._custRead();
+        all[codeUpper] = created;
+        this._custWrite(all);
+        created._savedTo = 'cloud';
+        return created;
+      }
+      const err = await res.json().catch(() => ({}));
+      return { error: err.detail || 'Cloud save failed (HTTP ' + res.status + ')' };
+    } catch (e) {
+      return { error: 'Could not reach the agent — customer was NOT saved. Check that the agent is running.' };
+    }
   },
 
   async updateCustomer(code, data) {
     const codeUpper = code.toUpperCase();
 
-    // Try agent first (source of truth when connected)
-    if (state.agentConnected) {
-      try {
-        const res = await this._authFetch(this.baseUrl + '/customers/' + encodeURIComponent(code), {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          // Sync back to localStorage
-          const all = this._custRead();
-          all[codeUpper] = updated;
-          this._custWrite(all);
-          return updated;
-        }
-        const err = await res.json().catch(() => ({}));
-        return { error: err.detail || 'Agent update failed (HTTP ' + res.status + ')' };
-      } catch (e) {
-        // Agent unreachable — fall through to localStorage
-      }
+    if (!state.agentConnected) {
+      return { error: 'Agent is offline — cannot save to cloud. Please make sure the agent is running and try again.' };
     }
 
-    // Fallback: localStorage only
-    const all = this._custRead();
-    const cust = all[codeUpper];
-    if (!cust) return { error: 'Customer not found: ' + codeUpper };
-    if (data.name != null) cust.name = data.name.trim();
-    if (data.emails != null) cust.emails = data.emails;
-    if (data.ccEmails != null) cust.ccEmails = data.ccEmails;
-    if (data.bccEmails != null) cust.bccEmails = data.bccEmails;
-    if (data.requiredDocs != null) cust.requiredDocs = data.requiredDocs;
-    if (data.sendMethod != null) cust.sendMethod = this._normalizeSendMethod(data.sendMethod);
-    if (data.notes != null) cust.notes = data.notes.trim();
-    if (data.active != null) cust.active = data.active;
-    this._applyMethodFields(cust, data);
-    cust.updatedAt = this._nowIso();
-    all[codeUpper] = cust;
-    this._custWrite(all);
-    return cust;
+    try {
+      const res = await this._authFetch(this.baseUrl + '/customers/' + encodeURIComponent(code), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        // Sync back to localStorage
+        const all = this._custRead();
+        all[codeUpper] = updated;
+        this._custWrite(all);
+        updated._savedTo = 'cloud';
+        return updated;
+      }
+      const err = await res.json().catch(() => ({}));
+      return { error: err.detail || 'Cloud save failed (HTTP ' + res.status + ')' };
+    } catch (e) {
+      return { error: 'Could not reach the agent — changes were NOT saved. Check that the agent is running.' };
+    }
   },
 
   async deleteCustomer(code) {
     const codeUpper = code.toUpperCase();
-    // Agent first
-    if (state.agentConnected) {
-      try { await this._authFetch(this.baseUrl + '/customers/' + encodeURIComponent(code), { method: 'DELETE' }); } catch {}
+
+    if (!state.agentConnected) {
+      return { error: 'Agent is offline — cannot update cloud. Please make sure the agent is running and try again.' };
     }
+
+    try {
+      const res = await this._authFetch(this.baseUrl + '/customers/' + encodeURIComponent(code), { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Cloud delete failed (HTTP ' + res.status + ')' };
+      }
+    } catch (e) {
+      return { error: 'Could not reach the agent — customer was NOT deactivated. Check that the agent is running.' };
+    }
+
     // Sync localStorage
     const all = this._custRead();
     if (all[codeUpper]) { all[codeUpper].active = false; all[codeUpper].updatedAt = this._nowIso(); this._custWrite(all); }
@@ -456,38 +437,31 @@ export const agentBridge = {
   },
 
   async importCustomers(customers) {
-    const all = this._custRead();
-    let created = 0, updated = 0;
-    const now = this._nowIso();
-    for (const item of customers) {
-      const codeUpper = (item.code || '').trim().toUpperCase();
-      if (!codeUpper) continue;
-      const sendMethod = this._normalizeSendMethod(item.sendMethod);
-      if (all[codeUpper]) {
-        Object.assign(all[codeUpper], {
-          name: (item.name || '').trim(), emails: item.emails || [], ccEmails: item.ccEmails || [],
-          bccEmails: item.bccEmails || [], requiredDocs: item.requiredDocs || [],
-          sendMethod, notes: (item.notes || '').trim(), updatedAt: now,
-        });
-        this._applyMethodFields(all[codeUpper], item);
-        updated++;
-      } else {
-        all[codeUpper] = {
-          code: codeUpper, name: (item.name || '').trim(),
-          emails: item.emails || [], ccEmails: item.ccEmails || [], bccEmails: item.bccEmails || [],
-          requiredDocs: item.requiredDocs || [], sendMethod,
-          notes: (item.notes || '').trim(), active: true, createdAt: now, updatedAt: now,
-        };
-        this._applyMethodFields(all[codeUpper], item);
-        created++;
+    if (!state.agentConnected) {
+      return { error: 'Agent is offline — cannot import to cloud. Please make sure the agent is running and try again.' };
+    }
+
+    try {
+      const res = await this._authFetch(this.baseUrl + '/customers/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customers }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { error: err.detail || 'Cloud import failed (HTTP ' + res.status + ')' };
       }
+      const result = await res.json();
+      // Sync back to localStorage from cloud
+      const fresh = await this.getCustomers('', false);
+      if (fresh.customers) {
+        const all = {};
+        for (const c of fresh.customers) all[c.code] = c;
+        this._custWrite(all);
+      }
+      return { status: 'ok', created: result.created, updated: result.updated, total: (result.created || 0) + (result.updated || 0) };
+    } catch (e) {
+      return { error: 'Could not reach the agent — import was NOT saved. Check that the agent is running.' };
     }
-    this._custWrite(all);
-    // Sync to agent
-    if (state.agentConnected) {
-      try { await this._authFetch(this.baseUrl + '/customers/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customers }) }); } catch {}
-    }
-    return { status: 'ok', created, updated, total: created + updated };
   },
 
   async exportCustomers() {
