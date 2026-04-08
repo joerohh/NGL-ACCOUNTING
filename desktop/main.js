@@ -189,7 +189,10 @@ function createWindow() {
     show: false, // Show after content loads
   });
 
-  mainWindow.loadURL(AGENT_URL);
+  // Clear HTTP cache so updated web UI files are always loaded fresh
+  mainWindow.webContents.session.clearCache().then(() => {
+    mainWindow.loadURL(AGENT_URL);
+  });
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
@@ -400,11 +403,137 @@ app.whenReady().then(async () => {
   if (!isDev) {
     setupAutoUpdater();
   }
+
+  // ── Menu bar ──────────────────────────────────────────────────────
+  const appVersion = app.getVersion();
+  const menuTemplate = [
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Refresh",
+          accelerator: "F5",
+          click: () => { if (mainWindow) mainWindow.webContents.reload(); },
+        },
+        { type: "separator" },
+        {
+          label: "Exit",
+          accelerator: "Alt+F4",
+          click: () => { if (mainWindow) mainWindow.close(); },
+        },
+      ],
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { role: "resetZoom" },
+        { type: "separator" },
+        {
+          label: "Developer Tools",
+          accelerator: "F12",
+          click: () => { if (mainWindow) mainWindow.webContents.toggleDevTools(); },
+        },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [
+        { role: "minimize" },
+        {
+          label: "Always on Top",
+          type: "checkbox",
+          checked: false,
+          click: (menuItem) => {
+            if (mainWindow) mainWindow.setAlwaysOnTop(menuItem.checked);
+          },
+        },
+      ],
+    },
+    {
+      label: "Help",
+      submenu: [
+        {
+          label: "Check for Updates",
+          click: () => {
+            if (isDev) {
+              dialog.showMessageBox(mainWindow, {
+                type: "info",
+                title: "Updates",
+                message: "Auto-update is disabled in dev mode.",
+              });
+              return;
+            }
+            log("[updater] Manual update check triggered");
+            autoUpdater.checkForUpdates().then((result) => {
+              if (!result || !result.updateInfo || result.updateInfo.version === appVersion) {
+                dialog.showMessageBox(mainWindow, {
+                  type: "info",
+                  title: "No Updates",
+                  message: `You're on the latest version (v${appVersion}).`,
+                });
+              }
+            }).catch((err) => {
+              log(`[updater] Manual check failed: ${err.message}`);
+              dialog.showMessageBox(mainWindow, {
+                type: "error",
+                title: "Update Check Failed",
+                message: `Could not check for updates.\n\n${err.message}`,
+              });
+            });
+          },
+        },
+        { type: "separator" },
+        {
+          label: `About NGL Accounting v${appVersion}`,
+          enabled: false,
+        },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 });
 
 // ── Auto-update ───────────────────────────────────────────────────
 
 function setupAutoUpdater() {
+  // Private repo — electron-updater needs a GitHub token to access releases.
+  // Read from agent .env (user-writable) or bundled .env (fallback).
+  const envPaths = [
+    path.join(path.dirname(process.execPath), "resources", "agent", "ngl-agent", "_internal", ".env"),
+    path.join(__dirname, "..", "agent", ".env"),
+  ];
+  for (const ep of envPaths) {
+    try {
+      const content = fs.readFileSync(ep, "utf8");
+      const match = content.match(/^GITHUB_PAT=(.+)$/m);
+      if (match && match[1].trim()) {
+        process.env.GH_TOKEN = match[1].trim();
+        break;
+      }
+    } catch (_) {}
+  }
+
+  const ghToken = process.env.GH_TOKEN;
+  log(`[updater] GH_TOKEN loaded: ${ghToken ? "yes (" + ghToken.slice(0, 8) + "...)" : "NO — private repo will 404!"}`);
+
+  if (ghToken) {
+    autoUpdater.addAuthHeader(`token ${ghToken}`);
+  }
+
   autoUpdater.logger = {
     info: (msg) => log(`[updater] ${msg}`),
     warn: (msg) => log(`[updater-warn] ${msg}`),

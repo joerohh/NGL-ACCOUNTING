@@ -1,22 +1,19 @@
-"""Portal upload mixin — download from QBO, merge, upload to customer portal."""
+"""Portal upload mixin — download from QBO API, merge, upload to customer portal."""
 
-import asyncio
 import logging
 import shutil
 import tempfile
 from pathlib import Path
 
-from config import QBO_ACTION_DELAY_S
-
 logger = logging.getLogger("ngl.job_manager")
 
 
 class SendPortalUploadMixin:
-    """Portal upload flow: Download invoice+POD from QBO, merge, upload to portal."""
+    """Portal upload flow: Download invoice+POD from QBO API, merge, upload to portal."""
 
     async def _send_portal_upload(self, job, invoice, customer: dict,
                                    result, index: int) -> None:
-        """Portal upload flow: Download invoice+POD from QBO, merge, upload to portal."""
+        """Portal upload flow: Download invoice+POD from QBO API, merge, upload to portal."""
         if not self._portal_uploader:
             result.status = "skipped"
             result.error = "Portal uploader not configured — check TranzAct credentials in .env"
@@ -38,13 +35,15 @@ class SendPortalUploadMixin:
             })
             return
 
-        # Search QBO for the invoice
+        api = self._qbo_api
+
+        # Step 1: Search QBO for the invoice
         await self._emit_send(job, "searching_invoice", {
             "invoiceNumber": invoice.invoice_number,
         })
 
-        invoice_url = await self._qbo.search_invoice(invoice.invoice_number)
-        if not invoice_url:
+        invoice_data = await api.search_invoice(invoice.invoice_number)
+        if not invoice_data:
             result.status = "error"
             result.error = f"Invoice {invoice.invoice_number} not found in QBO"
             await self._emit_send(job, "invoice_not_found", {
@@ -52,15 +51,18 @@ class SendPortalUploadMixin:
             })
             return
 
-        # Download invoice + POD from QBO
+        invoice_id = invoice_data["Id"]
+
+        # Step 2: Download invoice PDF + POD from QBO API
         await self._emit_send(job, "portal_downloading", {
             "invoiceNumber": invoice.invoice_number,
         })
 
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_portal_"))
 
-        inv_path = await self._qbo.download_invoice_pdf(temp_dir)
-        if not inv_path:
+        # Download invoice PDF
+        invoice_pdf_bytes = await api.download_invoice_pdf(invoice_id)
+        if not invoice_pdf_bytes:
             result.status = "error"
             result.error = "Could not download invoice PDF from QBO"
             await self._emit_send(job, "portal_upload_failed", {
@@ -69,8 +71,22 @@ class SendPortalUploadMixin:
             })
             return
 
-        await asyncio.sleep(QBO_ACTION_DELAY_S)
-        pod_path = await self._qbo.find_and_download_pod(temp_dir)
+        inv_path = temp_dir / f"{invoice.invoice_number}.pdf"
+        inv_path.write_bytes(invoice_pdf_bytes)
+
+        # Find and download POD from attachments
+        att_check = await api.check_attachments(invoice_id, ["pod"])
+        all_attachments = att_check.get("attachments", [])
+
+        pod_path = None
+        for att in all_attachments:
+            if att.get("docType") == "pod" and att.get("id"):
+                pod_path = await api.download_attachment(
+                    att["id"], att.get("fileName", "pod.pdf"), temp_dir
+                )
+                if pod_path:
+                    break
+
         if not pod_path:
             result.status = "missing_docs"
             result.error = "POD not found — cannot create combined PDF for portal"
@@ -80,7 +96,7 @@ class SendPortalUploadMixin:
             })
             return
 
-        # Merge invoice + POD into one PDF
+        # Step 3: Merge invoice + POD into one PDF
         await self._emit_send(job, "portal_merging", {
             "invoiceNumber": invoice.invoice_number,
         })
@@ -102,7 +118,7 @@ class SendPortalUploadMixin:
             })
             return
 
-        # Test mode approval for portal upload
+        # Step 4: Test mode approval
         if job.test_mode:
             job._approval_event = asyncio.Event()
             job._approval_decision = None
@@ -122,8 +138,9 @@ class SendPortalUploadMixin:
             })
             logger.info("Test mode: waiting for approval on portal upload for %s", invoice.invoice_number)
             try:
-                await asyncio.wait_for(job._approval_event.wait(), timeout=300)
-            except asyncio.TimeoutError:
+                import asyncio as _asyncio
+                await _asyncio.wait_for(job._approval_event.wait(), timeout=300)
+            except Exception:
                 result.status = "skipped"
                 result.error = "Portal upload approval timed out (5 minutes)"
                 await self._emit_send(job, "invoice_skipped", {
@@ -144,7 +161,7 @@ class SendPortalUploadMixin:
                 })
                 return
 
-        # Upload to portal
+        # Step 5: Upload to portal
         await self._emit_send(job, "portal_uploading", {
             "invoiceNumber": invoice.invoice_number,
             "portalUrl": portal_url,

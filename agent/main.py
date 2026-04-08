@@ -24,6 +24,7 @@ from config import (
 from routers import auth, jobs, files, qbo, customers, audit, tms, settings
 from services.shared_browser import SharedBrowser
 from services.qbo_browser import QBOBrowser
+from services.qbo_api import QBOApiClient
 from services.tms_browser import TMSBrowser
 from services.claude_classifier import ClaudeClassifier
 from services.email_sender import EmailSender
@@ -52,6 +53,7 @@ def _handle_unhandled_exception(loop, context):
 # ── Shared instances ─────────────────────────────────────────────────
 shared_browser = SharedBrowser()
 qbo_browser = QBOBrowser()
+qbo_api = QBOApiClient()
 tms_browser = TMSBrowser()
 classifier = None
 email_sender = None
@@ -300,15 +302,33 @@ async def lifespan(app: FastAPI):
 
     # Init job manager
     job_manager = JobManager(
-        qbo_browser, classifier,
+        qbo_api, classifier,
         email_sender=email_sender,
         portal_uploader=portal_uploader,
         tms_browser=tms_browser,
+        qbo_browser=qbo_browser,
     )
     jobs.set_job_manager(job_manager)
     qbo.set_qbo_browser(qbo_browser)
+    qbo.set_qbo_api(qbo_api)
     tms.set_tms_browser(tms_browser)
     settings.set_browsers(qbo_browser, tms_browser)
+
+    # Log QBO API status
+    if qbo_api.is_connected:
+        logger.info("QBO API connected (realm: %s)", qbo_api.token_manager.realm_id)
+        if qbo_api.token_manager.needs_reauth_warning:
+            days = qbo_api.token_manager.refresh_token_days_remaining
+            logger.warning("QBO API refresh token expires in %d days — re-authorize soon!", days)
+    else:
+        from config import QBO_CLIENT_ID
+        if QBO_CLIENT_ID:
+            logger.info("QBO API configured but not connected — visit /qbo/oauth/connect to authorize")
+        else:
+            logger.info("QBO API not configured (no QBO_CLIENT_ID in .env)")
+
+    from config import QBO_MODE
+    logger.info("QBO mode: %s", QBO_MODE)
     logger.info("Job manager ready")
 
     # Auto-check sessions — try auto-login if cookies didn't restore
@@ -386,7 +406,7 @@ class NoCacheStaticMiddleware:
 
 # Auth middleware — validates JWT tokens on API routes
 # Exempts: health check, public auth endpoints, static file serving, and OPTIONS (CORS preflight)
-_AUTH_EXEMPT_PATHS = ("/health", "/auth/token", "/auth/login")
+_AUTH_EXEMPT_PATHS = ("/health", "/auth/token", "/auth/login", "/qbo/oauth/")
 
 
 class AuthTokenMiddleware:
@@ -483,10 +503,13 @@ async def health():
     _session_alerts["qbo_needs_login"] = False
     _session_alerts["tms_needs_login"] = False
 
+    from config import QBO_MODE
     return {
         "status": "ok",
         "service": "ngl-agent",
+        "qbo_mode": QBO_MODE,
         "qbo_browser": "initialized",
+        "qbo_api": "connected" if qbo_api.is_connected else "not_connected",
         "tms_browser": "initialized" if tms_browser.is_initialized else "lazy_pending",
         "classifier": "ready" if classifier else "no_api_key",
         "session_alerts": alerts,

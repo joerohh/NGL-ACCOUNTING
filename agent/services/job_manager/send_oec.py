@@ -1,4 +1,4 @@
-"""OEC send mixin — invoice-only via QBO, then POD via separate Gmail email."""
+"""OEC send mixin — invoice-only via QBO API, then POD via separate Gmail email."""
 
 import asyncio
 import logging
@@ -7,17 +7,15 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from config import QBO_ACTION_DELAY_S
-
 logger = logging.getLogger("ngl.job_manager")
 
 
 class SendOECFlowMixin:
-    """OEC flow: Send invoice-only via QBO, then POD via separate Gmail email."""
+    """OEC flow: Send invoice-only via QBO API, then POD via separate Gmail email."""
 
     async def _send_oec_flow(self, job, invoice, customer: dict,
                               result, index: int) -> None:
-        """OEC flow: Send invoice-only via QBO, then POD via separate Gmail email."""
+        """OEC flow: Send invoice-only via QBO API, then POD via separate Gmail email."""
         customer_emails = customer.get("emails", [])
         if not customer_emails:
             result.status = "skipped"
@@ -39,13 +37,15 @@ class SendOECFlowMixin:
             })
             return
 
-        # Search QBO for the invoice
+        api = self._qbo_api
+
+        # Step 1: Search QBO for the invoice
         await self._emit_send(job, "searching_invoice", {
             "invoiceNumber": invoice.invoice_number,
         })
 
-        invoice_url = await self._qbo.search_invoice(invoice.invoice_number)
-        if not invoice_url:
+        invoice_data = await api.search_invoice(invoice.invoice_number)
+        if not invoice_data:
             result.status = "error"
             result.error = f"Invoice {invoice.invoice_number} not found in QBO"
             await self._emit_send(job, "invoice_not_found", {
@@ -53,14 +53,17 @@ class SendOECFlowMixin:
             })
             return
 
-        # Verify invoice details
+        invoice_id = invoice_data["Id"]
+        sync_token = invoice_data.get("SyncToken", "0")
+
+        # Step 2: Verify invoice details
         await self._emit_send(job, "verifying_invoice", {
             "invoiceNumber": invoice.invoice_number,
             "containerNumber": invoice.container_number,
         })
 
-        verification = await self._qbo.verify_invoice_details(
-            invoice.container_number, invoice.amount or None
+        verification = await api.verify_invoice_details(
+            invoice_data, invoice.container_number, invoice.amount or None
         )
         if not verification.get("verified"):
             result.status = "mismatch"
@@ -72,64 +75,41 @@ class SendOECFlowMixin:
             })
             return
 
-        # Log amount discrepancy as warning (QBO is source of truth)
         if verification.get("amount_note"):
             await self._emit_send(job, "invoice_amount_warning", {
                 "invoiceNumber": invoice.invoice_number,
                 "note": verification["amount_note"],
             })
 
-        # OEC flow: send invoice-only via QBO (no attachments required).
-        # The QBO invoice itself is the document — no PDF attachments needed.
-        # If attachments exist on the page, deselect them so only the invoice is sent.
+        # Step 3: Check attachments — find POD for Part B
         await self._emit_send(job, "checking_attachments", {
             "invoiceNumber": invoice.invoice_number,
         })
 
-        att_check = await self._qbo.check_attachments_on_page(["invoice", "pod"])
+        att_check = await api.check_attachments(invoice_id, ["invoice", "pod"])
         result.attachments_found = att_check.get("found", [])
         result.attachments_missing = att_check.get("missing", [])
-        has_pod = "pod" in result.attachments_found
-        total_attachments = len(att_check.get("attachments", []))
+        all_attachments = att_check.get("attachments", [])
 
-        # Download POD now (during first QBO visit) so we don't revisit later
+        # Find and download POD from QBO attachments
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
         pod_path = None
-        pod_source = None  # Track where POD came from: "QBO" or "TMS"
-        if has_pod:
-            await self._emit_send(job, "oec_downloading_pod", {
-                "invoiceNumber": invoice.invoice_number,
-            })
-            pod_path = await self._qbo.find_and_download_pod(temp_dir)
-            if pod_path:
-                pod_source = "QBO"
-                logger.info("POD downloaded from QBO during first visit: %s", pod_path.name)
+        pod_source = None
 
-        # ── Part A: Send invoice-only via QBO ──
-        await self._emit_send(job, "oec_qbo_sending", {
-            "invoiceNumber": invoice.invoice_number,
-        })
+        for att in all_attachments:
+            if att.get("docType") == "pod" and att.get("id"):
+                await self._emit_send(job, "oec_downloading_pod", {
+                    "invoiceNumber": invoice.invoice_number,
+                })
+                pod_path = await api.download_attachment(
+                    att["id"], att.get("fileName", "pod.pdf"), temp_dir
+                )
+                if pod_path:
+                    pod_source = "QBO"
+                    logger.info("POD downloaded from QBO API: %s", pod_path.name)
+                break
 
-        # If there are file attachments on the page, deselect them all
-        # — we only want the bare QBO invoice, zero attachments
-        if total_attachments > 0:
-            await self._qbo.deselect_all_attachments()
-            await asyncio.sleep(1)
-
-        # Click Review and Send
-        form_opened = await self._qbo.click_review_and_send()
-        if not form_opened:
-            result.status = "error"
-            result.error = "Failed to open Review and Send form"
-            await self._emit_send(job, "invoice_error", {
-                "invoiceNumber": invoice.invoice_number,
-                "error": result.error,
-            })
-            return
-
-        await asyncio.sleep(3)
-
-        # Fill form with customer's standard QBO email settings
+        # ── Part A: Send invoice-only via QBO API ──
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{invoice.container_number}"
         to_emails = customer_emails
         cc_emails = ["ar@ngltrans.net"] + customer.get("ccEmails", [])
@@ -146,40 +126,33 @@ class SendOECFlowMixin:
             "subject": subject,
         })
 
-        fill_result = await self._qbo.fill_send_form(
-            to_emails, cc_emails, subject, bcc_emails,
-            expected_attachment_count=0,  # No attachments — just the QBO invoice
-        )
-
-        if not fill_result.get("filled"):
-            result.status = "error"
-            result.error = "Failed to fill send form"
-            await self._emit_send(job, "invoice_error", {
-                "invoiceNumber": invoice.invoice_number,
-                "error": result.error,
-            })
-            return
-
         # Test mode approval for QBO send
         if job.test_mode:
-            # Override attachments_found for the approval card — OEC sends
-            # zero file attachments, only the QBO invoice itself
             saved_att = result.attachments_found
             result.attachments_found = ["QBO invoice (no file attachments)"]
             approved = await self._wait_for_approval(job, invoice, result, index,
                                                       to_emails, cc_emails, bcc_emails, subject)
-            result.attachments_found = saved_att  # restore for POD logic
+            result.attachments_found = saved_att
             if not approved:
                 return
 
-        await self._emit_send(job, "sending_invoice", {
+        await self._emit_send(job, "oec_qbo_sending", {
             "invoiceNumber": invoice.invoice_number,
         })
 
-        sent = await self._qbo.click_send_invoice()
-        if not sent:
+        # Send invoice-only via QBO API (bare invoice, no PDF attachments)
+        send_result = await api.send_invoice_email(
+            invoice_id=invoice_id,
+            sync_token=sync_token,
+            to_emails=to_emails,
+            cc_emails=cc_emails,
+            bcc_emails=bcc_emails,
+            subject=subject,
+        )
+
+        if not send_result.get("sent"):
             result.status = "error"
-            result.error = "QBO send button click failed"
+            result.error = f"QBO API send failed: {send_result.get('error', 'Unknown')}"
             await self._emit_send(job, "invoice_error", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": result.error,
@@ -191,10 +164,8 @@ class SendOECFlowMixin:
         })
 
         # ── Part B: Fetch DO SENDER from TMS (and POD if not on QBO) ──
-        # POD was already downloaded from QBO during first visit (above) if it existed.
-        # Now consult TMS for DO SENDER (always) and POD (if missing from QBO).
-        csv_do_sender = invoice.do_sender_email or ""  # preserve CSV value before TMS may overwrite
-        tms_failure_reason = ""  # track why TMS failed for UI
+        csv_do_sender = invoice.do_sender_email or ""
+        tms_failure_reason = ""
         tms_attempted = False
 
         if not self._tms:
@@ -328,7 +299,6 @@ class SendOECFlowMixin:
 
         # ── Cache successful TMS lookups for future fallback ──
         if invoice.do_sender_email and not csv_do_sender:
-            # Only cache if the value came from TMS (not CSV) — and TMS was actually used
             if tms_attempted:
                 strategy = getattr(self._tms, '_last_do_sender_strategy', '') if self._tms else ''
                 self._save_do_sender_cache(
@@ -398,7 +368,7 @@ class SendOECFlowMixin:
         else:
             logger.info("[POD_EMAIL] CC field: no DO SENDER email available for this invoice")
 
-        # Update result with actual POD email recipients (overrides QBO-step values)
+        # Update result with actual POD email recipients
         result.to_emails = pod_to
         result.cc_emails = pod_cc
 

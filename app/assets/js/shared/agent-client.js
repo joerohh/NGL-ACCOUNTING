@@ -128,6 +128,24 @@ export const agentBridge = {
     } catch (e) { return { status: 'error', error: e.message }; }
   },
 
+  async setQboMode(mode) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/settings/qbo-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async disconnectQboApi() {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/qbo/oauth/disconnect', { method: 'POST' });
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
   async checkTMSStatus() {
     try {
       const res = await this._authFetch(this.baseUrl + '/tms/status');

@@ -47,6 +47,9 @@ export async function settingsLoad() {
   document.getElementById('settingsTmsPassword').value = '';
   document.getElementById('settingsQboPassword').placeholder = creds.qbo_configured ? '(saved \u2014 enter new to change)' : 'Enter password';
   document.getElementById('settingsTmsPassword').placeholder = creds.tms_configured ? '(saved \u2014 enter new to change)' : 'Enter password';
+
+  // Load QBO API status
+  await loadQboApiStatus();
 }
 
 async function settingsSaveAndConnect() {
@@ -337,6 +340,125 @@ async function doChangePassword() {
   setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
 }
 
+// ── QBO API Connection ──
+async function loadQboApiStatus() {
+  if (!state.agentConnected) {
+    document.getElementById('settingsQboApiStatus').textContent = 'Agent offline';
+    return;
+  }
+
+  try {
+    const status = await agentBridge.checkQBOStatus();
+    const mode = status.mode || 'browser';
+
+    // Update mode toggle buttons
+    updateModeToggle(mode);
+
+    // Update API connection status
+    const api = status.api || {};
+    const statusEl = document.getElementById('settingsQboApiStatus');
+    const connectedInfo = document.getElementById('qboApiConnectedInfo');
+    const connectBtn = document.getElementById('qboApiConnectBtn');
+    const disconnectBtn = document.getElementById('qboApiDisconnectBtn');
+    const reauthWarning = document.getElementById('qboApiReauthWarning');
+
+    if (api.connected) {
+      statusEl.textContent = 'Connected';
+      statusEl.style.color = '#16a34a';
+      connectedInfo.style.display = '';
+      disconnectBtn.style.display = '';
+      document.getElementById('qboApiConnectBtnText').textContent = 'Re-authorize';
+
+      const realmInfo = document.getElementById('qboApiRealmInfo');
+      realmInfo.textContent = `Company ID: ${api.realm_id || 'unknown'}${api.sandbox ? ' (Sandbox)' : ''}`;
+
+      const tokenInfo = document.getElementById('qboApiTokenInfo');
+      if (api.refresh_token_days_remaining != null) {
+        tokenInfo.textContent = `Token expires in ${api.refresh_token_days_remaining} days`;
+      }
+
+      reauthWarning.style.display = api.needs_reauth_warning ? '' : 'none';
+    } else {
+      statusEl.textContent = mode === 'api' ? 'Not connected \u2014 authorize below' : 'Not connected';
+      statusEl.style.color = '#94a3b8';
+      connectedInfo.style.display = 'none';
+      disconnectBtn.style.display = 'none';
+      reauthWarning.style.display = 'none';
+      document.getElementById('qboApiConnectBtnText').textContent = 'Connect QBO API';
+    }
+  } catch (e) {
+    document.getElementById('settingsQboApiStatus').textContent = 'Error loading status';
+  }
+}
+
+function updateModeToggle(mode) {
+  const browserBtn = document.getElementById('qboModeBrowserBtn');
+  const apiBtn = document.getElementById('qboModeApiBtn');
+
+  if (mode === 'api') {
+    apiBtn.style.background = '#16a34a';
+    apiBtn.style.color = '#fff';
+    apiBtn.style.fontWeight = '600';
+    browserBtn.style.background = '#f8fafc';
+    browserBtn.style.color = '#64748b';
+    browserBtn.style.fontWeight = '500';
+  } else {
+    browserBtn.style.background = '#ea580c';
+    browserBtn.style.color = '#fff';
+    browserBtn.style.fontWeight = '600';
+    apiBtn.style.background = '#f8fafc';
+    apiBtn.style.color = '#64748b';
+    apiBtn.style.fontWeight = '500';
+  }
+}
+
+async function setQboMode(mode) {
+  if (!state.agentConnected) {
+    settingsShowResult('Agent is offline. Start the agent first.', false);
+    return;
+  }
+
+  updateModeToggle(mode);
+
+  try {
+    const result = await agentBridge.setQboMode(mode);
+    if (result.error) {
+      settingsShowResult('Failed to set QBO mode: ' + result.error, false);
+      return;
+    }
+    settingsShowResult(`QBO mode set to: ${mode === 'api' ? 'API (Official)' : 'Browser (Playwright)'}`, true);
+    await loadQboApiStatus();
+  } catch (e) {
+    settingsShowResult('Failed to set QBO mode: ' + e.message, false);
+  }
+}
+
+function connectQboApi() {
+  if (!state.agentConnected) {
+    settingsShowResult('Agent is offline. Start the agent first.', false);
+    return;
+  }
+  // Open the OAuth authorization page in a new tab
+  window.open(`${agentBridge.baseUrl}/qbo/oauth/authorize`, '_blank');
+  settingsShowResult('Opening QBO authorization page... After authorizing, come back and click Reload.', true);
+}
+
+async function disconnectQboApi() {
+  if (!state.agentConnected) return;
+
+  try {
+    const result = await agentBridge.disconnectQboApi();
+    if (result.error) {
+      settingsShowResult('Failed to disconnect: ' + result.error, false);
+      return;
+    }
+    settingsShowResult('QBO API disconnected.', true);
+    await loadQboApiStatus();
+  } catch (e) {
+    settingsShowResult('Failed to disconnect: ' + e.message, false);
+  }
+}
+
 // ── Window assignments for inline HTML handlers ──
 window.settingsSaveAndConnect = settingsSaveAndConnect;
 window.settingsLoad = settingsLoad;
@@ -346,3 +468,6 @@ window.openAddUserModal = openAddUserModal;
 window.openEditUserModal = openEditUserModal;
 window.saveUser = saveUser;
 window.doChangePassword = doChangePassword;
+window.setQboMode = setQboMode;
+window.connectQboApi = connectQboApi;
+window.disconnectQboApi = disconnectQboApi;

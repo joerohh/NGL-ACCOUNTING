@@ -7,7 +7,7 @@ import time
 from typing import Optional
 
 from config import DOWNLOADS_DIR, JOB_STATE_DIR
-from services.qbo_browser import QBOBrowser
+from services.qbo_api import QBOApiClient
 from services.tms_browser import TMSBrowser
 from services.claude_classifier import ClaudeClassifier
 from services.email_sender import EmailSender
@@ -16,7 +16,7 @@ from services.portal_uploader import PortalUploader
 from services.job_manager.util import JobManagerUtilMixin
 from services.job_manager.fetch_job import FetchJobMixin
 from services.job_manager.send_job import SendJobMixin
-from services.job_manager.send_qbo import SendQBOStandardMixin
+from services.job_manager.send_qbo_api import SendQBOApiMixin
 from services.job_manager.send_oec import SendOECFlowMixin
 from services.job_manager.send_portal import SendPortalUploadMixin
 
@@ -219,17 +219,19 @@ class JobManager(
     JobManagerUtilMixin,
     FetchJobMixin,
     SendJobMixin,
-    SendQBOStandardMixin,
+    SendQBOApiMixin,
     SendOECFlowMixin,
     SendPortalUploadMixin,
 ):
-    """Manages background fetch & send jobs — coordinates QBO browser + Claude classifier."""
+    """Manages background fetch & send jobs — coordinates QBO API + Claude classifier."""
 
-    def __init__(self, qbo: QBOBrowser, classifier: ClaudeClassifier,
+    def __init__(self, qbo_api: QBOApiClient, classifier: ClaudeClassifier,
                  email_sender: Optional["EmailSender"] = None,
                  portal_uploader: Optional["PortalUploader"] = None,
-                 tms_browser: Optional["TMSBrowser"] = None) -> None:
-        self._qbo = qbo
+                 tms_browser: Optional["TMSBrowser"] = None,
+                 qbo_browser=None) -> None:
+        self._qbo_api = qbo_api   # REST API client (all send flows)
+        self._qbo = qbo_browser   # Playwright browser (fetch jobs only)
         self._classifier = classifier
         self._email_sender = email_sender
         self._portal_uploader = portal_uploader

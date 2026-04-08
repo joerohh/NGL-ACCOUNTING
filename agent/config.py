@@ -90,9 +90,22 @@ GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 TRANZACT_USERNAME = os.getenv("TRANZACT_USERNAME", "")
 TRANZACT_PASSWORD = os.getenv("TRANZACT_PASSWORD", "")
 
-# QBO auto-login credentials
+# QBO auto-login credentials (browser automation — legacy)
 QBO_EMAIL = os.getenv("QBO_EMAIL", "")
 QBO_PASSWORD = os.getenv("QBO_PASSWORD", "")
+
+# QBO API (OAuth 2.0) — replaces browser automation
+QBO_CLIENT_ID = os.getenv("QBO_CLIENT_ID", "")
+QBO_CLIENT_SECRET = os.getenv("QBO_CLIENT_SECRET", "")
+QBO_REALM_ID = os.getenv("QBO_REALM_ID", "")
+QBO_REDIRECT_URI = os.getenv("QBO_REDIRECT_URI", f"http://localhost:{PORT}/qbo/oauth/callback")
+QBO_API_BASE_URL = "https://quickbooks.api.intuit.com"  # Production
+QBO_API_BASE_URL_SANDBOX = "https://sandbox-quickbooks.api.intuit.com"  # Sandbox
+QBO_USE_SANDBOX = os.getenv("QBO_USE_SANDBOX", "false").lower() in ("true", "1", "yes")
+QBO_TOKENS_FILE = APPDATA_DIR / ".qbo_tokens.json"
+
+# QBO mode: "browser" (Playwright, legacy) or "api" (official QBO API)
+QBO_MODE = os.getenv("QBO_MODE", "browser")
 
 # TMS auto-login credentials (Google SSO)
 TMS_EMAIL = os.getenv("TMS_EMAIL", "")

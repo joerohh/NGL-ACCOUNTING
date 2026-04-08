@@ -22,7 +22,8 @@ PER_USER_KEYS = {
     "NGL_ADMIN_USERNAME",
     "NGL_ADMIN_PASSWORD",
     "NGL_ADMIN_DISPLAY",
-    "GITHUB_PAT",
+    # Note: GITHUB_PAT is intentionally NOT excluded — needed by electron-updater
+    # to check for updates from the private GitHub repo.
 }
 
 def main():

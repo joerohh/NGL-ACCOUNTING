@@ -97,12 +97,19 @@ class SendJobMixin:
         # Load customer profiles once at job start
         customers = self._load_customers()
 
-        # Verify QBO login before starting
-        logged_in = await self._qbo.is_logged_in()
-        if not logged_in:
+        # Verify QBO API connection before starting
+        if not self._qbo_api or not self._qbo_api.is_connected:
             job.status = "paused"
             await self._emit_send(job, "login_required", {
-                "message": "QBO session expired. Please log in and resume.",
+                "message": "QBO API not connected. Please authorize via Settings.",
+            })
+            return
+
+        token = await self._qbo_api.token_manager.get_access_token()
+        if not token:
+            job.status = "paused"
+            await self._emit_send(job, "login_required", {
+                "message": "QBO API token expired. Please re-authorize via Settings.",
             })
             return
 
@@ -116,19 +123,6 @@ class SendJobMixin:
                 })
                 job._save_state()
                 return
-
-            # Check QBO session is still alive every 5 invoices
-            if i > 0 and i % 5 == 0:
-                still_logged_in = await self._qbo.is_logged_in()
-                if not still_logged_in:
-                    job.status = "paused"
-                    await self._emit_send(job, "login_required", {
-                        "message": f"QBO session expired after invoice {i}/{job.total}. Please log in and resume.",
-                        "progress": i,
-                        "total": job.total,
-                    })
-                    job._save_state()
-                    return
 
             job.progress = i
             result = SendResult(invoice.invoice_number, invoice.container_number,
@@ -168,7 +162,7 @@ class SendJobMixin:
                     elif method in ("portal_upload", "portal"):
                         await self._send_portal_upload(job, invoice, customer, result, i)
                     else:
-                        await self._send_qbo_standard(job, invoice, customer, result, i)
+                        await self._send_qbo_api(job, invoice, customer, result, i)
 
                 await asyncio.wait_for(_dispatch_send(), timeout=SEND_TIMEOUT_S)
 

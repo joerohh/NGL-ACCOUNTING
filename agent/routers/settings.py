@@ -118,3 +118,26 @@ async def update_notification_settings(data: NotificationUpdate):
     from services.notifier import set_enabled
     set_enabled(data.enabled)
     return {"status": "ok", "enabled": data.enabled}
+
+
+# ── QBO Mode ──
+
+class QboModeUpdate(BaseModel):
+    mode: str  # "browser" or "api"
+
+
+@router.post("/qbo-mode")
+async def set_qbo_mode(data: QboModeUpdate):
+    """Switch between QBO browser automation and API mode."""
+    if data.mode not in ("browser", "api"):
+        return {"error": "Invalid mode. Use 'browser' or 'api'."}
+
+    env_path = BASE_DIR / ".env"
+    update_env_file("QBO_MODE", data.mode, env_path)
+
+    # Update the runtime config value
+    import config
+    config.QBO_MODE = data.mode
+
+    logger.info("QBO mode switched to: %s", data.mode)
+    return {"status": "ok", "mode": data.mode}

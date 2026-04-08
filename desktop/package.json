@@ -1,6 +1,6 @@
 {
   "name": "ngl-accounting",
-  "version": "1.6.0",
+  "version": "2.2.0",
   "description": "NGL Accounting Service — Invoice management and document automation",
   "main": "main.js",
   "scripts": {
@@ -70,7 +70,8 @@
       {
         "provider": "github",
         "owner": "joerohh",
-        "repo": "NGL-ACCOUNTING"
+        "repo": "NGL-ACCOUNTING",
+        "private": true
       }
     ],
     "forceCodeSigning": false
