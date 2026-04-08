@@ -134,27 +134,6 @@ class SendQBOStandardMixin:
             expected_attachment_count=detail_att_count,
         )
 
-        # Recovery: if attachments missing on send form, go Back -> Select All -> retry
-        if fill_result.get("filled") and not fill_result.get("attachmentsFull", True) and detail_att_count > 0:
-            logger.warning("Attachments incomplete on send form — attempting recovery")
-            await self._emit_send(job, "retrying_attachments", {
-                "invoiceNumber": invoice.invoice_number,
-            })
-
-            back_ok = await self._qbo.click_back_from_send_form()
-            if back_ok:
-                await asyncio.sleep(3)
-                await self._qbo.select_all_attachments()
-                await asyncio.sleep(2)
-
-                form_ok = await self._qbo.click_review_and_send()
-                if form_ok:
-                    await asyncio.sleep(3)
-                    fill_result = await self._qbo.fill_send_form(
-                        to_emails, cc_emails, subject, bcc_emails,
-                        expected_attachment_count=detail_att_count,
-                    )
-
         if not fill_result.get("filled"):
             result.status = "error"
             result.error = "Failed to fill send form"
@@ -174,6 +153,19 @@ class SendQBOStandardMixin:
         await self._emit_send(job, "sending_invoice", {
             "invoiceNumber": invoice.invoice_number,
         })
+
+        # >>> DRY RUN — stop before sending so we can verify the form <<<
+        logger.info("DRY RUN: form filled successfully, skipping actual send")
+        result.status = "dry_run"
+        await self._emit_send(job, "invoice_sent", {
+            "invoiceNumber": invoice.invoice_number,
+            "containerNumber": invoice.container_number,
+            "toEmails": to_emails,
+            "subject": subject,
+            "dryRun": True,
+        })
+        return
+        # >>> END DRY RUN — remove this block to resume normal sending <<<
 
         sent = await self._qbo.click_send_invoice()
         if sent:

@@ -13,12 +13,10 @@
     --bg: #f8fafc;
     --text: #1e293b;
     --text-light: #64748b;
-    --card-bg: #ffffff;
     --border: #e2e8f0;
     --green: #16a34a;
     --blue: #2563eb;
     --red: #dc2626;
-    --amber: #d97706;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -33,12 +31,11 @@
   .topnav {
     position: sticky; top: 0; z-index: 100;
     background: linear-gradient(135deg, var(--orange), var(--orange-dark));
-    color: #fff;
-    padding: 14px 32px;
+    color: #fff; padding: 14px 32px;
     display: flex; align-items: center; justify-content: space-between;
     box-shadow: 0 2px 12px rgba(0,0,0,.15);
   }
-  .topnav .brand { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+  .topnav .brand { font-size: 20px; font-weight: 700; }
   .topnav .brand span { font-weight: 300; opacity: .85; }
   .topnav-links { display: flex; gap: 6px; flex-wrap: wrap; }
   .topnav-links a {
@@ -47,1451 +44,442 @@
   }
   .topnav-links a:hover { background: rgba(255,255,255,.18); }
 
-  /* ── Layout ── */
-  .container { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
 
   /* ── Hero ── */
   .hero {
-    text-align: center; padding: 56px 24px 48px;
+    text-align: center; padding: 48px 24px 40px;
     background: linear-gradient(160deg, #fff5ed 0%, #fff 60%);
     border-radius: 16px; margin-bottom: 48px;
     border: 1px solid var(--orange-light);
   }
-  .hero h1 { font-size: 36px; font-weight: 800; color: var(--orange); margin-bottom: 12px; }
-  .hero p { font-size: 17px; color: var(--text-light); max-width: 600px; margin: 0 auto; }
-  .hero .version { display: inline-block; margin-top: 16px; font-size: 12px; font-weight: 600; background: var(--orange); color: #fff; padding: 3px 12px; border-radius: 99px; }
-  .hero .privacy { display: inline-block; margin-top: 10px; font-size: 12px; color: var(--text-light); }
+  .hero h1 { font-size: 34px; font-weight: 800; color: var(--orange); margin-bottom: 10px; }
+  .hero p { font-size: 16px; color: var(--text-light); max-width: 560px; margin: 0 auto; }
+  .hero .version { display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 600; background: var(--orange); color: #fff; padding: 3px 12px; border-radius: 99px; }
 
-  /* ── Section ── */
-  section { margin-bottom: 60px; }
+  /* ── Sections ── */
+  section { margin-bottom: 56px; }
   section > h2 {
-    font-size: 26px; font-weight: 700; color: var(--orange);
+    font-size: 24px; font-weight: 700; color: var(--orange);
     border-bottom: 3px solid var(--orange-light);
-    padding-bottom: 10px; margin-bottom: 24px;
-  }
-  section > h3, section .sub-h3 {
-    font-size: 19px; font-weight: 600; margin: 32px 0 14px;
-  }
-  section h4 {
-    font-size: 16px; font-weight: 600; margin: 24px 0 10px;
-  }
-  section p, section li { margin-bottom: 8px; }
-
-  /* ── Info / Tip / Warning boxes ── */
-  .box {
-    border-radius: 10px; padding: 16px 20px; margin: 20px 0;
-    display: flex; gap: 12px; align-items: flex-start;
-    font-size: 14px;
-  }
-  .box .icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
-  .box.info  { background: #eff6ff; border-left: 4px solid var(--blue); }
-  .box.tip   { background: #f0fdf4; border-left: 4px solid var(--green); }
-  .box.warn  { background: #fef2f2; border-left: 4px solid var(--red); }
-  .box.note  { background: #fff7ed; border-left: 4px solid var(--orange); }
-
-  /* ── Ordered steps ── */
-  ol.steps { counter-reset: step; list-style: none; padding: 0; }
-  ol.steps > li {
-    counter-increment: step;
-    position: relative; padding-left: 48px; margin-bottom: 18px;
-  }
-  ol.steps > li::before {
-    content: counter(step);
-    position: absolute; left: 0; top: 0;
-    width: 32px; height: 32px; border-radius: 50%;
-    background: var(--orange); color: #fff;
-    font-weight: 700; font-size: 14px;
-    display: flex; align-items: center; justify-content: center;
+    padding-bottom: 8px; margin-bottom: 20px;
   }
 
-  /* ── Mockup Screens ── */
-  .mockup {
-    background: var(--card-bg);
+  /* ── Screenshot with callouts ── */
+  .screen {
+    position: relative; display: inline-block; width: 100%;
+    margin: 16px 0; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,.1);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-    margin: 24px 0;
-    box-shadow: 0 4px 16px rgba(0,0,0,.06);
   }
-  .mockup-bar {
-    background: #f1f5f9; border-bottom: 1px solid var(--border);
-    padding: 8px 16px; display: flex; align-items: center; gap: 6px;
+  .screen img {
+    width: 100%; display: block;
+    image-rendering: auto;
   }
-  .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
-  .mockup-dot.r { background: #ef4444; }
-  .mockup-dot.y { background: #eab308; }
-  .mockup-dot.g { background: #22c55e; }
-  .mockup-bar .title { margin-left: 10px; font-size: 12px; color: var(--text-light); font-weight: 500; }
-  .mockup-body { padding: 20px; position: relative; }
-
-  /* ── Mockup inner elements ── */
-  .mock-sidebar {
-    width: 180px; background: linear-gradient(180deg, var(--orange), var(--orange-dark));
-    border-radius: 8px; padding: 16px 12px; color: #fff; font-size: 12px;
-    position: absolute; left: 20px; top: 20px; bottom: 20px;
-  }
-  .mock-sidebar .logo { font-weight: 700; font-size: 14px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.25); }
-  .mock-sidebar .nav-item {
-    padding: 7px 10px; border-radius: 6px; margin-bottom: 4px;
-    cursor: default; font-weight: 500;
-  }
-  .mock-sidebar .nav-item.active { background: rgba(255,255,255,.22); }
-  .mock-main { margin-left: 200px; min-height: 260px; }
-
-  .mock-dropzone {
-    border: 2px dashed var(--border); border-radius: 10px;
-    padding: 28px 16px; text-align: center; color: var(--text-light);
-    font-size: 13px; margin-bottom: 12px;
-    transition: border-color .2s;
-  }
-  .mock-dropzone.highlight { border-color: var(--orange); background: #fff7ed; }
-  .mock-btn {
-    display: inline-block; padding: 8px 18px; border-radius: 8px;
-    font-size: 13px; font-weight: 600; cursor: default;
-    color: #fff; background: linear-gradient(135deg, var(--orange), var(--orange-dark));
-    border: none;
-  }
-  .mock-btn.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
-  .mock-btn.green { background: linear-gradient(135deg, #16a34a, #15803d); }
-  .mock-badge {
-    display: inline-block; padding: 2px 10px; border-radius: 99px;
-    font-size: 11px; font-weight: 600;
-  }
-  .mock-badge.green { background: #dcfce7; color: #166534; }
-  .mock-badge.red { background: #fee2e2; color: #991b1b; }
-  .mock-badge.orange { background: #fed7aa; color: #9a3412; }
-  .mock-badge.gray { background: #f1f5f9; color: #475569; }
-  .mock-badge.blue { background: #dbeafe; color: #1e40af; }
-  .mock-input {
-    display: block; width: 100%; padding: 8px 12px; border: 1px solid var(--border);
-    border-radius: 6px; font-size: 13px; background: #fff; color: var(--text);
-  }
-  .mock-table {
-    width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px;
-  }
-  .mock-table th {
-    text-align: left; padding: 8px 10px; background: #f8fafc;
-    border-bottom: 2px solid var(--border); font-weight: 600; color: var(--text-light);
-  }
-  .mock-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
-
-  /* ── Callout circles ── */
   .callout {
     position: absolute;
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 30px; height: 30px; border-radius: 50%;
     background: var(--orange); color: #fff;
-    font-size: 13px; font-weight: 700;
+    font-size: 14px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(234,88,12,.4);
+    box-shadow: 0 2px 8px rgba(234,88,12,.5);
     z-index: 10;
     animation: pulse-ring 2s ease-out infinite;
+    cursor: default;
   }
   @keyframes pulse-ring {
-    0% { box-shadow: 0 0 0 0 rgba(234,88,12,.35); }
+    0% { box-shadow: 0 0 0 0 rgba(234,88,12,.4); }
     70% { box-shadow: 0 0 0 10px rgba(234,88,12,0); }
     100% { box-shadow: 0 0 0 0 rgba(234,88,12,0); }
   }
 
-  /* ── Arrow connectors ── */
-  .arrow-down {
-    display: flex; justify-content: center; margin: 8px 0;
-    color: var(--orange); font-size: 24px; animation: bounce 1.5s ease infinite;
+  /* ── Legend ── */
+  .legend {
+    display: flex; flex-direction: column; gap: 8px;
+    margin: 14px 0 24px; font-size: 14px;
   }
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(4px); }
-  }
-
-  /* ── Flow diagram ── */
-  .flow {
-    display: flex; align-items: center; justify-content: center; gap: 0;
-    margin: 28px 0; flex-wrap: wrap;
-  }
-  .flow-step {
-    background: #fff; border: 2px solid var(--orange-light); border-radius: 10px;
-    padding: 12px 18px; text-align: center; font-size: 13px; font-weight: 600;
-    color: var(--text); min-width: 120px; position: relative;
-  }
-  .flow-step.active { background: var(--orange); color: #fff; border-color: var(--orange); }
-  .flow-step .step-num {
-    position: absolute; top: -10px; left: -10px;
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--orange); color: #fff; font-size: 11px; font-weight: 700;
+  .legend-item { display: flex; align-items: flex-start; gap: 10px; }
+  .legend-num {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    background: var(--orange); color: #fff;
+    font-size: 12px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
   }
-  .flow-step.active .step-num { background: #fff; color: var(--orange); }
-  .flow-arrow {
-    font-size: 22px; color: var(--orange); margin: 0 8px; font-weight: 700;
-  }
-  .flow-step .sub { font-size: 11px; font-weight: 400; color: var(--text-light); margin-top: 2px; }
-  .flow-step.active .sub { color: rgba(255,255,255,.8); }
+  .legend-text strong { color: var(--text); }
 
-  /* ── Callout Legend ── */
-  .legend {
-    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px;
-    font-size: 13px;
-  }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
-  .legend-num {
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--orange); color: #fff;
-    font-size: 11px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  }
-
-  /* ── Table of Contents ── */
+  /* ── TOC ── */
   .toc {
     background: #fff; border: 1px solid var(--border); border-radius: 12px;
-    padding: 24px 28px; margin-bottom: 48px;
+    padding: 20px 24px; margin-bottom: 48px;
   }
-  .toc h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--orange); }
+  .toc h3 { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: var(--orange); }
   .toc ol { padding-left: 20px; }
-  .toc li { margin-bottom: 6px; }
+  .toc li { margin-bottom: 4px; font-size: 14px; }
   .toc a { color: var(--orange); text-decoration: none; font-weight: 500; }
   .toc a:hover { text-decoration: underline; }
 
-  /* ── Grid helpers ── */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-
-  /* ── Feature card ── */
-  .feature-card {
-    background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+  /* ── Info box ── */
+  .box {
+    border-radius: 10px; padding: 14px 18px; margin: 16px 0;
+    display: flex; gap: 10px; align-items: flex-start; font-size: 13px;
   }
-  .feature-card .fc-icon { font-size: 28px; margin-bottom: 8px; }
-  .feature-card strong { color: var(--orange); }
-  .feature-card p { font-size: 13px; color: var(--text-light); margin-top: 6px; }
+  .box .icon { font-size: 18px; flex-shrink: 0; }
+  .box.tip { background: #f0fdf4; border-left: 4px solid var(--green); }
+  .box.info { background: #eff6ff; border-left: 4px solid var(--blue); }
+  .box.warn { background: #fef2f2; border-left: 4px solid var(--red); }
 
-  /* ── Footer ── */
+  /* ── Table ── */
+  .ref-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+  .ref-table th {
+    text-align: left; padding: 8px 10px; background: #f8fafc;
+    border-bottom: 2px solid var(--border); font-weight: 600; color: var(--text-light);
+  }
+  .ref-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 99px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge.green { background: #dcfce7; color: #166534; }
+  .badge.red { background: #fee2e2; color: #991b1b; }
+  .badge.orange { background: #fed7aa; color: #9a3412; }
+  .badge.gray { background: #f1f5f9; color: #475569; }
+
   .footer {
-    text-align: center; padding: 32px; color: var(--text-light);
-    font-size: 13px; border-top: 1px solid var(--border); margin-top: 48px;
+    text-align: center; padding: 28px; color: var(--text-light);
+    font-size: 12px; border-top: 1px solid var(--border); margin-top: 40px;
   }
 
-  /* ── Responsive ── */
   @media (max-width: 640px) {
     .topnav-links { display: none; }
     .hero h1 { font-size: 26px; }
-    .mock-sidebar { display: none; }
-    .mock-main { margin-left: 0; }
-    .grid-2, .grid-3 { grid-template-columns: 1fr; }
-    .flow { flex-direction: column; }
-    .flow-arrow { transform: rotate(90deg); margin: 4px 0; }
-  }
-
-  code {
-    background: #f1f5f9; padding: 2px 6px; border-radius: 4px;
-    font-size: 13px; font-family: 'Courier New', monospace;
   }
 </style>
 </head>
 <body>
 
-<!-- ═══════ TOP NAV ═══════ -->
 <nav class="topnav">
   <div class="brand">NGL Accounting Suite <span>— User Manual</span></div>
   <div class="topnav-links">
-    <a href="#overview">Overview</a>
-    <a href="#getting-started">Setup</a>
     <a href="#login">Login</a>
     <a href="#home">Home</a>
-    <a href="#merge">Merge Tool</a>
+    <a href="#merge">Merge</a>
     <a href="#invoice">Invoice Sender</a>
     <a href="#customers">Customers</a>
     <a href="#settings">Settings</a>
-    <a href="#troubleshooting">Help</a>
+    <a href="#glossary">Glossary</a>
   </div>
 </nav>
 
 <div class="container">
 
-<!-- ═══════ HERO ═══════ -->
 <div class="hero">
   <h1>NGL Accounting Suite</h1>
-  <p>Your complete guide to merging documents, sending invoices, and managing customers — all from one app.</p>
+  <p>A visual guide to every screen in the app — what each button, field, and area does.</p>
   <div class="version">User Manual v1.0 — April 2026</div>
-  <div class="privacy">&#128274; All files stay on your computer. Nothing is uploaded to the internet.</div>
 </div>
 
-<!-- ═══════ TABLE OF CONTENTS ═══════ -->
 <div class="toc">
-  <h3>What's Inside</h3>
+  <h3>Screens</h3>
   <ol>
-    <li><a href="#overview">What Is This App?</a></li>
-    <li><a href="#getting-started">Getting Started</a></li>
-    <li><a href="#login">Logging In</a></li>
-    <li><a href="#home">The Home Screen</a></li>
-    <li><a href="#merge">Merge Tool — Combining Documents</a>
-      <ol style="margin-top:4px; padding-left:18px; font-size:13px;">
-        <li><a href="#merge-auto">Auto Mode (Step by Step)</a></li>
-        <li><a href="#merge-manual">Manual Mode (Quick Merge)</a></li>
-        <li><a href="#merge-agent">AI Agent Panel</a></li>
-        <li><a href="#merge-log">Status Log &amp; Failure Report</a></li>
-      </ol>
-    </li>
-    <li><a href="#invoice">Invoice Sender — Emailing Invoices</a>
-      <ol style="margin-top:4px; padding-left:18px; font-size:13px;">
-        <li><a href="#invoice-steps">Step by Step</a></li>
-        <li><a href="#invoice-review">Review Window</a></li>
-        <li><a href="#invoice-methods">Send Methods</a></li>
-      </ol>
-    </li>
-    <li><a href="#customers">Customer Manager</a>
-      <ol style="margin-top:4px; padding-left:18px; font-size:13px;">
-        <li><a href="#customers-add">Adding a Customer</a></li>
-        <li><a href="#customers-edit">Editing &amp; Deleting</a></li>
-        <li><a href="#customers-import">Import &amp; Export</a></li>
-      </ol>
-    </li>
-    <li><a href="#settings">Settings &amp; Connections</a></li>
-    <li><a href="#troubleshooting">Tips &amp; Troubleshooting</a></li>
+    <li><a href="#login">Login</a></li>
+    <li><a href="#home">Home Dashboard</a></li>
+    <li><a href="#merge">Merge Tool</a></li>
+    <li><a href="#invoice">Invoice Sender</a></li>
+    <li><a href="#customers">Customer Manager</a></li>
+    <li><a href="#customer-form">Add Customer Form</a></li>
+    <li><a href="#customer-edit">Edit Customer Form</a></li>
+    <li><a href="#settings">Settings</a></li>
     <li><a href="#glossary">Glossary</a></li>
   </ol>
 </div>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 1: OVERVIEW                -->
-<!-- ═══════════════════════════════════ -->
-<section id="overview">
-  <h2>1. What Is This App?</h2>
-  <p>NGL Accounting Suite is a desktop tool built for logistics accounting. It has <strong>three main tools</strong>:</p>
-
-  <div class="grid-3" style="margin: 20px 0;">
-    <div class="feature-card">
-      <div class="fc-icon">&#128196;</div>
-      <strong>Merge Tool</strong>
-      <p>Combine invoices, PODs, and bills of lading into organized PDF packets — one per container.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fc-icon">&#128231;</div>
-      <strong>Invoice Sender</strong>
-      <p>Upload a list of invoices, match them to PDF files, and send them through QuickBooks Online automatically.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fc-icon">&#128101;</div>
-      <strong>Customer Manager</strong>
-      <p>Keep track of customer emails, document requirements, and how they prefer to receive invoices.</p>
-    </div>
-  </div>
-
-  <div class="box info">
-    <div class="icon">&#128274;</div>
-    <div><strong>Your files stay on your computer.</strong> All PDF merging and Excel processing happens locally. Nothing is uploaded to the internet.</div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 2: GETTING STARTED         -->
-<!-- ═══════════════════════════════════ -->
-<section id="getting-started">
-  <h2>2. Getting Started</h2>
-
-  <h3>How to Open the App</h3>
-  <div class="grid-2" style="margin:16px 0;">
-    <div class="feature-card" style="border-color:var(--orange-light);">
-      <div class="fc-icon">&#128421;</div>
-      <strong>Desktop App (Recommended)</strong>
-      <p>Double-click the <strong>NGL Accounting</strong> shortcut on your desktop. Everything starts automatically.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fc-icon">&#127760;</div>
-      <strong>Browser Version</strong>
-      <p>Open the <code>app/index.html</code> file in Chrome or Edge. Run <code>Start Agent.bat</code> first for QBO features.</p>
-    </div>
-  </div>
-
-  <h3>What Is the "Agent Server"?</h3>
-  <p>The <strong>Agent Server</strong> is a helper that runs behind the scenes. It handles connections to QuickBooks Online (QBO) and TMS. Think of it like a robot that clicks buttons in QBO for you.</p>
-
-  <div class="box note">
-    <div class="icon">&#128161;</div>
-    <div><strong>You don't always need it.</strong> The Merge Tool and Customer Manager work without the agent. You only need it for sending invoices and fetching missing documents.</div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 3: LOGIN                   -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ LOGIN ═══════ -->
 <section id="login">
-  <h2>3. Logging In</h2>
-  <p>When you open the app, you'll see the login screen. Here's what everything does:</p>
-
-  <!-- Login Mockup -->
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">NGL Accounting Suite — Login</span>
-    </div>
-    <div class="mockup-body" style="display:flex; min-height:320px; padding:0;">
-      <!-- Left panel -->
-      <div style="flex:1; background:linear-gradient(135deg, #ea580c, #c2410c); color:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:40px;">
-        <div style="font-size:32px; font-weight:800; margin-bottom:8px;">NGL</div>
-        <div style="font-size:13px; opacity:.8;">Accounting Suite</div>
-      </div>
-      <!-- Right panel -->
-      <div style="flex:1.2; padding:40px; display:flex; flex-direction:column; justify-content:center; position:relative;">
-        <div style="font-size:20px; font-weight:700; margin-bottom:4px;">Welcome Back</div>
-        <div style="font-size:13px; color:var(--text-light); margin-bottom:24px;">Sign in to continue</div>
-
-        <label style="font-size:12px; font-weight:600; margin-bottom:4px; display:block;">Username</label>
-        <input class="mock-input" value="joseph" style="margin-bottom:14px;" disabled>
-
-        <label style="font-size:12px; font-weight:600; margin-bottom:4px; display:block;">Password</label>
-        <input class="mock-input" type="password" value="••••••" style="margin-bottom:12px;" disabled>
-
-        <div style="display:flex; align-items:center; gap:6px; margin-bottom:18px; position:relative;">
-          <input type="checkbox" checked disabled>
-          <span style="font-size:12px;">Remember me</span>
-          <div class="callout" style="top:-10px; right:40px;">3</div>
-        </div>
-
-        <div class="mock-btn" style="text-align:center; width:100%; display:block; position:relative;">
-          Sign In
-          <div class="callout" style="top:-10px; right:-14px;">4</div>
-        </div>
-
-        <!-- Agent badge -->
-        <div style="position:absolute; bottom:16px; left:40px; display:flex; align-items:center; gap:6px;">
-          <span class="mock-badge green">Agent Online</span>
-          <div class="callout" style="top:-12px; right:-32px;">5</div>
-        </div>
-
-        <!-- Callouts -->
-        <div class="callout" style="top:100px; right:16px;">1</div>
-        <div class="callout" style="top:160px; right:16px;">2</div>
-      </div>
-    </div>
+  <h2>1. Login</h2>
+  <div class="screen">
+    <img src="screenshots/login.png" alt="Login screen">
+    <!-- Username -->
+    <div class="callout" style="top:33%; left:22%;">1</div>
+    <!-- Password -->
+    <div class="callout" style="top:46%; left:22%;">2</div>
+    <!-- Remember me -->
+    <div class="callout" style="top:57%; left:8%;">3</div>
+    <!-- Sign In button -->
+    <div class="callout" style="top:67%; left:22%;">4</div>
+    <!-- Agent status -->
+    <div class="callout" style="top:90%; left:12%;">5</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Type your username here</div>
-    <div class="legend-item"><div class="legend-num">2</div> Type your password here</div>
-    <div class="legend-item"><div class="legend-num">3</div> Check this to stay logged in next time</div>
-    <div class="legend-item"><div class="legend-num">4</div> Click "Sign In" to enter the app</div>
-    <div class="legend-item"><div class="legend-num">5</div> Agent badge — green means the background service is running</div>
-  </div>
-
-  <div class="box tip">
-    <div class="icon">&#128161;</div>
-    <div>If the badge says <span class="mock-badge red">Agent Offline</span>, the background service isn't running. Close and reopen the app, or see <a href="#troubleshooting">Troubleshooting</a>.</div>
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>Username</strong> — Type your username here.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Password</strong> — Type your password here.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Remember Me</strong> — Check this box so you don't have to log in every time.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Sign In</strong> — Click this button to log in.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>Agent Status</strong> — Shows if the background service is running. Green = good. Red = the agent needs to be restarted.</div></div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 4: HOME SCREEN             -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ HOME ═══════ -->
 <section id="home">
-  <h2>4. The Home Screen</h2>
-  <p>After logging in, you land on the <strong>Home</strong> screen. This is your dashboard — it shows quick stats, connection status, and shortcuts to each tool.</p>
-
-  <!-- Home Mockup -->
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">NGL Accounting Suite — Home</span>
-    </div>
-    <div class="mockup-body" style="min-height:400px;">
-      <!-- Sidebar -->
-      <div class="mock-sidebar">
-        <div class="logo">NGL</div>
-        <div class="nav-item active">Home</div>
-        <div class="nav-item">Merge Tool</div>
-        <div class="nav-item">Invoice Sender</div>
-        <div class="nav-item">Customers</div>
-        <div class="nav-item">Settings</div>
-        <div class="callout" style="right:-14px; top:68px;">1</div>
-      </div>
-      <!-- Main content -->
-      <div class="mock-main">
-        <div style="font-size:22px; font-weight:700; margin-bottom:4px;">Good morning!</div>
-        <div style="font-size:13px; color:var(--text-light); margin-bottom:20px;">Here's your workspace overview</div>
-
-        <!-- Metric Cards -->
-        <div style="display:flex; gap:10px; margin-bottom:16px; position:relative;">
-          <div style="flex:1; background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;">
-            <div style="font-size:22px; font-weight:700; color:var(--orange);">12</div>
-            <div style="font-size:11px; color:var(--text-light);">Pending Invoices</div>
-          </div>
-          <div style="flex:1; background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;">
-            <div style="font-size:22px; font-weight:700; color:var(--green);">48</div>
-            <div style="font-size:11px; color:var(--text-light);">PDFs Merged Today</div>
-          </div>
-          <div style="flex:1; background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;">
-            <div style="font-size:22px; font-weight:700; color:var(--blue);">7</div>
-            <div style="font-size:11px; color:var(--text-light);">Emails Sent</div>
-          </div>
-          <div style="flex:1; background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;">
-            <div style="font-size:22px; font-weight:700; color:var(--text);">85</div>
-            <div style="font-size:11px; color:var(--text-light);">Active Customers</div>
-          </div>
-          <div class="callout" style="top:-12px; right:-12px;">2</div>
-        </div>
-
-        <!-- Quick Action Cards -->
-        <div style="display:flex; gap:10px; margin-bottom:16px; position:relative;">
-          <div style="flex:1; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:14px; font-size:12px; text-align:center; cursor:pointer;">
-            <div style="font-size:20px;">&#128196;</div>
-            <div style="font-weight:600; margin-top:4px;">Merge Documents</div>
-          </div>
-          <div style="flex:1; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:14px; font-size:12px; text-align:center; cursor:pointer;">
-            <div style="font-size:20px;">&#128231;</div>
-            <div style="font-weight:600; margin-top:4px;">Send Invoices</div>
-          </div>
-          <div style="flex:1; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:14px; font-size:12px; text-align:center; cursor:pointer;">
-            <div style="font-size:20px;">&#128101;</div>
-            <div style="font-weight:600; margin-top:4px;">Manage Customers</div>
-          </div>
-          <div class="callout" style="top:-12px; right:-12px;">3</div>
-        </div>
-
-        <!-- Connection Status -->
-        <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Connections</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; position:relative;">
-          <span class="mock-badge green">Agent Server: Connected</span>
-          <span class="mock-badge green">QBO: Logged In</span>
-          <span class="mock-badge orange">TMS: Not Connected</span>
-          <span class="mock-badge gray">Classifier: Ready</span>
-          <div class="callout" style="top:-12px; right:-12px;">4</div>
-        </div>
-      </div>
-    </div>
+  <h2>2. Home Dashboard</h2>
+  <div class="screen">
+    <img src="screenshots/home.png" alt="Home dashboard">
+    <!-- Sidebar -->
+    <div class="callout" style="top:45%; left:3%;">1</div>
+    <!-- Quick actions (new merge, send invoices, add customer) -->
+    <div class="callout" style="top:19%; left:32%;">2</div>
+    <!-- Metric cards -->
+    <div class="callout" style="top:35%; left:50%;">3</div>
+    <!-- Connection badges -->
+    <div class="callout" style="top:52%; left:50%;">4</div>
+    <!-- Tool descriptions -->
+    <div class="callout" style="top:72%; left:50%;">5</div>
+    <!-- Start sending invoices button -->
+    <div class="callout" style="top:12%; left:88%;">6</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Sidebar — click any tool name to switch pages</div>
-    <div class="legend-item"><div class="legend-num">2</div> Metric cards — quick daily stats at a glance</div>
-    <div class="legend-item"><div class="legend-num">3</div> Quick actions — click a card to jump straight to that tool</div>
-    <div class="legend-item"><div class="legend-num">4</div> Connection badges — shows what services are connected</div>
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>Sidebar</strong> — Click any tool name (Merging Tool, Invoice Sender, Customers, Settings) to go to that page.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Quick Actions</strong> — Shortcut buttons to jump straight to a tool. "New merge," "Send invoices," or "Add customer."</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Metric Cards</strong> — Shows today's numbers at a glance: pending invoices, merged PDFs, emails sent, and total customers.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Connection Badges</strong> — Shows if QBO, TMS, AI Classifier, and the Agent Server are connected. Green = connected, orange = needs login, red = offline.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>Tool Cards</strong> — Descriptions of each tool with an "Open tool" button to go there.</div></div>
+    <div class="legend-item"><div class="legend-num">6</div><div class="legend-text"><strong>Start Sending Invoices</strong> — Quick shortcut to jump to the Invoice Sender.</div></div>
   </div>
-
-  <h3>What the Connection Badges Mean</h3>
-  <table class="mock-table" style="max-width:600px;">
-    <tr><th>Badge</th><th>Meaning</th></tr>
-    <tr><td><span class="mock-badge green">Connected / Logged In</span></td><td>Working normally — you're good to go</td></tr>
-    <tr><td><span class="mock-badge orange">Not Connected</span></td><td>Not logged in yet — click to connect</td></tr>
-    <tr><td><span class="mock-badge red">Offline</span></td><td>Service is down — see <a href="#troubleshooting">Troubleshooting</a></td></tr>
-    <tr><td><span class="mock-badge gray">Ready</span></td><td>Available but not actively connected (normal for Classifier)</td></tr>
-  </table>
 </section>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 5: MERGE TOOL              -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ MERGE TOOL ═══════ -->
 <section id="merge">
-  <h2>5. Merge Tool — Combining Documents</h2>
-  <p>The Merge Tool combines your invoices, PODs, and bills of lading into organized PDF packets. It has two modes:</p>
-
-  <div class="grid-2" style="margin:16px 0 24px;">
-    <div style="background:#fff7ed; border:2px solid var(--orange-light); border-radius:10px; padding:16px;">
-      <strong style="color:var(--orange);">&#9733; Auto Mode</strong> <span style="font-size:12px; color:var(--text-light);">(most common)</span>
-      <p style="font-size:13px; margin-top:6px;">Upload an Excel file + PDF files. The app reads the Excel, figures out which PDFs belong to which containers, and merges them automatically.</p>
-    </div>
-    <div style="background:#f1f5f9; border:1px solid var(--border); border-radius:10px; padding:16px;">
-      <strong>Manual Mode</strong>
-      <p style="font-size:13px; margin-top:6px;">Drag in 2 or more PDFs, put them in order, and merge. No Excel needed — great for quick one-off merges.</p>
-    </div>
-  </div>
-
-  <!-- ── AUTO MODE ── -->
-  <h3 id="merge-auto">5.1 Auto Mode — Step by Step</h3>
-
-  <p>Here's the overall flow:</p>
-  <div class="flow">
-    <div class="flow-step active"><div class="step-num">1</div>Upload Excel<div class="sub">.xlsx file</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step"><div class="step-num">2</div>Upload PDFs<div class="sub">invoices, PODs, BLs</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step"><div class="step-num">3</div>Pick Option<div class="sub">Per Container, etc.</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step"><div class="step-num">4</div>Run Merge<div class="sub">click the button</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step" style="border-color:var(--green);"><div class="step-num" style="background:var(--green);">5</div>Download<div class="sub">ZIP file</div></div>
-  </div>
-
-  <!-- Merge Mockup -->
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Merge Tool — Auto Mode</span>
-    </div>
-    <div class="mockup-body" style="min-height:420px;">
-      <div class="mock-sidebar">
-        <div class="logo">NGL</div>
-        <div class="nav-item">Home</div>
-        <div class="nav-item active">Merge Tool</div>
-        <div class="nav-item">Invoice Sender</div>
-        <div class="nav-item">Customers</div>
-        <div class="nav-item">Settings</div>
-      </div>
-      <div class="mock-main">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <div style="font-size:18px; font-weight:700;">Merge Tool</div>
-          <div style="display:flex; gap:8px; position:relative;">
-            <span class="mock-badge green">Auto Mode</span>
-            <span class="mock-badge gray">Manual Mode</span>
-            <div class="callout" style="top:-14px; right:-14px;">1</div>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-          <!-- Excel drop zone -->
-          <div>
-            <div style="font-size:12px; font-weight:600; margin-bottom:6px;">Step 1: Upload Excel</div>
-            <div class="mock-dropzone highlight" style="position:relative; min-height:100px;">
-              &#128202; Drag your Excel file here<br>
-              <span style="font-size:11px; opacity:.7;">or click to browse</span>
-              <div class="callout" style="top:-12px; right:-12px;">2</div>
-            </div>
-            <div style="font-size:11px; color:var(--green); margin-top:4px;">&#10003; Container Report.xlsx — 47 containers found</div>
-          </div>
-          <!-- PDF drop zone -->
-          <div>
-            <div style="font-size:12px; font-weight:600; margin-bottom:6px;">Step 2: Upload PDFs</div>
-            <div class="mock-dropzone" style="position:relative; min-height:100px;">
-              &#128196; Drag PDF files here<br>
-              <span style="font-size:11px; opacity:.7;">invoices, PODs, bills of lading</span>
-              <div class="callout" style="top:-12px; right:-12px;">3</div>
-            </div>
-            <div style="font-size:11px; color:var(--text-light); margin-top:4px;">94 PDFs uploaded</div>
-          </div>
-        </div>
-
-        <!-- Merge Options -->
-        <div style="margin-top:20px; position:relative;">
-          <div style="font-size:12px; font-weight:600; margin-bottom:8px;">Merge Option</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <span style="background:var(--orange); color:#fff; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600;">Per Container</span>
-            <span style="background:#f1f5f9; padding:6px 14px; border-radius:6px; font-size:12px; border:1px solid var(--border);">All-in-One</span>
-            <span style="background:#f1f5f9; padding:6px 14px; border-radius:6px; font-size:12px; border:1px solid var(--border);">Invoices Only</span>
-            <span style="background:#f1f5f9; padding:6px 14px; border-radius:6px; font-size:12px; border:1px solid var(--border);">PODs Only</span>
-            <span style="background:#f1f5f9; padding:6px 14px; border-radius:6px; font-size:12px; border:1px solid var(--border);">BLs Only</span>
-          </div>
-          <div class="callout" style="top:-8px; right:-12px;">4</div>
-        </div>
-
-        <!-- Sort Order -->
-        <div style="margin-top:14px; position:relative;">
-          <div style="font-size:12px; font-weight:600; margin-bottom:8px;">Sort Order</div>
-          <div style="display:flex; gap:8px;">
-            <span style="background:var(--orange); color:#fff; padding:4px 12px; border-radius:6px; font-size:12px; font-weight:500;">Excel Order</span>
-            <span style="background:#f1f5f9; padding:4px 12px; border-radius:6px; font-size:12px; border:1px solid var(--border);">Container #</span>
-            <span style="background:#f1f5f9; padding:4px 12px; border-radius:6px; font-size:12px; border:1px solid var(--border);">Invoice #</span>
-          </div>
-          <div class="callout" style="top:-8px; right:-12px;">5</div>
-        </div>
-
-        <!-- Buttons -->
-        <div style="margin-top:20px; display:flex; gap:10px; position:relative;">
-          <div class="mock-btn">&#9654; Run Auto Merge</div>
-          <div class="mock-btn green">&#128190; Save to Folder</div>
-          <div class="callout" style="top:-10px; left:90px;">6</div>
-        </div>
-      </div>
-    </div>
+  <h2>3. Merge Tool</h2>
+  <div class="screen">
+    <img src="screenshots/merge.png" alt="Merge Tool">
+    <!-- Page title area -->
+    <div class="callout" style="top:5%; left:15%;">1</div>
+    <!-- Agent Online badge -->
+    <div class="callout" style="top:5%; left:82%;">2</div>
+    <!-- Step 1 Excel drop zone -->
+    <div class="callout" style="top:28%; left:28%;">3</div>
+    <!-- Step 2 PDF drop zone -->
+    <div class="callout" style="top:58%; left:28%;">4</div>
+    <!-- Document Queue -->
+    <div class="callout" style="top:20%; left:68%;">5</div>
+    <!-- Status Log -->
+    <div class="callout" style="top:52%; left:55%;">6</div>
+    <!-- AI Agent panel -->
+    <div class="callout" style="top:28%; left:90%;">7</div>
+    <!-- QBO Login -->
+    <div class="callout" style="top:63%; left:80%;">8</div>
+    <!-- TMS Login -->
+    <div class="callout" style="top:78%; left:80%;">9</div>
+    <!-- Mode badge at bottom -->
+    <div class="callout" style="top:92%; left:5%;">10</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Mode toggle — switch between Auto Mode and Manual Mode</div>
-    <div class="legend-item"><div class="legend-num">2</div> Drag your Excel spreadsheet here (must have a Container # column)</div>
-    <div class="legend-item"><div class="legend-num">3</div> Drag all your PDF files here — drop them all at once</div>
-    <div class="legend-item"><div class="legend-num">4</div> Pick how you want the output organized (see table below)</div>
-    <div class="legend-item"><div class="legend-num">5</div> Choose the order of the final files</div>
-    <div class="legend-item"><div class="legend-num">6</div> Click "Run Auto Merge" to start — or "Save to Folder" to pick where files go</div>
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>Page Title</strong> — Shows you're on the Merging Tool. The tabs next to it let you switch between Auto and Manual mode.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Agent Online / Quick Tool</strong> — Shows if the agent is running. "Quick Tool" is for fast manual merges.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Step 1 — Excel Drop Zone</strong> — Drag your Excel spreadsheet (.xlsx) here. The app reads it and finds your Container Numbers and Invoice Numbers automatically.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Step 2 — PDF Drop Zone</strong> — Drag all your PDF files here (invoices, PODs, bills of lading). You can drop them all at once.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>Document Queue</strong> — Shows the PDFs you've uploaded and how they're matched to containers. Empty until you upload files.</div></div>
+    <div class="legend-item"><div class="legend-num">6</div><div class="legend-text"><strong>Status Log</strong> — Shows real-time messages while the merge runs: what's being processed, any warnings, and when it's done.</div></div>
+    <div class="legend-item"><div class="legend-num">7</div><div class="legend-text"><strong>AI Agent Panel</strong> — Connects to QBO and TMS to automatically fetch missing documents. Shows connection status for each service.</div></div>
+    <div class="legend-item"><div class="legend-num">8</div><div class="legend-text"><strong>QBO Login</strong> — Click "Open QBO Login" to sign into QuickBooks Online. Required before the agent can fetch invoices.</div></div>
+    <div class="legend-item"><div class="legend-num">9</div><div class="legend-text"><strong>TMS Login</strong> — Click "Open TMS Login" to sign into TMS. Required before the agent can fetch PODs.</div></div>
+    <div class="legend-item"><div class="legend-num">10</div><div class="legend-text"><strong>Mode Badge</strong> — Shows the current mode (Idle, Auto Mode, or Manual Mode). "Clear All" resets everything.</div></div>
   </div>
-
-  <h4>Merge Options Explained</h4>
-  <table class="mock-table">
-    <tr><th>Option</th><th>What It Does</th></tr>
-    <tr><td><strong>Per Container</strong></td><td>Creates one PDF per container number, with all matching invoices + PODs inside. <em>Most common choice.</em></td></tr>
-    <tr><td><strong>All-in-One</strong></td><td>Merges everything into a single large PDF file.</td></tr>
-    <tr><td><strong>Invoices Only</strong></td><td>Only includes invoice PDFs (skips PODs and BLs).</td></tr>
-    <tr><td><strong>PODs Only</strong></td><td>Only includes Proof of Delivery documents.</td></tr>
-    <tr><td><strong>BLs Only</strong></td><td>Only includes Bills of Lading.</td></tr>
-  </table>
 
   <div class="box info">
     <div class="icon">&#128202;</div>
-    <div><strong>Smart Column Matching:</strong> The app is flexible about Excel column names — "Container #", "CNTR NO", "Container Number" all work. Same for invoice columns.</div>
+    <div><strong>Column matching is flexible</strong> — "Container #", "CNTR NO", "Container Number" all work. Same for invoice columns.</div>
   </div>
 
-  <!-- ── MANUAL MODE ── -->
-  <h3 id="merge-manual">5.2 Manual Mode (Quick Merge)</h3>
-  <p>For quick one-off merges when you don't have an Excel file:</p>
-
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Merge Tool — Manual Mode</span>
-    </div>
-    <div class="mockup-body" style="min-height:300px;">
-      <div class="mock-sidebar">
-        <div class="logo">NGL</div>
-        <div class="nav-item">Home</div>
-        <div class="nav-item active">Merge Tool</div>
-        <div class="nav-item">Invoice Sender</div>
-        <div class="nav-item">Customers</div>
-        <div class="nav-item">Settings</div>
-      </div>
-      <div class="mock-main">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <div style="font-size:18px; font-weight:700;">Merge Tool</div>
-          <div style="display:flex; gap:8px; position:relative;">
-            <span class="mock-badge gray">Auto Mode</span>
-            <span class="mock-badge green">Manual Mode</span>
-            <div class="callout" style="top:-14px; right:-14px;">1</div>
-          </div>
-        </div>
-
-        <div class="mock-dropzone" style="position:relative; margin-bottom:16px;">
-          &#128196; Drag 2 or more PDFs here<br>
-          <span style="font-size:11px; opacity:.7;">or click to browse</span>
-          <div class="callout" style="top:-12px; right:-12px;">2</div>
-        </div>
-
-        <!-- PDF list -->
-        <div style="position:relative;">
-          <div style="font-size:12px; font-weight:600; margin-bottom:8px;">Your PDFs (drag to reorder):</div>
-          <div style="background:#fff; border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:4px; display:flex; align-items:center; gap:8px; font-size:12px;">
-            <span style="color:var(--text-light); cursor:grab;">&#9776;</span>
-            <span style="font-weight:500;">1.</span> Invoice_MSCU1234567.pdf
-            <span style="margin-left:auto; color:var(--text-light); font-size:11px;">245 KB</span>
-            <span style="color:var(--red); cursor:pointer;">&times;</span>
-          </div>
-          <div style="background:#fff; border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:4px; display:flex; align-items:center; gap:8px; font-size:12px;">
-            <span style="color:var(--text-light); cursor:grab;">&#9776;</span>
-            <span style="font-weight:500;">2.</span> POD_MSCU1234567.pdf
-            <span style="margin-left:auto; color:var(--text-light); font-size:11px;">189 KB</span>
-            <span style="color:var(--red); cursor:pointer;">&times;</span>
-          </div>
-          <div style="background:#fff; border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:4px; display:flex; align-items:center; gap:8px; font-size:12px;">
-            <span style="color:var(--text-light); cursor:grab;">&#9776;</span>
-            <span style="font-weight:500;">3.</span> BOL_MSCU1234567.pdf
-            <span style="margin-left:auto; color:var(--text-light); font-size:11px;">312 KB</span>
-            <span style="color:var(--red); cursor:pointer;">&times;</span>
-          </div>
-          <div class="callout" style="top:-8px; right:-12px;">3</div>
-        </div>
-
-        <div style="margin-top:14px; position:relative;">
-          <div class="mock-btn">&#128196; Merge &amp; Download</div>
-          <div class="callout" style="top:-10px; left:100px;">4</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Click "Manual Mode" to switch</div>
-    <div class="legend-item"><div class="legend-num">2</div> Drag in 2 or more PDFs</div>
-    <div class="legend-item"><div class="legend-num">3</div> Drag the &#9776; handle to reorder — the order here is the page order in the final PDF</div>
-    <div class="legend-item"><div class="legend-num">4</div> Click to combine all PDFs into one file and download it</div>
-  </div>
-
-  <!-- ── AI AGENT PANEL ── -->
-  <h3 id="merge-agent">5.3 AI Agent Panel</h3>
-  <p>On the right side of the Merge Tool, you'll see the <strong>AI Agent Panel</strong>. This connects to QBO and TMS to automatically download documents you're missing.</p>
-
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">AI Agent Panel</span>
-    </div>
-    <div class="mockup-body" style="min-height:280px; padding:24px;">
-      <!-- Status row -->
-      <div style="display:flex; gap:10px; margin-bottom:20px; position:relative;">
-        <span class="mock-badge green">QBO: Logged In</span>
-        <span class="mock-badge orange">TMS: Not Connected</span>
-        <span class="mock-badge gray">Classifier: Ready</span>
-        <div class="callout" style="top:-14px; right:-10px;">1</div>
-      </div>
-
-      <!-- Login buttons -->
-      <div style="display:flex; gap:10px; margin-bottom:20px; position:relative;">
-        <div class="mock-btn secondary" style="font-size:12px;">&#128275; Open QBO Login</div>
-        <div class="mock-btn secondary" style="font-size:12px;">&#128275; Login to TMS</div>
-        <div class="callout" style="top:-14px; right:-10px;">2</div>
-      </div>
-
-      <!-- Fetch options -->
-      <div style="font-size:12px; font-weight:600; margin-bottom:8px;">Fetch Missing Documents</div>
-      <div style="display:flex; gap:12px; margin-bottom:14px; position:relative;">
-        <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-          <input type="checkbox" checked disabled> Invoice
-        </label>
-        <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-          <input type="checkbox" checked disabled> POD
-        </label>
-        <label style="font-size:12px; display:flex; align-items:center; gap:4px; color:var(--text-light);">
-          <input type="checkbox" disabled> BL <span style="font-size:10px;">(coming soon)</span>
-        </label>
-        <div class="callout" style="top:-14px; right:-10px;">3</div>
-      </div>
-
-      <div style="position:relative;">
-        <div class="mock-btn" style="font-size:12px;">&#128269; Auto-Fetch Missing</div>
-        <div class="callout" style="top:-10px; right:100px;">4</div>
-      </div>
-    </div>
-  </div>
-  <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Status badges — shows which services you're connected to</div>
-    <div class="legend-item"><div class="legend-num">2</div> Login buttons — click to open a browser window and sign into QBO or TMS</div>
-    <div class="legend-item"><div class="legend-num">3</div> Check which document types you want the agent to fetch</div>
-    <div class="legend-item"><div class="legend-num">4</div> Click to start — the agent searches QBO/TMS for any missing documents</div>
-  </div>
-
-  <div class="box tip">
-    <div class="icon">&#128161;</div>
-    <div><strong>How it works:</strong> After you upload your Excel and PDFs, the app knows which containers are missing documents. Click "Auto-Fetch Missing" and the agent will search QBO and TMS to find and download them for you. You can keep working while it runs.</div>
-  </div>
-
-  <!-- ── STATUS LOG ── -->
-  <h3 id="merge-log">5.4 Status Log &amp; Failure Report</h3>
-
-  <div class="grid-2" style="margin:16px 0;">
-    <div class="feature-card">
-      <strong style="color:var(--blue);">Status Log</strong>
-      <p>A collapsible bar at the bottom that shows real-time messages while the merge runs. Click it to expand/collapse.</p>
-      <div style="margin-top:10px; font-size:12px;">
-        <div style="color:var(--blue);">&#9432; Processing MSCU1234567...</div>
-        <div style="color:var(--green);">&#10003; Merged 3 PDFs for MSCU1234567</div>
-        <div style="color:var(--amber);">&#9888; No POD found for TEMU9876543</div>
-        <div style="color:var(--red);">&#10007; Corrupt PDF skipped: invoice_bad.pdf</div>
-      </div>
-    </div>
-    <div class="feature-card">
-      <strong style="color:var(--red);">Failure Report</strong>
-      <p>After a merge finishes, this lists any containers where PDFs could not be matched.</p>
-      <div style="margin-top:10px; font-size:12px;">
-        <div><strong>If a container shows up here:</strong></div>
-        <ul style="margin:4px 0 0 16px; font-size:12px;">
-          <li>Check that your PDF file names contain the container number</li>
-          <li>Make sure the Excel has the correct container listed</li>
-        </ul>
-      </div>
-    </div>
-  </div>
+  <h4 style="margin-top:20px; font-size:15px; font-weight:600;">Merge Options (appear after uploading files)</h4>
+  <table class="ref-table">
+    <tr><th>Option</th><th>What It Does</th></tr>
+    <tr><td><strong>Per Container</strong></td><td>One PDF per container with all matching documents inside. Most common.</td></tr>
+    <tr><td><strong>All-in-One</strong></td><td>Everything merged into a single PDF.</td></tr>
+    <tr><td><strong>Invoices Only</strong></td><td>Only invoice PDFs.</td></tr>
+    <tr><td><strong>PODs Only</strong></td><td>Only Proof of Delivery documents.</td></tr>
+    <tr><td><strong>BLs Only</strong></td><td>Only Bills of Lading.</td></tr>
+  </table>
 </section>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 6: INVOICE SENDER          -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ INVOICE SENDER ═══════ -->
 <section id="invoice">
-  <h2>6. Invoice Sender — Emailing Invoices</h2>
-  <p>The Invoice Sender lets you email invoices to customers through QuickBooks Online. Upload a CSV of invoices, the app matches them to your customer list, and sends them in bulk.</p>
-
-  <!-- Flow -->
-  <div class="flow">
-    <div class="flow-step active"><div class="step-num">1</div>Upload CSV<div class="sub">invoice list</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step"><div class="step-num">2</div>Auto-Match<div class="sub">to customers</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step"><div class="step-num">3</div>Review Table<div class="sub">check statuses</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step"><div class="step-num">4</div>Test Mode<div class="sub">(recommended)</div></div>
-    <div class="flow-arrow">&#10142;</div>
-    <div class="flow-step" style="border-color:var(--green);"><div class="step-num" style="background:var(--green);">5</div>Send<div class="sub">via QBO</div></div>
-  </div>
-
-  <!-- Invoice Sender Mockup -->
-  <h3 id="invoice-steps">6.1 Step by Step</h3>
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Invoice Sender</span>
-    </div>
-    <div class="mockup-body" style="min-height:440px;">
-      <div class="mock-sidebar">
-        <div class="logo">NGL</div>
-        <div class="nav-item">Home</div>
-        <div class="nav-item">Merge Tool</div>
-        <div class="nav-item active">Invoice Sender</div>
-        <div class="nav-item">Customers</div>
-        <div class="nav-item">Settings</div>
-      </div>
-      <div class="mock-main">
-        <div style="font-size:18px; font-weight:700; margin-bottom:16px;">Invoice Sender</div>
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-          <!-- Left: CSV upload -->
-          <div>
-            <div class="mock-dropzone highlight" style="position:relative;">
-              &#128203; Drop your CSV or Excel file here<br>
-              <span style="font-size:11px; opacity:.7;">invoice export from your system</span>
-              <div class="callout" style="top:-12px; right:-12px;">1</div>
-            </div>
-            <div style="margin-top:10px; position:relative;">
-              <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Email Subject Template</label>
-              <input class="mock-input" value="Invoice #{invoice_number} - {customer_name}" disabled>
-              <div class="callout" style="top:-8px; right:-12px;">2</div>
-            </div>
-          </div>
-          <!-- Right: actions -->
-          <div>
-            <div style="display:flex; gap:8px; margin-bottom:12px; position:relative;">
-              <div class="mock-btn" style="flex:1; text-align:center;">&#9654; Send Invoices</div>
-              <div class="mock-btn secondary" style="flex:1; text-align:center;">&#128220; Audit Log</div>
-              <div class="callout" style="top:-12px; right:-12px;">3</div>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; font-size:12px; position:relative;">
-              <div style="width:14px; height:14px; border:2px solid var(--orange); border-radius:3px; background:#fff7ed;"></div>
-              <span>Test Mode (no emails sent)</span>
-              <div class="callout" style="top:-12px; right:-12px;">4</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Summary bar -->
-        <div style="display:flex; gap:12px; margin-top:18px; padding:8px 12px; background:#f8fafc; border-radius:6px; font-size:12px; position:relative;">
-          <span><strong>Total:</strong> 15</span>
-          <span style="color:var(--green);"><strong>Ready:</strong> 12</span>
-          <span style="color:var(--orange);"><strong>No Email:</strong> 2</span>
-          <span style="color:var(--red);"><strong>No Match:</strong> 1</span>
-          <div class="callout" style="top:-14px; right:-10px;">5</div>
-        </div>
-
-        <!-- Invoice Table -->
-        <table class="mock-table" style="margin-top:8px; position:relative;">
-          <thead>
-            <tr><th>Invoice #</th><th>Container</th><th>Customer</th><th>Amount</th><th>Email</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            <tr><td style="font-family:monospace; color:var(--orange); cursor:pointer; text-decoration:underline;">INV-4521</td><td>MSCU1234567</td><td>ABC Logistics</td><td style="text-align:right;">$3,450.00</td><td style="font-size:11px;">billing@abc.com</td><td><span class="mock-badge green">Ready</span></td></tr>
-            <tr><td style="font-family:monospace; color:var(--orange); cursor:pointer; text-decoration:underline;">INV-4522</td><td>TEMU9876543</td><td>XYZ Transport</td><td style="text-align:right;">$1,200.00</td><td style="font-size:11px;">ap@xyz.com</td><td><span class="mock-badge green">Ready</span></td></tr>
-            <tr style="background:#fef2f2;"><td style="font-family:monospace; color:var(--orange); cursor:pointer; text-decoration:underline;">INV-4523</td><td>MAGU5551234</td><td>Fast Freight Inc</td><td style="text-align:right;">$890.00</td><td style="font-size:11px; color:var(--red);">—</td><td><span class="mock-badge orange">No Email</span></td></tr>
-            <tr style="background:#fef2f2;"><td style="font-family:monospace;">INV-4524</td><td>KKFU7654819</td><td style="color:var(--red);">Unknown Co.</td><td style="text-align:right;">$2,100.00</td><td style="font-size:11px; color:var(--red);">—</td><td><span class="mock-badge red">No Match</span></td></tr>
-          </tbody>
-          <div class="callout" style="top:20px; right:-12px;">6</div>
-        </table>
-      </div>
-    </div>
+  <h2>4. Invoice Sender</h2>
+  <div class="screen">
+    <img src="screenshots/invoice-sender.png" alt="Invoice Sender">
+    <!-- CSV drop zone -->
+    <div class="callout" style="top:30%; left:24%;">1</div>
+    <!-- Subject template -->
+    <div class="callout" style="top:18%; left:68%;">2</div>
+    <!-- Test mode checkbox -->
+    <div class="callout" style="top:33%; left:55%;">3</div>
+    <!-- Send button -->
+    <div class="callout" style="top:41%; left:68%;">4</div>
+    <!-- Audit Log -->
+    <div class="callout" style="top:49%; left:62%;">5</div>
+    <!-- Invoice table headers -->
+    <div class="callout" style="top:60%; left:45%;">6</div>
+    <!-- Status Log -->
+    <div class="callout" style="top:82%; left:20%;">7</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Drop your CSV or Excel file here — the app reads invoice numbers, customer names, and amounts</div>
-    <div class="legend-item"><div class="legend-num">2</div> Customize the email subject line. Use tokens like {invoice_number} and {customer_name}</div>
-    <div class="legend-item"><div class="legend-num">3</div> "Send Invoices" starts the send. "Audit Log" shows history of past sends</div>
-    <div class="legend-item"><div class="legend-num">4</div> Check this box to preview without sending — always test first!</div>
-    <div class="legend-item"><div class="legend-num">5</div> Summary bar — quick count of ready, missing, and problem invoices</div>
-    <div class="legend-item"><div class="legend-num">6</div> Invoice table — click any invoice number to open the Review window and edit details</div>
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>CSV / Excel Drop Zone</strong> — Drag your invoice export file here. Must have columns like Invoice Number, Customer, and Amount.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Subject Template</strong> — Customize the email subject line. Use {invoice_number} and {customer_name} as placeholders.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Test Mode</strong> — Check this to preview without actually sending emails. Always test first!</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Send Invoices</strong> — Starts sending all "Ready" invoices through QuickBooks Online.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>Audit Log</strong> — View a history of everything that's been sent — when, to whom, and the result.</div></div>
+    <div class="legend-item"><div class="legend-num">6</div><div class="legend-text"><strong>Invoice Table</strong> — Shows each invoice with its customer match, amount, send method, and status. Click an invoice number to edit its details before sending.</div></div>
+    <div class="legend-item"><div class="legend-num">7</div><div class="legend-text"><strong>Status Log</strong> — Shows live progress while invoices are being sent.</div></div>
   </div>
 
-  <h4>Invoice Status Badges</h4>
-  <table class="mock-table" style="max-width:500px;">
-    <tr><th>Badge</th><th>What It Means</th></tr>
-    <tr><td><span class="mock-badge green">Ready</span></td><td>Matched to a customer with an email — ready to send</td></tr>
-    <tr><td><span class="mock-badge orange">No Email</span></td><td>Customer found, but no email on file. Add their email in Customer Manager.</td></tr>
-    <tr><td><span class="mock-badge red">No Match</span></td><td>Customer not in your database. Add them in Customer Manager first.</td></tr>
-    <tr><td><span class="mock-badge blue">In Progress</span></td><td>Currently being sent through QBO</td></tr>
-    <tr><td><span class="mock-badge green">Sent</span></td><td>Successfully sent</td></tr>
-    <tr><td><span class="mock-badge red">Error</span></td><td>Send failed — check the error message and retry</td></tr>
+  <h4 style="margin-top:20px; font-size:15px; font-weight:600;">Invoice Status Badges</h4>
+  <table class="ref-table" style="max-width:500px;">
+    <tr><th>Badge</th><th>Meaning</th></tr>
+    <tr><td><span class="badge green">Ready</span></td><td>Matched to a customer with email — ready to send.</td></tr>
+    <tr><td><span class="badge orange">No Email</span></td><td>Customer found, but no email on file. Add it in Customer Manager.</td></tr>
+    <tr><td><span class="badge red">No Match</span></td><td>Customer not in your database. Add them first.</td></tr>
+    <tr><td><span class="badge green">Sent</span></td><td>Successfully sent.</td></tr>
+    <tr><td><span class="badge red">Error</span></td><td>Send failed — check the error message and retry.</td></tr>
   </table>
-
-  <!-- ── REVIEW MODAL ── -->
-  <h3 id="invoice-review">6.2 Review Window</h3>
-  <p>Click any <strong>invoice number</strong> in the table to open the Review window. Here you can edit details before sending:</p>
-
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Review Invoice</span>
-    </div>
-    <div class="mockup-body" style="display:flex; justify-content:center; padding:30px;">
-      <div style="width:460px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:24px; position:relative; box-shadow:0 8px 30px rgba(0,0,0,.1);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <div style="font-size:16px; font-weight:700;">Review Invoice #INV-4521</div>
-          <span style="font-size:18px; color:var(--text-light); cursor:pointer;">&times;</span>
-        </div>
-
-        <!-- Info grid -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; font-size:12px;">
-          <div style="background:#f8fafc; padding:8px 12px; border-radius:6px;"><strong>Customer:</strong> ABC Logistics</div>
-          <div style="background:#f8fafc; padding:8px 12px; border-radius:6px;"><strong>Amount:</strong> $3,450.00</div>
-          <div style="background:#f8fafc; padding:8px 12px; border-radius:6px;"><strong>Container:</strong> MSCU1234567</div>
-          <div style="background:#f8fafc; padding:8px 12px; border-radius:6px;"><strong>Due Date:</strong> 04/15/2026</div>
-        </div>
-
-        <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Email To</label>
-        <div style="position:relative;">
-          <input class="mock-input" value="billing@abc.com" disabled style="margin-bottom:12px;">
-          <div class="callout" style="top:-8px; right:-12px;">1</div>
-        </div>
-
-        <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Subject Line</label>
-        <div style="position:relative;">
-          <input class="mock-input" value="Invoice #INV-4521 - ABC Logistics" disabled style="margin-bottom:16px;">
-          <div class="callout" style="top:-8px; right:-12px;">2</div>
-        </div>
-
-        <div style="display:flex; gap:8px; justify-content:flex-end; position:relative;">
-          <div class="mock-btn secondary">Cancel</div>
-          <div class="mock-btn">Save Changes</div>
-          <div class="callout" style="top:-12px; right:-12px;">3</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Edit the email address if you need to change where this invoice goes</div>
-    <div class="legend-item"><div class="legend-num">2</div> Edit the subject line for this specific invoice</div>
-    <div class="legend-item"><div class="legend-num">3</div> Click "Save Changes" to update, or "Cancel" to discard</div>
-  </div>
-
-  <div class="box warn">
-    <div class="icon">&#9888;&#65039;</div>
-    <div><strong>QBO must be connected.</strong> The Invoice Sender needs the agent to be logged into QuickBooks Online. If the QBO badge shows "Not Connected," go to Settings and log in first.</div>
-  </div>
-
-  <!-- ── SEND METHODS ── -->
-  <h3 id="invoice-methods">6.3 Send Methods Explained</h3>
-  <p>Each customer has a <strong>send method</strong> set in the Customer Manager. This controls how their invoices are delivered:</p>
-
-  <div class="grid-3" style="margin:16px 0;">
-    <div class="feature-card" style="border-color:#dcfce7;">
-      <strong style="color:var(--green);">Standard QBO Email</strong>
-      <p>Sends all attachments (invoice, POD, BL) together in one email through QuickBooks Online.</p>
-      <div style="margin-top:8px;"><span class="mock-badge green">Most common</span></div>
-    </div>
-    <div class="feature-card" style="border-color:var(--orange-light);">
-      <strong style="color:var(--orange);">QBO Invoice + POD Email (OEC)</strong>
-      <p>Sends the invoice through QBO, then sends the POD in a separate email. For carriers that need the POD delivered separately.</p>
-    </div>
-    <div class="feature-card" style="border-color:#fef08a;">
-      <strong style="color:var(--amber);">Portal Upload</strong>
-      <p>Merges invoice and POD into one file and uploads it to the carrier's web portal. No QBO email is sent.</p>
-    </div>
-  </div>
 </section>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 7: CUSTOMER MANAGER        -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ CUSTOMERS ═══════ -->
 <section id="customers">
-  <h2>7. Customer Manager</h2>
-  <p>The Customer Manager stores your customer profiles — names, emails, document rules, and send preferences. The Invoice Sender uses this data to know where and how to send each invoice.</p>
-
-  <!-- Customer Mockup -->
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Customer Manager</span>
-    </div>
-    <div class="mockup-body" style="min-height:380px;">
-      <div class="mock-sidebar">
-        <div class="logo">NGL</div>
-        <div class="nav-item">Home</div>
-        <div class="nav-item">Merge Tool</div>
-        <div class="nav-item">Invoice Sender</div>
-        <div class="nav-item active">Customers</div>
-        <div class="nav-item">Settings</div>
-      </div>
-      <div class="mock-main">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <div style="font-size:18px; font-weight:700;">Customers</div>
-          <div style="display:flex; gap:8px; position:relative;">
-            <div class="mock-btn" style="font-size:12px;">+ Add Customer</div>
-            <div class="mock-btn secondary" style="font-size:12px;">Import</div>
-            <div class="mock-btn secondary" style="font-size:12px;">Export</div>
-            <div class="callout" style="top:-14px; right:-14px;">1</div>
-          </div>
-        </div>
-
-        <!-- Search bar -->
-        <div style="display:flex; gap:10px; margin-bottom:14px;">
-          <div style="position:relative; flex:1;">
-            <input class="mock-input" placeholder="Search customers by code or name..." disabled style="padding-left:32px;">
-            <span style="position:absolute; left:10px; top:8px; font-size:14px;">&#128269;</span>
-            <div class="callout" style="top:-10px; right:-12px;">2</div>
-          </div>
-          <div style="position:relative;">
-            <select class="mock-input" disabled style="width:130px;">
-              <option>Active Only</option>
-            </select>
-            <div class="callout" style="top:-10px; right:-12px;">3</div>
-          </div>
-        </div>
-
-        <!-- Table -->
-        <table class="mock-table" style="position:relative;">
-          <thead>
-            <tr><th>Code</th><th>Name</th><th>Emails</th><th>Method</th><th>Required Docs</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="font-family:monospace; font-weight:600;">ABC</td>
-              <td style="font-weight:500;">ABC Logistics</td>
-              <td style="font-size:11px;">
-                <span style="background:#eff6ff; padding:1px 6px; border-radius:3px;">billing@abc.com</span>
-                <span style="background:#eff6ff; padding:1px 6px; border-radius:3px;">ap@abc.com</span>
-              </td>
-              <td><span class="mock-badge green" style="font-size:10px;">QBO</span></td>
-              <td style="font-size:11px;">
-                <span style="background:#f0fdf4; padding:1px 6px; border-radius:3px;">INV</span>
-                <span style="background:#f0fdf4; padding:1px 6px; border-radius:3px;">POD</span>
-              </td>
-              <td><span class="mock-badge green">Active</span></td>
-              <td>
-                <span style="color:var(--orange); font-size:12px; cursor:pointer; font-weight:500;">Edit</span>
-                <span style="color:var(--red); font-size:12px; cursor:pointer; margin-left:6px;">Delete</span>
-              </td>
-            </tr>
-            <tr>
-              <td style="font-family:monospace; font-weight:600;">XYZ</td>
-              <td style="font-weight:500;">XYZ Transport <span class="mock-badge orange" style="font-size:9px;">OEC</span></td>
-              <td style="font-size:11px;">
-                <span style="background:#eff6ff; padding:1px 6px; border-radius:3px;">invoices@xyz.com</span>
-              </td>
-              <td><span class="mock-badge orange" style="font-size:10px;">OEC</span></td>
-              <td style="font-size:11px;">
-                <span style="background:#f0fdf4; padding:1px 6px; border-radius:3px;">INV</span>
-                <span style="background:#f0fdf4; padding:1px 6px; border-radius:3px;">POD / BOL</span>
-              </td>
-              <td><span class="mock-badge green">Active</span></td>
-              <td>
-                <span style="color:var(--orange); font-size:12px; cursor:pointer; font-weight:500;">Edit</span>
-                <span style="color:var(--red); font-size:12px; cursor:pointer; margin-left:6px;">Delete</span>
-              </td>
-            </tr>
-            <tr style="opacity:.6;">
-              <td style="font-family:monospace; font-weight:600;">FAST</td>
-              <td>Fast Freight Inc</td>
-              <td style="font-size:11px; color:var(--text-light);">— none —</td>
-              <td><span class="mock-badge gray" style="font-size:10px;">QBO</span></td>
-              <td style="font-size:11px;">ALL</td>
-              <td><span class="mock-badge red">Inactive</span></td>
-              <td><span style="color:var(--green); font-size:12px; cursor:pointer; font-weight:500;">Activate</span></td>
-            </tr>
-          </tbody>
-          <div class="callout" style="bottom:10px; right:-12px;">4</div>
-        </table>
-      </div>
-    </div>
+  <h2>5. Customer Manager</h2>
+  <div class="screen">
+    <img src="screenshots/customers.png" alt="Customer Manager">
+    <!-- Search bar -->
+    <div class="callout" style="top:10%; left:28%;">1</div>
+    <!-- Active Only filter -->
+    <div class="callout" style="top:10%; left:55%;">2</div>
+    <!-- Add Customer button -->
+    <div class="callout" style="top:10%; left:68%;">3</div>
+    <!-- Import button -->
+    <div class="callout" style="top:10%; left:82%;">4</div>
+    <!-- Export button -->
+    <div class="callout" style="top:10%; left:90%;">5</div>
+    <!-- Table -->
+    <div class="callout" style="top:40%; left:50%;">6</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Action buttons — Add a customer, Import from file, or Export your list</div>
-    <div class="legend-item"><div class="legend-num">2</div> Search bar — type a name or code to filter the table</div>
-    <div class="legend-item"><div class="legend-num">3</div> Filter — "Active Only" hides deleted customers, "All" shows everything</div>
-    <div class="legend-item"><div class="legend-num">4</div> Customer table — click "Edit" to change a customer, "Delete" to deactivate</div>
-  </div>
-
-  <!-- ── ADD CUSTOMER MODAL ── -->
-  <h3 id="customers-add">7.1 Adding a Customer</h3>
-  <p>Click <strong>"+ Add Customer"</strong> to open this form:</p>
-
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Add Customer</span>
-    </div>
-    <div class="mockup-body" style="display:flex; justify-content:center; padding:30px;">
-      <div style="width:480px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:24px; position:relative; box-shadow:0 8px 30px rgba(0,0,0,.1);">
-        <div style="font-size:16px; font-weight:700; margin-bottom:20px;">Add Customer</div>
-
-        <!-- Basic Info -->
-        <div style="font-size:13px; font-weight:600; color:var(--orange); margin-bottom:10px; border-bottom:1px solid var(--orange-light); padding-bottom:4px;">Basic Info</div>
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-          <div style="position:relative;">
-            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Customer Code *</label>
-            <input class="mock-input" value="ABC" disabled style="text-transform:uppercase;">
-            <div class="callout" style="top:-8px; right:-10px;">1</div>
-          </div>
-          <div>
-            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Customer Name *</label>
-            <input class="mock-input" value="ABC Logistics" disabled>
-          </div>
-        </div>
-
-        <!-- Emails -->
-        <div style="font-size:13px; font-weight:600; color:var(--orange); margin-bottom:10px; border-bottom:1px solid var(--orange-light); padding-bottom:4px;">Email Addresses</div>
-
-        <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Email Addresses</label>
-        <div style="border:1px solid var(--border); border-radius:6px; padding:6px 8px; display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; min-height:36px; position:relative;">
-          <span style="background:var(--orange-light); color:#9a3412; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">billing@abc.com &times;</span>
-          <span style="background:var(--orange-light); color:#9a3412; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">ap@abc.com &times;</span>
-          <div class="callout" style="top:-14px; right:-12px;">2</div>
-        </div>
-        <div style="font-size:11px; color:var(--text-light); margin-bottom:12px;">Type an email and press Enter to add it. Click &times; to remove.</div>
-
-        <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">CC Emails</label>
-        <div style="border:1px solid var(--border); border-radius:6px; padding:6px 8px; display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; min-height:36px;">
-          <span style="background:#e2e8f0; color:#475569; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">ar@ngltrans.net &times;</span>
-        </div>
-        <div style="font-size:11px; color:var(--text-light); margin-bottom:14px;">ar@ngltrans.net is always included automatically.</div>
-
-        <!-- Send Method -->
-        <div style="font-size:13px; font-weight:600; color:var(--orange); margin-bottom:10px; border-bottom:1px solid var(--orange-light); padding-bottom:4px;">Send Method</div>
-
-        <div style="position:relative;">
-          <select class="mock-input" disabled style="margin-bottom:14px;">
-            <option>Standard QBO Email</option>
-          </select>
-          <div class="callout" style="top:-8px; right:-12px;">3</div>
-        </div>
-
-        <!-- Required Docs -->
-        <div style="font-size:13px; font-weight:600; color:var(--orange); margin-bottom:10px; border-bottom:1px solid var(--orange-light); padding-bottom:4px;">Required Documents</div>
-
-        <div style="display:flex; gap:8px; margin-bottom:8px; position:relative;">
-          <span style="background:var(--orange); color:#fff; padding:4px 12px; border-radius:6px; font-size:12px; font-weight:500;">Send All</span>
-          <span style="background:#f1f5f9; padding:4px 12px; border-radius:6px; font-size:12px; border:1px solid var(--border);">Require Specific</span>
-          <div class="callout" style="top:-12px; right:-12px;">4</div>
-        </div>
-
-        <div style="display:flex; gap:10px; margin-bottom:14px; position:relative;">
-          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" checked disabled> Invoice
-          </label>
-          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" checked disabled> POD
-          </label>
-          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" disabled> BOL
-          </label>
-          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" disabled> BL
-          </label>
-          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" disabled> PL
-          </label>
-          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" disabled> DO
-          </label>
-          <div class="callout" style="top:-14px; right:-12px;">5</div>
-        </div>
-
-        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:20px;">
-          <div class="mock-btn secondary">Cancel</div>
-          <div class="mock-btn">Save Customer</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> Customer Code — a short unique ID like "ABC" or "FAST01" (can't be changed later)</div>
-    <div class="legend-item"><div class="legend-num">2</div> Email tags — type an email and press Enter. Click &times; to remove one</div>
-    <div class="legend-item"><div class="legend-num">3</div> Send Method — how this customer receives invoices (QBO Email, OEC, or Portal)</div>
-    <div class="legend-item"><div class="legend-num">4</div> "Send All" attaches everything. "Require Specific" lets you pick which docs are needed</div>
-    <div class="legend-item"><div class="legend-num">5</div> Check the boxes for which documents this customer requires</div>
-  </div>
-
-  <div class="box tip">
-    <div class="icon">&#128161;</div>
-    <div><strong>Either/Or Groups:</strong> Some customers accept POD <em>or</em> BOL (either one is fine). When you check "Require Specific" and select multiple docs, you can link two as an "either/or" pair — the invoice will pass if at least one is attached.</div>
-  </div>
-
-  <!-- ── EDIT & DELETE ── -->
-  <h3 id="customers-edit">7.2 Editing &amp; Deleting</h3>
-  <div class="grid-2" style="margin:12px 0;">
-    <div class="feature-card">
-      <strong style="color:var(--orange);">Editing</strong>
-      <p>Click <strong>"Edit"</strong> on any customer row. The same form opens with their existing information filled in. Make your changes and click "Update Customer."</p>
-    </div>
-    <div class="feature-card">
-      <strong style="color:var(--red);">Deleting</strong>
-      <p>Click <strong>"Delete"</strong> on an active customer. This <em>deactivates</em> them — they become Inactive and disappear from the active list. They can be brought back anytime by clicking "Activate."</p>
-    </div>
-  </div>
-
-  <div class="box note">
-    <div class="icon">&#128712;</div>
-    <div><strong>Nothing is permanently deleted.</strong> "Delete" just hides the customer. Switch the filter to "All Customers" to see inactive ones and reactivate them.</div>
-  </div>
-
-  <!-- ── IMPORT & EXPORT ── -->
-  <h3 id="customers-import">7.3 Import &amp; Export</h3>
-  <div class="grid-2" style="margin:12px 0;">
-    <div class="feature-card">
-      <strong style="color:var(--blue);">&#11014; Import</strong>
-      <p>Click <strong>"Import"</strong> to load customers in bulk from an Excel, CSV, or JSON file.</p>
-      <ul style="font-size:12px; margin-top:8px; padding-left:16px;">
-        <li><strong>Required columns:</strong> Code and Name</li>
-        <li><strong>Optional:</strong> Email, CC, BCC, Send Method, Required Docs, Notes</li>
-        <li>Column names are matched flexibly</li>
-      </ul>
-    </div>
-    <div class="feature-card">
-      <strong style="color:var(--green);">&#11015; Export</strong>
-      <p>Click <strong>"Export"</strong> to download your entire customer list as an Excel file.</p>
-      <ul style="font-size:12px; margin-top:8px; padding-left:16px;">
-        <li>Good for backups</li>
-        <li>Good for sharing between computers</li>
-        <li>Can be re-imported later</li>
-      </ul>
-    </div>
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>Search Bar</strong> — Type a customer code or name to filter the table.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Active Only Filter</strong> — Switch between "Active Only" and "All Customers" to show or hide deactivated customers.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>+ Add Customer</strong> — Opens the Add Customer form to create a new profile.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Import</strong> — Load customers in bulk from an Excel, CSV, or JSON file.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>Export</strong> — Download your entire customer list as an Excel file for backup.</div></div>
+    <div class="legend-item"><div class="legend-num">6</div><div class="legend-text"><strong>Customer Table</strong> — Shows all customers with their code, name, emails, required docs, notes, and status. Click "Edit" on any row to change their info, or "Delete" to deactivate them.</div></div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 8: SETTINGS                -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ ADD CUSTOMER FORM ═══════ -->
+<section id="customer-form">
+  <h2>6. Add Customer Form</h2>
+  <div class="screen" style="max-width:420px; margin:16px auto; display:block;">
+    <img src="screenshots/customer-form.png" alt="Add Customer form">
+    <!-- Customer Code -->
+    <div class="callout" style="top:9%; left:30%;">1</div>
+    <!-- Customer Name -->
+    <div class="callout" style="top:9%; left:80%;">2</div>
+    <!-- Email Addresses -->
+    <div class="callout" style="top:19%; left:80%;">3</div>
+    <!-- CC Emails -->
+    <div class="callout" style="top:30%; left:80%;">4</div>
+    <!-- BCC -->
+    <div class="callout" style="top:39%; left:80%;">5</div>
+    <!-- Send Method -->
+    <div class="callout" style="top:51%; left:80%;">6</div>
+    <!-- Required Docs -->
+    <div class="callout" style="top:63%; left:60%;">7</div>
+    <!-- Notes -->
+    <div class="callout" style="top:78%; left:80%;">8</div>
+    <!-- Save button -->
+    <div class="callout" style="top:90%; left:80%;">9</div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>Customer Code</strong> — A short unique ID for the customer (like "ABC" or "FAST01"). Can't be changed later.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Customer Name</strong> — The customer's full name.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Email Addresses</strong> — Type an email and press Enter to add it. These are the main recipients for invoices.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>CC Emails</strong> — Extra people to copy on every email. ar@ngltrans.net is always included automatically.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>BCC Emails</strong> — Hidden copies. Recipients here won't be visible to the customer.</div></div>
+    <div class="legend-item"><div class="legend-num">6</div><div class="legend-text"><strong>Send Method</strong> — How invoices are delivered: Standard QBO Email, QBO Invoice + separate POD Email (OEC), or Portal Upload.</div></div>
+    <div class="legend-item"><div class="legend-num">7</div><div class="legend-text"><strong>Required Documents</strong> — "Send All Attachments" sends everything. "Require Specific Docs" lets you pick exactly which documents this customer needs (Invoice, POD, BOL, etc.).</div></div>
+    <div class="legend-item"><div class="legend-num">8</div><div class="legend-text"><strong>Notes</strong> — Optional notes about this customer for your reference.</div></div>
+    <div class="legend-item"><div class="legend-num">9</div><div class="legend-text"><strong>Save Customer</strong> — Click to save the new customer. "Cancel" closes without saving.</div></div>
+  </div>
+</section>
+
+<!-- ═══════ EDIT CUSTOMER ═══════ -->
+<section id="customer-edit">
+  <h2>7. Edit Customer Form</h2>
+  <div class="screen" style="max-width:420px; margin:16px auto; display:block;">
+    <img src="screenshots/customer-edit.png" alt="Edit Customer form">
+    <!-- Customer Code (locked) -->
+    <div class="callout" style="top:8%; left:30%;">1</div>
+    <!-- Email tags -->
+    <div class="callout" style="top:22%; left:80%;">2</div>
+    <!-- Send All / Require Specific toggle -->
+    <div class="callout" style="top:62%; left:55%;">3</div>
+    <!-- Update Customer button -->
+    <div class="callout" style="top:92%; left:75%;">4</div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>Customer Code (locked)</strong> — The code can't be changed after creation. Everything else can be edited.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>Email Tags</strong> — Existing emails show as tags. Click the X on a tag to remove it. Type a new one and press Enter to add.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Required Docs Toggle</strong> — Switch between "Send All Attachments" and "Require Specific Docs" to control what gets sent.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Update Customer</strong> — Click to save your changes. "Cancel" closes without saving.</div></div>
+  </div>
+</section>
+
+<!-- ═══════ SETTINGS ═══════ -->
 <section id="settings">
-  <h2>8. Settings &amp; Connections</h2>
-  <p>The Settings page lets you manage your connections to QuickBooks Online and TMS, configure notifications, and check system health.</p>
-
-  <div class="mockup">
-    <div class="mockup-bar">
-      <div class="mockup-dot r"></div><div class="mockup-dot y"></div><div class="mockup-dot g"></div>
-      <span class="title">Settings</span>
-    </div>
-    <div class="mockup-body" style="min-height:300px;">
-      <div class="mock-sidebar">
-        <div class="logo">NGL</div>
-        <div class="nav-item">Home</div>
-        <div class="nav-item">Merge Tool</div>
-        <div class="nav-item">Invoice Sender</div>
-        <div class="nav-item">Customers</div>
-        <div class="nav-item active">Settings</div>
-      </div>
-      <div class="mock-main">
-        <div style="font-size:18px; font-weight:700; margin-bottom:16px;">Settings</div>
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-          <!-- QBO Connection -->
-          <div style="background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:16px; position:relative;">
-            <div style="font-size:13px; font-weight:600; margin-bottom:8px;">QuickBooks Online</div>
-            <span class="mock-badge green" style="margin-bottom:10px; display:inline-block;">Logged In</span>
-            <div style="margin-top:8px;">
-              <div class="mock-btn secondary" style="font-size:11px;">Re-login</div>
-            </div>
-            <div class="callout" style="top:-10px; right:-10px;">1</div>
-          </div>
-          <!-- TMS Connection -->
-          <div style="background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:16px; position:relative;">
-            <div style="font-size:13px; font-weight:600; margin-bottom:8px;">TMS Connection</div>
-            <span class="mock-badge orange" style="margin-bottom:10px; display:inline-block;">Not Connected</span>
-            <div style="margin-top:8px;">
-              <div class="mock-btn" style="font-size:11px;">Login to TMS</div>
-            </div>
-            <div class="callout" style="top:-10px; right:-10px;">2</div>
-          </div>
-        </div>
-
-        <!-- Notifications -->
-        <div style="margin-top:14px; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:16px; position:relative;">
-          <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Notifications</div>
-          <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" checked disabled> Show desktop notifications when jobs complete
-          </label>
-          <div style="font-size:11px; color:var(--text-light); margin-top:6px;">Get a popup when a merge or send finishes — useful if you're working in another window.</div>
-          <div class="callout" style="top:-10px; right:-10px;">3</div>
-        </div>
-
-        <!-- Health Check -->
-        <div style="margin-top:14px; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:16px; position:relative;">
-          <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Health Checks</div>
-          <div style="display:flex; gap:8px; font-size:12px;">
-            <span class="mock-badge green">Agent: Healthy</span>
-            <span class="mock-badge green">QBO Selectors: OK</span>
-            <span class="mock-badge green">TMS Selectors: OK</span>
-          </div>
-          <div style="font-size:11px; color:var(--text-light); margin-top:6px;">Automatically checked every 15 seconds.</div>
-          <div class="callout" style="top:-10px; right:-10px;">4</div>
-        </div>
-      </div>
-    </div>
+  <h2>8. Settings</h2>
+  <div class="screen">
+    <img src="screenshots/settings.png" alt="Settings page">
+    <!-- QBO section -->
+    <div class="callout" style="top:20%; left:55%;">1</div>
+    <!-- TMS section -->
+    <div class="callout" style="top:42%; left:55%;">2</div>
+    <!-- Save & Connect button -->
+    <div class="callout" style="top:62%; left:52%;">3</div>
+    <!-- Relaunch button -->
+    <div class="callout" style="top:62%; left:72%;">4</div>
+    <!-- Selector Health -->
+    <div class="callout" style="top:75%; left:45%;">5</div>
+    <!-- Notifications -->
+    <div class="callout" style="top:88%; left:35%;">6</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-num">1</div> QBO status — shows if you're logged in. Click "Re-login" if your session expired</div>
-    <div class="legend-item"><div class="legend-num">2</div> TMS status — login here to enable auto-fetching of PODs from TMS</div>
-    <div class="legend-item"><div class="legend-num">3</div> Toggle desktop notifications — get alerts when background tasks finish</div>
-    <div class="legend-item"><div class="legend-num">4</div> Health checks — the app automatically monitors all connections</div>
+    <div class="legend-item"><div class="legend-num">1</div><div class="legend-text"><strong>QuickBooks Online</strong> — Enter your QBO login email and password. The agent uses this to connect to QuickBooks for sending invoices.</div></div>
+    <div class="legend-item"><div class="legend-num">2</div><div class="legend-text"><strong>TMS Portal (Google SSO)</strong> — Enter your Google login email for TMS access. Used for fetching PODs from the TMS system.</div></div>
+    <div class="legend-item"><div class="legend-num">3</div><div class="legend-text"><strong>Save & Connect</strong> — Saves your credentials and connects to both QBO and TMS.</div></div>
+    <div class="legend-item"><div class="legend-num">4</div><div class="legend-text"><strong>Relaunch</strong> — Restarts the agent server if it gets stuck or disconnected.</div></div>
+    <div class="legend-item"><div class="legend-num">5</div><div class="legend-text"><strong>Selector Health</strong> — Checks if the QBO and TMS page layouts have changed. If something shows "unhealthy," the agent may need updating.</div></div>
+    <div class="legend-item"><div class="legend-num">6</div><div class="legend-text"><strong>Notifications</strong> — Turn desktop notifications on/off. When enabled, you get a popup when a background job finishes.</div></div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 9: TROUBLESHOOTING         -->
-<!-- ═══════════════════════════════════ -->
-<section id="troubleshooting">
-  <h2>9. Tips &amp; Troubleshooting</h2>
-
-  <h3>Best Practices</h3>
-  <div class="box tip">
-    <div class="icon">&#128161;</div>
-    <div>
-      <ul style="margin:0; padding-left:18px;">
-        <li><strong>Always test first</strong> — Use "Test Mode" in the Invoice Sender before doing a real send.</li>
-        <li><strong>Keep customer emails updated</strong> — Invoices can only be sent if the customer has an email on file.</li>
-        <li><strong>Use "Per Container" merge</strong> — It's the most organized format and what most customers expect.</li>
-        <li><strong>Check the Failure Report</strong> — After a merge, look at the failure report to see if any PDFs couldn't be matched.</li>
-        <li><strong>Export your customer list</strong> — Click "Export" in Customer Manager periodically as a backup.</li>
-        <li><strong>Name PDFs clearly</strong> — Include the container number or invoice number in the file name so the app can match them.</li>
-        <li><strong>Save to Folder</strong> — Use "Save to Folder" instead of individual downloads for large batches.</li>
-      </ul>
-    </div>
-  </div>
-
-  <h3>Common Problems</h3>
-  <table class="mock-table">
-    <tr><th style="width:30%;">Problem</th><th>What to Do</th></tr>
-    <tr>
-      <td><strong>"Agent Offline"</strong> badge</td>
-      <td>The background service isn't running. Close and reopen the app. If using the browser version, run <code>Start Agent.bat</code>.</td>
-    </tr>
-    <tr>
-      <td><strong>QBO shows "Not Connected"</strong></td>
-      <td>Go to Settings and click "Re-login." A browser window will open for you to sign into QuickBooks.</td>
-    </tr>
-    <tr>
-      <td><strong>Excel columns not recognized</strong></td>
-      <td>Make sure your spreadsheet has columns for Container Number and Invoice Number. The app accepts many name variations, but the column must exist.</td>
-    </tr>
-    <tr>
-      <td><strong>PDFs not matching to containers</strong></td>
-      <td>Check that the PDF file names contain the container number or invoice number somewhere in the file name.</td>
-    </tr>
-    <tr>
-      <td><strong>Invoice shows "No Email"</strong></td>
-      <td>That customer doesn't have an email on file. Go to Customer Manager, find them, click Edit, and add their email address.</td>
-    </tr>
-    <tr>
-      <td><strong>Invoice shows "No Match"</strong></td>
-      <td>The customer isn't in your database. Add them in Customer Manager first, then reload the CSV.</td>
-    </tr>
-    <tr>
-      <td><strong>Send failed for an invoice</strong></td>
-      <td>Usually means the QBO session timed out. Go to Settings, re-login to QBO, and retry the failed invoices.</td>
-    </tr>
-    <tr>
-      <td><strong>App is slow during merge</strong></td>
-      <td>Normal for large batches (100+ containers). The app processes everything on your computer. Let it finish — you can keep working in other windows.</td>
-    </tr>
-  </table>
-
-  <h3>Keyboard Shortcuts</h3>
-  <table class="mock-table" style="max-width:400px;">
-    <tr><th>Shortcut</th><th>Action</th></tr>
-    <tr><td><code>Ctrl + 1</code></td><td>Go to Merge Tool</td></tr>
-    <tr><td><code>Ctrl + 2</code></td><td>Go to Invoice Sender</td></tr>
-    <tr><td><code>Ctrl + 3</code></td><td>Go to Customers</td></tr>
-    <tr><td><code>Esc</code></td><td>Close any popup window</td></tr>
-  </table>
-</section>
-
-<!-- ═══════════════════════════════════ -->
-<!-- SECTION 10: GLOSSARY               -->
-<!-- ═══════════════════════════════════ -->
+<!-- ═══════ GLOSSARY ═══════ -->
 <section id="glossary">
-  <h2>10. Glossary</h2>
-  <p>Quick definitions of terms used throughout this manual:</p>
-
-  <table class="mock-table">
+  <h2>9. Glossary</h2>
+  <table class="ref-table">
     <tr><th style="width:22%;">Term</th><th>What It Means</th></tr>
-    <tr><td><strong>QBO</strong></td><td>QuickBooks Online — the accounting software used to send invoices to customers.</td></tr>
-    <tr><td><strong>TMS</strong></td><td>Transportation Management System — used to track shipments and find POD documents.</td></tr>
-    <tr><td><strong>POD</strong></td><td>Proof of Delivery — a document confirming that goods were delivered to the customer.</td></tr>
-    <tr><td><strong>BL / BOL</strong></td><td>Bill of Lading — the shipping contract document that travels with the cargo.</td></tr>
-    <tr><td><strong>Agent Server</strong></td><td>A background service on your computer that handles QBO and TMS connections. Think of it as a robot that clicks buttons for you.</td></tr>
-    <tr><td><strong>CSV</strong></td><td>Comma-Separated Values — a simple spreadsheet format you can export from most programs.</td></tr>
-    <tr><td><strong>OEC</strong></td><td>A send method where the invoice goes through QBO and the POD is sent in a separate email.</td></tr>
-    <tr><td><strong>Container Number</strong></td><td>The unique ID stamped on a shipping container (e.g., MSCU1234567). Always 4 letters + 7 numbers.</td></tr>
-    <tr><td><strong>Drop Zone</strong></td><td>The dashed-border area in the app where you drag and drop files. You can also click it to browse.</td></tr>
-    <tr><td><strong>Test Mode</strong></td><td>A setting in Invoice Sender that lets you preview the send process without actually emailing anything.</td></tr>
+    <tr><td><strong>QBO</strong></td><td>QuickBooks Online — the accounting software used to send invoices.</td></tr>
+    <tr><td><strong>TMS</strong></td><td>Transportation Management System — used to track shipments and find PODs.</td></tr>
+    <tr><td><strong>POD</strong></td><td>Proof of Delivery — confirms goods were delivered to the customer.</td></tr>
+    <tr><td><strong>BL / BOL</strong></td><td>Bill of Lading — the shipping contract document.</td></tr>
+    <tr><td><strong>Agent Server</strong></td><td>A background service that connects to QBO and TMS for you. Like a robot clicking buttons.</td></tr>
+    <tr><td><strong>CSV</strong></td><td>Comma-Separated Values — a simple spreadsheet format exportable from most programs.</td></tr>
+    <tr><td><strong>OEC</strong></td><td>A send method: invoice via QBO, POD via separate email.</td></tr>
+    <tr><td><strong>Container #</strong></td><td>The unique ID on a shipping container (e.g., MSCU1234567). 4 letters + 7 numbers.</td></tr>
   </table>
 </section>
 
-</div><!-- end .container -->
+</div>
 
-<!-- ═══════ FOOTER ═══════ -->
 <div class="footer">
   <strong style="color:var(--orange);">NGL Accounting Suite</strong> — User Manual v1.0<br>
-  <span style="font-size:12px;">All document processing happens locally on your computer. Your files are never uploaded.</span><br>
-  <span style="font-size:11px; color:#94a3b8; margin-top:4px; display:inline-block;">Last updated: April 2026</span>
+  All document processing happens locally on your computer. Your files are never uploaded.<br>
+  <span style="color:#94a3b8;">Last updated: April 2026</span>
 </div>
 
 </body>

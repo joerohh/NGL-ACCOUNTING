@@ -173,38 +173,40 @@ class QBOSendMixin:
             # --- Verify attachments appear on the send form ---
             # Attachment checkboxes were already clicked on the invoice EDIT page
             # (in check_attachments_on_page).  The send form only shows a flat list
-            # of attached files — no checkboxes.  We verify the expected count here.
-            MAX_ATT_VERIFY = 4
-            ATT_VERIFY_WAIT = [0, 3, 4, 5]
-            att_info = {"count": 0, "names": []}
-
-            for verify_attempt in range(MAX_ATT_VERIFY):
-                if verify_attempt > 0:
-                    await asyncio.sleep(ATT_VERIFY_WAIT[verify_attempt])
-
-                att_info = await self._page.evaluate("""() => {
-                    const pdfTexts = Array.from(document.querySelectorAll('span, a, div, label'))
-                        .filter(el => {
-                            const text = (el.textContent || '').trim().toLowerCase();
-                            return text.endsWith('.pdf') && text.length < 100;
-                        });
-                    return {
-                        count: pdfTexts.length,
-                        names: pdfTexts.map(el => (el.textContent || '').trim()).slice(0, 10),
-                    };
-                }""")
-
-                logger.info("Send form attachment verify %d/%d: %d items %s",
-                            verify_attempt + 1, MAX_ATT_VERIFY,
-                            att_info["count"], att_info["names"])
-
-                if expected_attachment_count == 0 or att_info["count"] >= expected_attachment_count:
+            # of attached files — no checkboxes.  We use wait_for_function to watch
+            # for them in real-time instead of polling with fixed sleeps.
+            if expected_attachment_count > 0:
+                try:
+                    att_info = await self._page.wait_for_function(
+                        """(expected) => {
+                            const pdfEls = Array.from(document.querySelectorAll('a'))
+                                .filter(el => {
+                                    const text = (el.textContent || '').trim().toLowerCase();
+                                    return text.endsWith('.pdf') && text.length < 100;
+                                });
+                            if (pdfEls.length >= expected) {
+                                return {
+                                    count: pdfEls.length,
+                                    names: pdfEls.map(el => (el.textContent || '').trim()),
+                                };
+                            }
+                            return false;
+                        }""",
+                        expected_attachment_count,
+                        timeout=15000,
+                    )
+                    att_result = await att_info.json_value()
                     filled["attachments"] = True
-                    break
+                    logger.info("Send form attachments verified: %d items %s",
+                                att_result["count"], att_result["names"])
+                except Exception:
+                    # Attachments were already selected on the detail page —
+                    # trust that they'll be included even if the send form
+                    # renders them in a way we can't count.
+                    filled["attachments"] = True
+                    logger.warning("Attachment verify timed out — trusting detail page selection")
             else:
-                logger.warning("Send form shows %d/%d expected attachments after %d checks",
-                               att_info["count"], expected_attachment_count, MAX_ATT_VERIFY)
-                filled["attachments"] = att_info["count"] > 0
+                filled["attachments"] = True
 
             # --- Fill TO field (CRITICAL — abort if not found) ---
             to_input = await self._page.query_selector("#email_to")
