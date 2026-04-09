@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
-from services.database import query_audit_log, audit_stats, get_all_audit_entries
+import services.database as db
 
 logger = logging.getLogger("ngl.audit")
 
@@ -24,13 +24,13 @@ async def query_audit(
     limit: int = Query(100, ge=1, le=1000, description="Max entries to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
 ):
-    return query_audit_log(date, customer, status, invoice, limit, offset)
+    return db.query_audit_log(date, customer, status, invoice, limit, offset)
 
 
 @router.get("/export")
 async def export_audit():
     """Export the full audit log as a CSV download."""
-    entries = get_all_audit_entries()
+    entries = db.get_all_audit_entries()
 
     output = io.StringIO()
     fieldnames = [
@@ -60,4 +60,4 @@ async def export_audit():
 
 @router.get("/stats")
 async def stats():
-    return audit_stats()
+    return db.audit_stats()

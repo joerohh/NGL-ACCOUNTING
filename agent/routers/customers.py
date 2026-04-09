@@ -7,15 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from services.database import (
-    list_customers as db_list_customers,
-    get_customer as db_get_customer,
-    customer_exists,
-    create_customer as db_create_customer,
-    update_customer as db_update_customer,
-    soft_delete_customer,
-    bulk_import_customers,
-)
+import services.database as db
 
 logger = logging.getLogger("ngl.customers")
 
@@ -146,13 +138,13 @@ async def list_customers(
     search: str = Query("", description="Filter by code or name (case-insensitive)"),
     active_only: bool = Query(True, alias="activeOnly", description="Only return active customers"),
 ):
-    results = db_list_customers(search, active_only)
+    results = db.list_customers(search, active_only)
     return {"customers": results, "total": len(results)}
 
 
 @router.get("/export")
 async def export_customers():
-    results = db_list_customers("", False)
+    results = db.list_customers("", False)
     return JSONResponse(
         content=results,
         headers={"Content-Disposition": 'attachment; filename="customers.json"'},
@@ -161,7 +153,7 @@ async def export_customers():
 
 @router.get("/{code}")
 async def get_customer(code: str):
-    cust = db_get_customer(code)
+    cust = db.get_customer(code)
     if not cust:
         raise HTTPException(404, f"Customer not found: {code.upper()}")
     return cust
@@ -172,13 +164,13 @@ async def create_customer(req: CustomerCreate):
     code_upper = req.code.strip().upper()
     if not code_upper:
         raise HTTPException(400, "Customer code is required")
-    if customer_exists(code_upper):
+    if db.customer_exists(code_upper):
         raise HTTPException(409, f"Customer already exists: {code_upper}")
 
     data = _prepare_customer_data(req)
     data["code"] = code_upper
     data = _apply_method_fields(data)
-    cust = db_create_customer(data)
+    cust = db.create_customer(data)
     logger.info("Created customer: %s", code_upper)
     return cust
 
@@ -186,12 +178,12 @@ async def create_customer(req: CustomerCreate):
 @router.put("/{code}")
 async def update_customer(code: str, req: CustomerUpdate):
     code_upper = code.upper()
-    if not db_get_customer(code_upper):
+    if not db.get_customer(code_upper):
         raise HTTPException(404, f"Customer not found: {code_upper}")
 
     data = _prepare_customer_data(req)
     data = _apply_method_fields(data, is_update=True)
-    cust = db_update_customer(code_upper, data)
+    cust = db.update_customer(code_upper, data)
     logger.info("Updated customer: %s", code_upper)
     return cust
 
@@ -199,7 +191,7 @@ async def update_customer(code: str, req: CustomerUpdate):
 @router.delete("/{code}")
 async def delete_customer(code: str):
     code_upper = code.upper()
-    if not soft_delete_customer(code_upper):
+    if not db.soft_delete_customer(code_upper):
         raise HTTPException(404, f"Customer not found: {code_upper}")
     logger.info("Soft-deleted customer: %s", code_upper)
     return {"status": "deleted", "code": code_upper}
@@ -217,6 +209,6 @@ async def import_customers(req: BulkImportRequest):
     # Run in thread pool to avoid blocking the event loop
     # (Supabase client uses synchronous httpx calls)
     import asyncio
-    result = await asyncio.to_thread(bulk_import_customers, items)
+    result = await asyncio.to_thread(db.bulk_import_customers, items)
     logger.info("Bulk import: %d created, %d updated", result["created"], result["updated"])
     return {"status": "ok", **result}

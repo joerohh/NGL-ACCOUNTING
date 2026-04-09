@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from config import DO_SENDER_CACHE_FILE
-from services.database import get_all_customers_dict, write_audit_entry
+import services.database as db
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -66,7 +66,7 @@ class JobManagerUtilMixin:
     @staticmethod
     def _load_customers() -> dict:
         """Load customer profiles from SQLite."""
-        return get_all_customers_dict()
+        return db.get_all_customers_dict()
 
     # ------------------------------------------------------------------
     # Audit log
@@ -74,7 +74,7 @@ class JobManagerUtilMixin:
     @staticmethod
     def _write_audit_log(entry: dict) -> None:
         """Write a single audit log entry to SQLite."""
-        write_audit_entry(entry)
+        db.write_audit_entry(entry)
 
     # ------------------------------------------------------------------
     # SSE event stream
