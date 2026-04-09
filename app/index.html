@@ -395,52 +395,6 @@
         </div>
       </div>
 
-      <!-- Session History -->
-      <div class="home-section-label">Session History</div>
-      <div class="history-panel" id="historyPanel">
-        <!-- Filters -->
-        <div class="history-filters">
-          <input type="date" id="historyFilterDate" class="history-filter-input" title="Filter by date" />
-          <input type="text" id="historyFilterCustomer" class="history-filter-input" placeholder="Customer code" title="Filter by customer" />
-          <select id="historyFilterStatus" class="history-filter-input" title="Filter by status">
-            <option value="">All statuses</option>
-            <option value="sent">Sent</option>
-            <option value="skipped">Skipped</option>
-            <option value="error">Error</option>
-            <option value="mismatch">Mismatch</option>
-            <option value="missing_docs">Missing docs</option>
-          </select>
-          <input type="text" id="historyFilterInvoice" class="history-filter-input" placeholder="Invoice #" title="Filter by invoice" />
-          <button class="history-filter-btn" onclick="loadSessionHistory()" title="Search">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </button>
-          <button class="history-filter-btn history-export-btn" onclick="exportSessionHistory()" title="Export CSV">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
-        </div>
-        <!-- Table -->
-        <div class="history-table-wrap">
-          <table class="history-table" id="historyTable">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Invoice</th>
-                <th>Container</th>
-                <th>Customer</th>
-                <th>Status</th>
-                <th>To</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody id="historyTableBody">
-              <tr><td colspan="7" class="history-empty">No history loaded</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <!-- Pagination -->
-        <div class="history-pagination" id="historyPagination"></div>
-      </div>
-
     </div><!-- /home-body -->
   </div>
 </div>

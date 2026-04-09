@@ -188,11 +188,6 @@ function initApp() {
   agentHealthCheck();
   setInterval(agentHealthCheck, 15000);
 
-  // Enter key triggers search in history filters
-  document.querySelectorAll('.history-filter-input').forEach(el => {
-    el.addEventListener('keydown', e => { if (e.key === 'Enter') loadSessionHistory(0); });
-  });
-
   // Start on home page
   switchTool('home');
 
@@ -222,7 +217,6 @@ function switchTool(tool) {
   if (tool === 'home') {
     document.getElementById('homeView').style.display = '';
     refreshHomeMetrics();
-    loadSessionHistory();
   } else if (tool === 'merge') {
     document.getElementById('mergeToolView').style.display = '';
   } else if (tool === 'invoice-sender') {
@@ -348,103 +342,10 @@ window.addEventListener('resize', applyResponsiveLayout);
 applyResponsiveLayout();
 
 
-// ══════════════════════════════════════════════════════════
-//  SESSION HISTORY — audit log viewer on home dashboard
-// ══════════════════════════════════════════════════════════
-let _historyPage = 0;
-const HISTORY_PAGE_SIZE = 25;
-
-async function loadSessionHistory(page) {
-  if (!state.agentConnected) return;
-  if (page !== undefined) _historyPage = page;
-
-  const filters = {
-    date: document.getElementById('historyFilterDate').value || '',
-    customer: document.getElementById('historyFilterCustomer').value.trim(),
-    status: document.getElementById('historyFilterStatus').value,
-    invoice: document.getElementById('historyFilterInvoice').value.trim(),
-    limit: HISTORY_PAGE_SIZE,
-    offset: _historyPage * HISTORY_PAGE_SIZE,
-  };
-
-  const data = await agentBridge.getAuditLog(filters);
-  const tbody = document.getElementById('historyTableBody');
-
-  if (data.error || !data.entries || data.entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="history-empty">'
-      + (data.error ? 'Could not load history' : 'No entries found') + '</td></tr>';
-    document.getElementById('historyPagination').innerHTML = '';
-    return;
-  }
-
-  tbody.innerHTML = data.entries.map(e => {
-    const time = formatHistoryTime(e.timestamp);
-    const toList = (e.toEmails || []).join(', ') || '--';
-    const detail = e.error || (e.attachmentsFound || []).join(', ') || '--';
-    const statusClass = (e.status || '').replace(/\s/g, '_');
-    return `<tr>
-      <td title="${escHtml(e.timestamp || '')}">${time}</td>
-      <td><strong>${escHtml(e.invoiceNumber || '--')}</strong></td>
-      <td>${escHtml(e.containerNumber || '--')}</td>
-      <td>${escHtml(e.customerCode || '--')}</td>
-      <td><span class="history-status ${statusClass}">${escHtml(e.status || '--')}</span></td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(toList)}">${escHtml(toList)}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(detail)}">${escHtml(detail)}</td>
-    </tr>`;
-  }).join('');
-
-  // Pagination
-  const total = data.total || 0;
-  const totalPages = Math.ceil(total / HISTORY_PAGE_SIZE);
-  const pag = document.getElementById('historyPagination');
-
-  if (totalPages <= 1) {
-    pag.innerHTML = `<span>${total} entr${total === 1 ? 'y' : 'ies'}</span><span></span>`;
-    return;
-  }
-
-  let btns = '';
-  btns += `<button class="history-page-btn" onclick="loadSessionHistory(0)" ${_historyPage === 0 ? 'disabled' : ''}>&laquo;</button>`;
-  btns += `<button class="history-page-btn" onclick="loadSessionHistory(${_historyPage - 1})" ${_historyPage === 0 ? 'disabled' : ''}>&lsaquo;</button>`;
-
-  // Show up to 5 page numbers around current
-  const start = Math.max(0, _historyPage - 2);
-  const end = Math.min(totalPages, start + 5);
-  for (let i = start; i < end; i++) {
-    btns += `<button class="history-page-btn ${i === _historyPage ? 'active' : ''}" onclick="loadSessionHistory(${i})">${i + 1}</button>`;
-  }
-
-  btns += `<button class="history-page-btn" onclick="loadSessionHistory(${_historyPage + 1})" ${_historyPage >= totalPages - 1 ? 'disabled' : ''}>&rsaquo;</button>`;
-  btns += `<button class="history-page-btn" onclick="loadSessionHistory(${totalPages - 1})" ${_historyPage >= totalPages - 1 ? 'disabled' : ''}>&raquo;</button>`;
-
-  pag.innerHTML = `<span>${total} entr${total === 1 ? 'y' : 'ies'} &middot; page ${_historyPage + 1} of ${totalPages}</span><div class="history-page-btns">${btns}</div>`;
-}
-
-function formatHistoryTime(ts) {
-  if (!ts) return '--';
-  try {
-    const d = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z');
-    const now = new Date();
-    const diff = now - d;
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-    if (diff < 172800000) return 'Yesterday';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  } catch { return ts.slice(0, 16); }
-}
-
-async function exportSessionHistory() {
-  if (!state.agentConnected) return;
-  await agentBridge.exportAuditLog();
-}
-
 // ── Window assignments for inline HTML handlers ──
 window.switchTool = switchTool;
 window.toggleToolSwitcher = toggleToolSwitcher;
 window.refreshHomeMetrics = refreshHomeMetrics;
-window.loadSessionHistory = loadSessionHistory;
-window.exportSessionHistory = exportSessionHistory;
 
 // ── Boot ──
 startup();

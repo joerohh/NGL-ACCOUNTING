@@ -699,18 +699,23 @@ async function invSendViaQBO() {
   }
 
   // Only send invoices that are ready AND not already sent
-  const readyInvoices = invoiceState.invoices.filter(inv =>
+  let readyInvoices = invoiceState.invoices.filter(inv =>
     inv.validationStatus === 'ready' && inv.sendStatus !== 'sent' && inv.sendStatus !== 'sent_no_pod'
   );
   if (readyInvoices.length === 0) {
     // Check if all ready invoices were already sent (retry scenario)
     const alreadySent = invoiceState.invoices.filter(inv =>
-      inv.validationStatus === 'ready' && inv.sendStatus === 'sent'
+      inv.validationStatus === 'ready' && (inv.sendStatus === 'sent' || inv.sendStatus === 'sent_no_pod')
     );
     if (alreadySent.length > 0) {
-      const msg = 'All ready invoices have already been sent (' + alreadySent.length + ' total).';
-      invAddLog('info', msg);
-      alert(msg);
+      const msg = 'All ready invoices have already been sent (' + alreadySent.length + ' total).\n\nDo you want to resend them?';
+      if (confirm(msg)) {
+        alreadySent.forEach(inv => { inv.sendStatus = ''; });
+        invAddLog('info', 'Resending ' + alreadySent.length + ' invoices...');
+        readyInvoices = alreadySent;
+      } else {
+        return;
+      }
     } else {
       const noMatch = invoiceState.invoices.filter(inv => inv.validationStatus === 'no_match').length;
       const noEmail = invoiceState.invoices.filter(inv => inv.validationStatus === 'no_email').length;
@@ -721,8 +726,8 @@ async function invSendViaQBO() {
       if (pending > 0) msg += '\n• ' + pending + ' are still pending validation';
       invAddLog('error', msg.replace(/\n/g, ' '));
       alert(msg);
+      return;
     }
-    return;
   }
 
   // Use selected or all ready

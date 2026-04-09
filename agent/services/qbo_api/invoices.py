@@ -32,6 +32,37 @@ class QBOInvoicesMixin:
                      invoice_number, invoice["Id"], invoice.get("TotalAmt"))
         return invoice
 
+    async def get_invoice_link(self, invoice_id: str) -> str:
+        """Get the customer-facing payment/review link for an invoice.
+
+        Uses ?include=invoiceLink to fetch the QBO portal URL.
+        Returns the link URL or empty string if unavailable.
+        """
+        token = await self._token_manager.get_access_token()
+        if not token:
+            return ""
+
+        realm = self._token_manager.realm_id or self._realm_id
+        url = f"{self._base_url}/v3/company/{realm}/invoice/{invoice_id}?include=invoiceLink"
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/json",
+                    },
+                    timeout=15,
+                )
+            if resp.status_code == 200:
+                link = resp.json().get("Invoice", {}).get("InvoiceLink", "")
+                if link:
+                    logger.info("Got invoice link for %s", invoice_id)
+                return link or ""
+        except Exception as e:
+            logger.warning("Failed to get invoice link: %s", e)
+        return ""
+
     async def verify_invoice_details(self, invoice_data: dict,
                                       expected_container: str,
                                       expected_amount: Optional[str] = None) -> dict:

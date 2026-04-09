@@ -112,7 +112,7 @@ class EmailSender:
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(self._address, self._password)
-            server.sendmail(self._address, all_recipients, msg.as_string())
+            server.send_message(msg, self._address, all_recipients)
 
         logger.info(
             "POD email sent: to=%s, cc=%s, subject=%s, attachment=%s",
@@ -159,17 +159,13 @@ class EmailSender:
         else:
             msg.attach(MIMEText(body, "plain"))
 
-        # Attach files (raw bytes) — first PDF gets a CID for the "Print or save" button
-        first_pdf_tagged = False
+        # Attach files (raw bytes)
         for att in attachments:
             filename = att["filename"]
             data = att["data"]
             subtype = "pdf" if filename.lower().endswith(".pdf") else "octet-stream"
             part = MIMEApplication(data, _subtype=subtype)
             part.add_header("Content-Disposition", "attachment", filename=filename)
-            if not first_pdf_tagged and filename.lower().endswith(".pdf"):
-                part.add_header("Content-ID", "<invoice_pdf>")
-                first_pdf_tagged = True
             msg.attach(part)
 
         # All recipients (To + CC + BCC)
@@ -178,7 +174,7 @@ class EmailSender:
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(self._address, self._password)
-            server.sendmail(self._address, all_recipients, msg.as_string())
+            server.send_message(msg, self._address, all_recipients)
 
         logger.info(
             "Invoice email sent: to=%s, cc=%s, bcc=%s, subject=%s, attachments=%d",

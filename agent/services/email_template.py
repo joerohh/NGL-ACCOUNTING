@@ -19,6 +19,8 @@ def build_invoice_email_html(
     due_date: str = "",
     ngl_ref: str = "",
     customer_ref: str = "",
+    resend_notice: bool = False,
+    invoice_link: str = "",
 ) -> str:
     """Build an HTML email body that matches the QBO invoice email style."""
 
@@ -50,8 +52,11 @@ def build_invoice_email_html(
     else:
         logo_img = '<span style="font-size:24px; font-weight:bold; color:#1a2744;">NGL TRANSPORTATION</span>'
 
-    # "Print or save" button — links to the attached invoice PDF via CID
-    print_btn = '<a href="cid:invoice_pdf" target="_blank" style="display:inline-block; background:#2e7d32; color:#ffffff; padding:10px 32px; border-radius:4px; font-size:14px; font-weight:600; text-decoration:none; letter-spacing:0.3px;">Print or save</a>'
+    # "Review and pay" button — links to QBO's online invoice portal when available
+    if invoice_link:
+        review_btn = f'<a href="{invoice_link}" target="_blank" style="display:inline-block; background:#2e7d32; color:#ffffff; padding:10px 32px; border-radius:4px; font-size:14px; font-weight:600; text-decoration:none; letter-spacing:0.3px;">Review and pay invoice</a>'
+    else:
+        review_btn = ""
 
     return f"""<!DOCTYPE html>
 <html>
@@ -90,9 +95,7 @@ def build_invoice_email_html(
           <td style="padding:28px 20px; text-align:center;">
             {f'<div style="font-size:13px; color:#6b7280; margin-bottom:10px; font-weight:500;">{due_display}</div>' if due_display else ''}
             <div style="font-size:36px; font-weight:700; color:#1a1a1a; letter-spacing:-0.5px;">{amount_display}</div>
-            <div style="margin-top:16px;">
-              {print_btn}
-            </div>
+            {f'<div style="margin-top:16px;">{review_btn}</div>' if review_btn else ''}
             <div style="font-size:11px; color:#9ca3af; margin-top:10px;">Powered by QuickBooks</div>
           </td>
         </tr>
@@ -105,6 +108,7 @@ def build_invoice_email_html(
     <td style="padding:0 40px 20px;">
       <div style="font-size:14px; color:#333333; line-height:1.8;">
         <p style="margin:0 0 14px;">Dear {customer_name},</p>
+        {'<p style="margin:0 0 14px; padding:10px 14px; background:#fff8e1; border-left:4px solid #f9a825; border-radius:4px; color:#555555; font-size:13px;">We recently identified a transmission error with our previous email, which may have affected the attached documents. We are resending this invoice for your records. We apologize for any inconvenience.</p>' if resend_notice else ''}
         <p style="margin:0 0 14px;">Attached is the invoice for the load or container referenced in the subject line.</p>
         <p style="margin:0 0 14px; font-weight:600; color:#111111;">{ref_line}</p>
         <p style="margin:0 0 14px;">Please confirm receipt and contact us if you have any questions.<br/>Have a great day.</p>
