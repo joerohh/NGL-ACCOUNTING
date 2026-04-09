@@ -158,6 +158,17 @@ async def oauth_callback(code: str = "", state: str = "", realmId: str = ""):
         )
 
 
+@router.get("/oauth/auth-url")
+async def oauth_auth_url():
+    """Return the Intuit authorization URL as JSON (for Electron to open in system browser)."""
+    if not _qbo_api:
+        raise HTTPException(503, "QBO API client not initialized")
+    if not QBO_CLIENT_ID:
+        raise HTTPException(400, "QBO_CLIENT_ID not configured in .env")
+    auth_url = _qbo_api.token_manager.get_authorization_url()
+    return {"auth_url": auth_url}
+
+
 @router.get("/oauth/authorize")
 async def oauth_authorize_page():
     """Show a page with instructions to paste the redirect URL after authorizing."""

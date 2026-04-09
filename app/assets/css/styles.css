@@ -135,6 +135,7 @@ body {
 /* ─── Processing spinner ─── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner { animation: spin 0.8s linear infinite; display: inline-block; }
+.spinner-sm { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 4px; }
 
 /* ─── Section labels ─── */
 .section-label {
@@ -426,6 +427,66 @@ select.history-filter-input { width: 120px; cursor: pointer; }
 .history-page-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
 .history-page-btn:disabled { opacity: 0.4; cursor: default; }
 .history-page-btn.active { background: #ea580c; color: #fff; border-color: #ea580c; }
+
+/* ─── Session History Tab (in-memory job log) ─── */
+.session-empty {
+  text-align: center; padding: 48px 16px; color: #94a3b8;
+  font-size: 0.88rem; font-style: italic;
+}
+.sh-job-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  margin-bottom: 10px; overflow: hidden; transition: border-color 0.15s;
+}
+.sh-job-card:hover { border-color: #cbd5e1; }
+.sh-job-header {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+  cursor: pointer; flex-wrap: wrap;
+}
+.sh-job-header:hover { background: #fafafa; }
+.sh-job-meta {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.sh-type-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 6px;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.sh-type-badge.type-fetch { background: #eff6ff; color: #2563eb; }
+.sh-type-badge.type-send { background: #fff7ed; color: #ea580c; }
+.sh-time { font-size: 0.78rem; color: #64748b; }
+.sh-total { font-size: 0.78rem; color: #94a3b8; }
+.sh-job-chips {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1;
+}
+.sh-chip {
+  font-size: 0.72rem; color: #64748b; padding: 2px 8px;
+  background: #f8fafc; border-radius: 5px; white-space: nowrap;
+}
+.sh-chip strong { color: #0f172a; }
+.sh-chip-warn { background: #fef3c7; color: #92400e; }
+.sh-chip-warn strong { color: #92400e; }
+.sh-chip-err { background: #fef2f2; color: #dc2626; }
+.sh-chip-err strong { color: #dc2626; }
+.sh-job-actions {
+  display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0;
+}
+.sh-export-btn { padding: 4px 10px !important; font-size: 0.72rem !important; gap: 4px; }
+.sh-chevron { transition: transform 0.2s; flex-shrink: 0; }
+.sh-job-detail { border-top: 1px solid #f1f5f9; background: #fafafa; }
+.sh-detail-table {
+  width: 100%; border-collapse: collapse; font-size: 0.75rem;
+}
+.sh-detail-table th {
+  padding: 8px 12px; text-align: left; font-weight: 600;
+  color: #64748b; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.04em; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+}
+.sh-detail-table td {
+  padding: 7px 12px; border-bottom: 1px solid #f1f5f9; color: #334155;
+}
+.sh-detail-table tbody tr:hover { background: #f0f4f8; }
+tr.sh-detail-success td:last-child { color: #16a34a; }
+tr.sh-detail-warning td:last-child { color: #d97706; }
+tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 
 /* ─── Tool Header Bar (top-right switcher inside tools) ─── */
 .tool-header-bar {

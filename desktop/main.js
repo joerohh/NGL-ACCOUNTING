@@ -16,7 +16,7 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, globalShortcut } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, globalShortcut, shell } = require("electron");
 const path = _path;
 const fs = _fs;
 const { spawn } = require("child_process");
@@ -196,6 +196,15 @@ function createWindow() {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
+  });
+
+  // Open external URLs (OAuth, etc.) in the system browser instead of Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http") && !url.startsWith(AGENT_URL)) {
+      shell.openExternal(url);
+      return { action: "deny" };
+    }
+    return { action: "allow" };
   });
 
   // F5 / Ctrl+R to refresh, F12 / Ctrl+Shift+I for DevTools

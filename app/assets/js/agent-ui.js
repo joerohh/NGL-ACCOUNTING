@@ -7,6 +7,7 @@ import { addLog } from './shared/log.js';
 import { agentBridge } from './shared/agent-client.js';
 import { invUpdateGenerateBtn } from './tools/invoice-sender/invoice-sender.js';
 import { classifyPdf, renderContainerGroups } from './tools/merge/merge.js';
+import { fetchJobResultsForHistory } from './tools/session-history/session-history.js';
 
 function toggleAgentPanel() {
   const body  = document.getElementById('agentBody');
@@ -525,6 +526,10 @@ async function handleAgentEvent(event, jobId) {
       if (event.errors > 0)
         addLog('error', `[Agent] Errors: ${event.errors}`);
       resetFetchButton();
+
+      // Push to session history (fetch job results from API)
+      fetchJobResultsForHistory(jobId, 'fetch', event);
+
       state.activeJobId = null;
       renderContainerGroups();
       break;

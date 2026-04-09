@@ -433,14 +433,89 @@ async function setQboMode(mode) {
   }
 }
 
-function connectQboApi() {
+async function connectQboApi() {
   if (!state.agentConnected) {
     settingsShowResult('Agent is offline. Start the agent first.', false);
     return;
   }
-  // Open the OAuth authorization page in a new tab
+  // Get the Intuit auth URL from the agent and open it directly in the system browser
+  try {
+    const resp = await agentBridge._authFetch(`${agentBridge.baseUrl}/qbo/oauth/auth-url`);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.auth_url) {
+        window.open(data.auth_url, '_blank');
+        settingsShowResult('Intuit authorization opened in your browser. After clicking Connect, copy the redirect URL and paste it below.', true);
+        showOAuthPasteBox();
+        return;
+      }
+    }
+  } catch (e) {
+    // Fallback to the old method
+  }
   window.open(`${agentBridge.baseUrl}/qbo/oauth/authorize`, '_blank');
   settingsShowResult('Opening QBO authorization page... After authorizing, come back and click Reload.', true);
+}
+
+function showOAuthPasteBox() {
+  // Remove existing paste box if any
+  const existing = document.getElementById('qboOAuthPasteBox');
+  if (existing) existing.remove();
+
+  const container = document.getElementById('qboApiConnectBtn').parentElement;
+  const box = document.createElement('div');
+  box.id = 'qboOAuthPasteBox';
+  box.style.cssText = 'margin-top:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;';
+  box.innerHTML = `
+    <p style="margin:0 0 10px;font-weight:600;font-size:0.85rem;color:#c2410c;">Paste the redirect URL after authorizing:</p>
+    <input type="text" id="qboOAuthRedirectUrl" placeholder="Paste the full URL here..."
+           style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.84rem;box-sizing:border-box;margin-bottom:10px;" />
+    <button onclick="window.submitOAuthUrl()" id="qboOAuthSubmitBtn"
+            style="background:#ea580c;color:#fff;padding:8px 20px;border:none;border-radius:8px;font-weight:600;font-size:0.84rem;cursor:pointer;">
+      Complete Connection
+    </button>
+    <p id="qboOAuthResultMsg" style="display:none;margin:10px 0 0;padding:8px;border-radius:8px;font-size:0.82rem;"></p>
+  `;
+  container.appendChild(box);
+}
+
+window.submitOAuthUrl = async function() {
+  const url = document.getElementById('qboOAuthRedirectUrl').value.trim();
+  const btn = document.getElementById('qboOAuthSubmitBtn');
+  const msg = document.getElementById('qboOAuthResultMsg');
+  if (!url) { msg.textContent = 'Please paste the URL first.'; msg.style.display=''; msg.style.color='#dc2626'; return; }
+
+  let params;
+  try { params = new URL(url).searchParams; } catch(e) {
+    msg.textContent = 'Invalid URL. Copy the full URL from the address bar.';
+    msg.style.display = ''; msg.style.color = '#dc2626'; return;
+  }
+  const code = params.get('code');
+  const state = params.get('state');
+  const realmId = params.get('realmId');
+  if (!code) {
+    msg.textContent = 'No authorization code found. Make sure you clicked Connect on Intuit\'s page.';
+    msg.style.display = ''; msg.style.color = '#dc2626'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Connecting...';
+  try {
+    const resp = await fetch(`${agentBridge.baseUrl}/qbo/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}&realmId=${encodeURIComponent(realmId || '')}`);
+    const text = await resp.text();
+    if (resp.ok && text.includes('Connected')) {
+      msg.innerHTML = '<strong style="color:#16a34a;">QBO API Connected!</strong>';
+      msg.style.display = ''; msg.style.background = '#f0fdf4'; msg.style.border = '1px solid #bbf7d0';
+      setTimeout(() => { document.getElementById('qboOAuthPasteBox')?.remove(); loadQboApiStatus(); }, 2000);
+    } else {
+      msg.textContent = 'Connection failed: ' + text;
+      msg.style.display = ''; msg.style.color = '#dc2626';
+      btn.disabled = false; btn.textContent = 'Complete Connection';
+    }
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.style.display = ''; msg.style.color = '#dc2626';
+    btn.disabled = false; btn.textContent = 'Complete Connection';
+  }
 }
 
 async function disconnectQboApi() {

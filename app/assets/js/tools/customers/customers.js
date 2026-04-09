@@ -215,23 +215,47 @@ async function custSave() {
     return;
   }
 
+  // Show loading state on button
+  const saveBtn = document.getElementById('custSaveBtn');
+  const originalText = saveBtn.textContent;
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
+
   let result;
-  if (custState.editingCode) {
-    result = await agentBridge.updateCustomer(custState.editingCode, data);
-  } else {
-    result = await agentBridge.createCustomer(data);
+  try {
+    if (custState.editingCode) {
+      result = await agentBridge.updateCustomer(custState.editingCode, data);
+    } else {
+      result = await agentBridge.createCustomer(data);
+    }
+  } catch (e) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = originalText;
+    custShowToast('Could not reach the agent — check that it is running.', 'error');
+    return;
   }
 
   if (result.error) {
-    alert('Error: ' + result.error);
+    saveBtn.disabled = false;
+    saveBtn.textContent = originalText;
+    custShowToast('Save failed: ' + result.error, 'error');
     return;
   }
+
+  // Brief success state on button
+  saveBtn.innerHTML = '&#10003; Saved!';
+  saveBtn.style.background = '#16a34a';
 
   const action = custState.editingCode ? 'Updated' : 'Added';
   custShowToast(`${action} ${result.code || code} — Saved to cloud`, 'success');
 
-  custCloseModal();
-  custLoadCustomers();
+  setTimeout(() => {
+    saveBtn.disabled = false;
+    saveBtn.textContent = originalText;
+    saveBtn.style.background = '';
+    custCloseModal();
+    custLoadCustomers();
+  }, 600);
 }
 
 async function custDelete(code) {
@@ -642,17 +666,17 @@ function custShowToast(message, type = 'success') {
 
   const toast = document.createElement('div');
   toast.id = 'custToast';
-  const isSuccess = type === 'success';
+  const bg = type === 'success' ? '#16a34a' : type === 'error' ? '#dc2626' : '#d97706';
   toast.style.cssText = `
     position: fixed; bottom: 24px; right: 24px; z-index: 10000;
     padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500;
     color: #fff; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     display: flex; align-items: center; gap: 8px;
-    background: ${isSuccess ? '#16a34a' : '#d97706'};
+    background: ${bg};
     animation: custToastIn 0.3s ease-out;
   `;
 
-  const icon = isSuccess ? '\u2601\uFE0F' : '\uD83D\uDCBE';
+  const icon = type === 'success' ? '\u2601\uFE0F' : type === 'error' ? '\u274C' : '\uD83D\uDCBE';
   toast.textContent = `${icon} ${message}`;
   document.body.appendChild(toast);
 

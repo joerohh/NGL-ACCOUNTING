@@ -7,6 +7,7 @@ import { setupDrop } from '../../shared/dom-helpers.js';
 import { invAddLog, invClearLog, invSetProgress, invToggleLog } from '../../shared/log.js';
 import { agentBridge } from '../../shared/agent-client.js';
 import { LS_SEND_HISTORY, LS_LAST_SEND_RUN } from '../../shared/constants.js';
+import { fetchJobResultsForHistory } from '../session-history/session-history.js';
 
 // ── CSV Column Aliases ──
 const INV_CSV_ALIASES = {
@@ -849,6 +850,8 @@ const _sendEventHandlers = {
       ' | No Attachments: ' + (event.noAttachments || 0));
     invSaveLastRunSummary(event);
     invShowSendResults(event);
+    // Push to session history
+    if (sendState.jobId) fetchJobResultsForHistory(sendState.jobId, 'send', event);
   },
   connection_warning(event) {
     invAddLog('warning', event.message);

@@ -12,6 +12,7 @@ import { renderPdfQueue, updateUI, handleExcelFile, handlePdfFiles } from './too
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
+import { renderSessionHistory } from './tools/session-history/session-history.js';
 
 // Prevent browser from opening files dropped anywhere on the page
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -215,6 +216,7 @@ function switchTool(tool) {
   document.getElementById('invoiceSenderView').style.display = 'none';
   document.getElementById('customerView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'none';
+  document.getElementById('sessionHistoryView').style.display = 'none';
 
   // Show selected view
   if (tool === 'home') {
@@ -229,6 +231,9 @@ function switchTool(tool) {
   } else if (tool === 'customers') {
     document.getElementById('customerView').style.display = '';
     custLoadCustomers();
+  } else if (tool === 'session-history') {
+    document.getElementById('sessionHistoryView').style.display = '';
+    renderSessionHistory();
   } else if (tool === 'settings') {
     document.getElementById('settingsView').style.display = '';
     settingsLoad();
@@ -240,6 +245,7 @@ function switchTool(tool) {
     'merge': 'Merging Tool',
     'invoice-sender': 'Invoice Sender',
     'customers': 'Customer Management',
+    'session-history': 'Session History',
     'settings': 'Settings',
   };
   document.getElementById('headerSubtitle').textContent = subtitles[tool] || '';
@@ -252,6 +258,7 @@ function switchTool(tool) {
   document.getElementById('navMerge').classList.toggle('active', tool === 'merge');
   document.getElementById('navInvoiceSender').classList.toggle('active', tool === 'invoice-sender');
   document.getElementById('navCustomers').classList.toggle('active', tool === 'customers');
+  document.getElementById('navSessionHistory').classList.toggle('active', tool === 'session-history');
   document.getElementById('navSettings').classList.toggle('active', tool === 'settings');
 }
 

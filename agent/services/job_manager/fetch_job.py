@@ -1,4 +1,4 @@
-"""Fetch job mixin — create, start, and process container fetch jobs."""
+"""Fetch job mixin — create, start, and process container fetch jobs via QBO API."""
 
 import asyncio
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger("ngl.job_manager")
 
 
 class FetchJobMixin:
-    """Handles fetch job lifecycle: create, start, process containers."""
+    """Handles fetch job lifecycle: create, start, process containers via QBO API."""
 
     def create_job(self, containers: list[dict], *, doc_types=None):
         """Create a new fetch job from a list of {containerNumber, invoiceNumber}."""
@@ -58,16 +58,13 @@ class FetchJobMixin:
         event = {"type": event_type, "timestamp": time.time(), **data}
         await job.events.put(event)
 
-    async def _process_one_container(self, job, container, result, *, page=None) -> None:
-        """Process a single container: search, download invoice, classify, check POD.
-
-        Args:
-            page: Playwright page to use for this container (for parallel workers).
-        """
+    async def _process_one_container(self, job, container, result) -> None:
+        """Process a single container via QBO API: search, download invoice, download POD."""
         want_invoice = "invoice" in job.doc_types
         want_pod = "pod" in job.doc_types
+        api = self._qbo_api
 
-        # Step 1: Search for the invoice in QBO (always needed — POD is an attachment on the invoice page)
+        # Step 1: Search for the invoice in QBO
         search_term = container.invoice_number or container.container_number
         if not container.invoice_number:
             logger.warning(
@@ -80,8 +77,8 @@ class FetchJobMixin:
             "invoiceNumber": search_term,
         })
 
-        invoice_url = await self._qbo.search_invoice(search_term, page=page)
-        if not invoice_url:
+        invoice_data = await api.search_invoice(search_term)
+        if not invoice_data:
             result.error = f"Invoice {container.invoice_number} not found in QBO"
             await self._emit(job, "not_found", {
                 "containerNumber": container.container_number,
@@ -89,17 +86,19 @@ class FetchJobMixin:
             })
             return
 
+        invoice_id = invoice_data["Id"]
+
         # Step 2: Download the invoice PDF (only if invoice type is requested)
         if want_invoice:
             await self._emit(job, "downloading_invoice", {
                 "containerNumber": container.container_number,
             })
 
-            inv_path = await self._qbo.download_invoice_pdf(job.download_dir, page=page)
-            if inv_path:
+            pdf_bytes = await api.download_invoice_pdf(invoice_id)
+            if pdf_bytes:
                 new_name = f"{container.container_number}_invoice.pdf"
                 new_path = job.download_dir / new_name
-                inv_path.rename(new_path)
+                new_path.write_bytes(pdf_bytes)
                 strip_motw(new_path)
                 result.invoice_file = new_name
 
@@ -131,25 +130,36 @@ class FetchJobMixin:
                 "containerNumber": container.container_number,
             })
 
-            await asyncio.sleep(QBO_ACTION_DELAY_S)
-            pod_path = await self._qbo.find_and_download_pod(job.download_dir, page=page)
+            attachments = await api.list_attachments(invoice_id)
+            pod_att = next((a for a in attachments if a.get("docType") == "pod"), None)
 
-            if pod_path:
-                new_name = f"{container.container_number}_pod.pdf"
-                new_path = job.download_dir / new_name
-                pod_path.rename(new_path)
-                strip_motw(new_path)
-                result.pod_file = new_name
+            if pod_att:
+                pod_path = await api.download_attachment(
+                    pod_att["id"], pod_att["fileName"], job.download_dir
+                )
+                if pod_path:
+                    new_name = f"{container.container_number}_pod.pdf"
+                    new_path = job.download_dir / new_name
+                    if pod_path != new_path:
+                        pod_path.rename(new_path)
+                    strip_motw(new_path)
+                    result.pod_file = new_name
 
-                # Classify POD
-                pod_classification = await self._classifier.classify(new_path)
-                if pod_classification.needs_review:
-                    result.needs_review = True
+                    # Classify POD
+                    pod_classification = await self._classifier.classify(new_path)
+                    if pod_classification.needs_review:
+                        result.needs_review = True
 
-                await self._emit(job, "pod_found", {
-                    "containerNumber": container.container_number,
-                    "file": new_name,
-                })
+                    await self._emit(job, "pod_found", {
+                        "containerNumber": container.container_number,
+                        "file": new_name,
+                    })
+                else:
+                    result.pod_missing = True
+                    await self._emit(job, "pod_missing", {
+                        "containerNumber": container.container_number,
+                        "message": f"POD found but download failed for container {container.container_number}",
+                    })
             else:
                 result.pod_missing = True
                 await self._emit(job, "pod_missing", {
@@ -177,12 +187,19 @@ class FetchJobMixin:
             except Exception:
                 pass
 
-        # Verify QBO login before starting
-        logged_in = await self._qbo.is_logged_in()
-        if not logged_in:
+        # Verify QBO API connection before starting
+        if not self._qbo_api or not self._qbo_api.is_connected:
             job.status = "paused"
             await self._emit(job, "login_required", {
-                "message": "QBO session expired. Please log in and resume.",
+                "message": "QBO API not connected. Please authorize via Settings.",
+            })
+            return
+
+        token = await self._qbo_api.token_manager.get_access_token()
+        if not token:
+            job.status = "paused"
+            await self._emit(job, "login_required", {
+                "message": "QBO API token expired. Please re-authorize via Settings.",
             })
             return
 
@@ -194,7 +211,7 @@ class FetchJobMixin:
             await self._run_job_sequential(job)
 
     async def _run_job_sequential(self, job) -> None:
-        """Original sequential processing — one container at a time."""
+        """Sequential processing — one container at a time."""
         from services.job_manager import FetchResult
 
         for i, container in enumerate(job.containers):
@@ -252,11 +269,9 @@ class FetchJobMixin:
         await self._finish_job(job)
 
     async def _run_job_parallel(self, job, concurrency: int) -> None:
-        """Parallel processing — multiple containers at once using browser page pool."""
+        """Parallel processing — multiple containers at once using async semaphore."""
         from services.job_manager import FetchResult
 
-        # Create extra pages (main page + N-1 workers)
-        await self._qbo.create_worker_pages(concurrency - 1)
         logger.info("Starting parallel fetch: %d containers, concurrency=%d", job.total, concurrency)
 
         sem = asyncio.Semaphore(concurrency)
@@ -272,62 +287,53 @@ class FetchJobMixin:
                 if job.status == "paused":
                     return
 
-                page = await self._qbo.acquire_page()
-                try:
-                    result = FetchResult(container.container_number, container.invoice_number)
+                result = FetchResult(container.container_number, container.invoice_number)
 
-                    await self._emit(job, "container_start", {
+                await self._emit(job, "container_start", {
+                    "containerNumber": container.container_number,
+                    "invoiceNumber": container.invoice_number,
+                    "index": i,
+                    "total": job.total,
+                })
+
+                try:
+                    await asyncio.wait_for(
+                        self._process_one_container(job, container, result),
+                        timeout=CONTAINER_TIMEOUT_S,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Container %s timed out after %ds",
+                        container.container_number, CONTAINER_TIMEOUT_S,
+                    )
+                    result.error = f"Timed out after {CONTAINER_TIMEOUT_S}s"
+                    await self._emit(job, "container_error", {
                         "containerNumber": container.container_number,
-                        "invoiceNumber": container.invoice_number,
-                        "index": i,
-                        "total": job.total,
+                        "error": result.error,
+                    })
+                except Exception as e:
+                    logger.error(
+                        "Error processing container %s: %s",
+                        container.container_number, e,
+                    )
+                    result.error = str(e)
+                    await self._emit(job, "container_error", {
+                        "containerNumber": container.container_number,
+                        "error": str(e),
                     })
 
-                    try:
-                        await asyncio.wait_for(
-                            self._process_one_container(job, container, result, page=page),
-                            timeout=CONTAINER_TIMEOUT_S,
-                        )
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            "Container %s timed out after %ds",
-                            container.container_number, CONTAINER_TIMEOUT_S,
-                        )
-                        result.error = f"Timed out after {CONTAINER_TIMEOUT_S}s"
-                        await self._emit(job, "container_error", {
-                            "containerNumber": container.container_number,
-                            "error": result.error,
-                        })
-                    except Exception as e:
-                        logger.error(
-                            "Error processing container %s: %s",
-                            container.container_number, e,
-                        )
-                        result.error = str(e)
-                        await self._emit(job, "container_error", {
-                            "containerNumber": container.container_number,
-                            "error": str(e),
-                        })
+                job.results.append(result)
+                completed_count += 1
+                job.progress = completed_count
+                job._save_state()
 
-                    job.results.append(result)
-                    completed_count += 1
-                    job.progress = completed_count
-                    job._save_state()
+                await asyncio.sleep(QBO_ACTION_DELAY_S)
 
-                    # Small delay between QBO actions to avoid rate limiting
-                    await asyncio.sleep(QBO_ACTION_DELAY_S)
-                finally:
-                    await self._qbo.release_page(page)
-
-        try:
-            tasks = [
-                asyncio.create_task(process_one(i, c))
-                for i, c in enumerate(job.containers)
-            ]
-            await asyncio.gather(*tasks)
-        finally:
-            # Always clean up worker pages
-            await self._qbo.close_worker_pages()
+        tasks = [
+            asyncio.create_task(process_one(i, c))
+            for i, c in enumerate(job.containers)
+        ]
+        await asyncio.gather(*tasks)
 
         if job.status == "paused":
             await self._emit(job, "job_paused", {
@@ -341,7 +347,7 @@ class FetchJobMixin:
         await self._finish_job(job)
 
     async def _finish_job(self, job) -> None:
-        """Mark job as completed and emit summary (shared by sequential and parallel)."""
+        """Mark job as completed and emit summary."""
         job.progress = job.total
         job.status = "completed"
         job._save_state()
