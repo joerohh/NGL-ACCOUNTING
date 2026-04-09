@@ -340,7 +340,7 @@ function invRenderTable() {
 
   let html = '';
   for (const inv of displayInvoices) {
-    const subject = inv.subject || inv.subjectOverride || invRenderSubject(invoiceState.subjectTemplate, inv);
+    const subject = inv.resendSubject || inv.subject || inv.subjectOverride || invRenderSubject(invoiceState.subjectTemplate, inv);
     const isSelected = invoiceState.selectedIds.has(inv.id);
 
     // Customer column — show code + name from profile
@@ -478,7 +478,7 @@ function invOpenReview(id) {
   if (!inv) return;
   invoiceState.reviewingId = id;
 
-  const subject = inv.subjectOverride || invRenderSubject(invoiceState.subjectTemplate, inv);
+  const subject = inv.resendSubject || inv.subjectOverride || invRenderSubject(invoiceState.subjectTemplate, inv);
   const email = inv.emailOverride || inv.email;
 
   document.getElementById('reviewModalTitle').textContent = 'Review — Invoice #' + inv.invoiceNumber;
@@ -642,6 +642,7 @@ function invRestoreSendHistory() {
       const filterWrap = document.getElementById('invSendFilterWrap');
       if (filterWrap) filterWrap.style.display = '';
       invUpdateSendStatusBar();
+      invUpdateResendBtn();
     }
   } catch (e) { /* ignore */ }
 }
@@ -682,6 +683,43 @@ function invUpdateSendStatusBar() {
     (counts.error > 0 ? '<div class="inv-summary-item" style="color:#991b1b;"><strong>' + counts.error + '</strong> errors</div>' : '');
 }
 
+function invResendAll() {
+  const sentInvoices = invoiceState.invoices.filter(inv =>
+    inv.sendStatus === 'sent' || inv.sendStatus === 'sent_no_pod'
+  );
+  if (sentInvoices.length === 0) {
+    alert('No previously sent invoices to resend.');
+    return;
+  }
+  if (!confirm('Reset ' + sentInvoices.length + ' sent invoice(s) so they can be sent again?')) return;
+  sentInvoices.forEach(inv => {
+    inv.sendStatus = null;
+    inv.sentAt = null;
+    inv.errorMessage = null;
+    // Force the subject to [NGL_INV_REVISED] so Gmail creates a new thread
+    inv.resendSubject = '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
+  });
+  // Clear from localStorage history too
+  try {
+    const history = JSON.parse(localStorage.getItem(LS_SEND_HISTORY) || '{}');
+    sentInvoices.forEach(inv => { delete history[inv.invoiceNumber]; });
+    localStorage.setItem(LS_SEND_HISTORY, JSON.stringify(history));
+  } catch (e) { /* ignore */ }
+  invRenderTable();
+  invUpdateSendStatusBar();
+  invUpdateResendBtn();
+  invAddLog('info', 'Cleared sent status for ' + sentInvoices.length + ' invoice(s). Ready to send again.');
+}
+
+function invUpdateResendBtn() {
+  const btn = document.getElementById('invResendAllBtn');
+  if (!btn) return;
+  const hasSent = invoiceState.invoices.some(inv =>
+    inv.sendStatus === 'sent' || inv.sendStatus === 'sent_no_pod'
+  );
+  btn.style.display = hasSent ? '' : 'none';
+}
+
 function invToggleTestLimitVisibility() {
   const checked = document.getElementById('invTestModeToggle')?.checked;
   const wrap = document.getElementById('invTestLimitWrap');
@@ -710,7 +748,10 @@ async function invSendViaQBO() {
     if (alreadySent.length > 0) {
       const msg = 'All ready invoices have already been sent (' + alreadySent.length + ' total).\n\nDo you want to resend them?';
       if (confirm(msg)) {
-        alreadySent.forEach(inv => { inv.sendStatus = ''; });
+        alreadySent.forEach(inv => {
+          inv.sendStatus = '';
+          inv.resendSubject = '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
+        });
         invAddLog('info', 'Resending ' + alreadySent.length + ' invoices...');
         readyInvoices = alreadySent;
       } else {
@@ -745,12 +786,13 @@ async function invSendViaQBO() {
   // the Customer Manager — no need to re-import on every send click.
 
   // Build request — include subject from Excel (or fallback template)
+  // resendSubject is set by invResendAll() — forces [NGL_INV_REVISED] prefix
   let invoicePayload = toSend.map(inv => ({
     invoiceNumber: inv.invoiceNumber,
     containerNumber: inv.containerNumber,
     customerCode: inv.customerCode,
     amount: inv.amount || '',
-    subject: inv.subject || invRenderSubject(invoiceState.subjectTemplate, inv),
+    subject: inv.resendSubject || inv.subject || invRenderSubject(invoiceState.subjectTemplate, inv),
     doSenderEmail: inv.doSenderEmail || '',
   }));
 
@@ -823,6 +865,7 @@ function invUpdateInvoiceSendStatus(invoiceNumber, status, extra) {
     filterWrap.style.display = '';
   }
   invUpdateSendStatusBar();
+  invUpdateResendBtn();
 }
 
 // ── Send event handlers (dispatch map) ──
@@ -1479,3 +1522,4 @@ window.invPauseSendJob = invPauseSendJob;
 window.invApprovalDecision = invApprovalDecision;
 window.invLoadAuditLog = invLoadAuditLog;
 window.invToggleTestLimitVisibility = invToggleTestLimitVisibility;
+window.invResendAll = invResendAll;
