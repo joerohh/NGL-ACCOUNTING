@@ -268,11 +268,12 @@ class TMSDownloadMixin:
 
     async def fetch_pod_and_do_sender(
         self, container_number: str, download_dir: Path,
-        invoice_number: str = ""
+        invoice_number: str = "", skip_do_sender: bool = False
     ) -> tuple[Optional[Path], Optional[str]]:
         """Single TMS trip: search → grab DO SENDER → Document tab → download POD.
 
         Returns (pod_path, do_sender_email). Either or both may be None.
+        If skip_do_sender=True, skips the Detail Info tab extraction (faster).
         """
         container_number = container_number.strip()
 
@@ -295,20 +296,36 @@ class TMSDownloadMixin:
                 logger.warning("[POD_DO] search_container returned None for %s", container_number)
             return (None, grid_email)
 
-        # Step 2: Grab DO SENDER from Detail Info tab
-        do_sender = await self._extract_do_sender()
-        if do_sender:
-            logger.info("[POD_DO] D/O sender for %s: %s", container_number, do_sender)
+        # Step 2: Grab DO SENDER from Detail Info tab (skippable for email-only flows)
+        do_sender = None
+        if skip_do_sender:
+            do_sender = self._grid_do_sender
+            logger.info("[POD_DO] Skipping DO SENDER extraction (skip_do_sender=True), grid=%s", do_sender)
+            # Go straight to Document tab via URL (skip detail page load)
+            doc_url = work_order_url.replace("/detail-info/", "/document/")
+            logger.info("[POD_DO] Direct nav to Document tab: %s", doc_url)
+            try:
+                await self._page.goto(doc_url, wait_until="domcontentloaded", timeout=15000)
+                await asyncio.sleep(2)
+                docs_found = True
+            except Exception as e:
+                logger.warning("[POD_DO] Direct doc URL failed: %s — falling back", e)
+                docs_found = False
+            if not docs_found:
+                docs_found = await self.navigate_to_documents_tab()
         else:
-            # Fall back to grid DO SENDER if detail page extraction failed
-            if self._grid_do_sender:
-                do_sender = self._grid_do_sender
-                logger.info("[POD_DO] D/O sender from grid fallback: %s", do_sender)
+            do_sender = await self._extract_do_sender()
+            if do_sender:
+                logger.info("[POD_DO] D/O sender for %s: %s", container_number, do_sender)
             else:
-                logger.warning("[POD_DO] No D/O sender found for %s", container_number)
+                if self._grid_do_sender:
+                    do_sender = self._grid_do_sender
+                    logger.info("[POD_DO] D/O sender from grid fallback: %s", do_sender)
+                else:
+                    logger.warning("[POD_DO] No D/O sender found for %s", container_number)
 
-        # Step 3: Navigate to Document tab
-        docs_found = await self.navigate_to_documents_tab()
+            # Step 3: Navigate to Document tab
+            docs_found = await self.navigate_to_documents_tab()
         if not docs_found:
             self._make_error("navigate_documents", f"Documents tab failed for {container_number}")
             return (None, do_sender)

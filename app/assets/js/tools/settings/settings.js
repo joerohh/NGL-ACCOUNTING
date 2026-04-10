@@ -25,17 +25,10 @@ export async function settingsLoad() {
 
   const creds = await agentBridge.getCredentials();
   if (creds.error) {
-    document.getElementById('settingsQboStatus').textContent = 'Error loading';
     return;
   }
 
-  // Pre-fill emails (never pre-fill passwords)
-  if (creds.qbo_email) {
-    document.getElementById('settingsQboEmail').value = creds.qbo_email;
-  }
-  document.getElementById('settingsQboStatus').textContent = creds.qbo_configured ? 'Configured' : 'Not configured';
-  document.getElementById('settingsQboStatus').style.color = creds.qbo_configured ? '#16a34a' : '#94a3b8';
-
+  // Pre-fill TMS email (never pre-fill passwords)
   if (creds.tms_email) {
     document.getElementById('settingsTmsEmail').value = creds.tms_email;
   }
@@ -43,9 +36,7 @@ export async function settingsLoad() {
   document.getElementById('settingsTmsStatus').style.color = creds.tms_configured ? '#16a34a' : '#94a3b8';
 
   // Clear password fields
-  document.getElementById('settingsQboPassword').value = '';
   document.getElementById('settingsTmsPassword').value = '';
-  document.getElementById('settingsQboPassword').placeholder = creds.qbo_configured ? '(saved \u2014 enter new to change)' : 'Enter password';
   document.getElementById('settingsTmsPassword').placeholder = creds.tms_configured ? '(saved \u2014 enter new to change)' : 'Enter password';
 
   // Load QBO API status
@@ -64,13 +55,9 @@ async function settingsSaveAndConnect() {
   btnText.textContent = 'Saving & connecting...';
 
   const data = {};
-  const qboEmail = document.getElementById('settingsQboEmail').value.trim();
-  const qboPass = document.getElementById('settingsQboPassword').value;
   const tmsEmail = document.getElementById('settingsTmsEmail').value.trim();
   const tmsPass = document.getElementById('settingsTmsPassword').value;
 
-  if (qboEmail) data.qbo_email = qboEmail;
-  if (qboPass) data.qbo_password = qboPass;
   if (tmsEmail) data.tms_email = tmsEmail;
   if (tmsPass) data.tms_password = tmsPass;
 
@@ -134,12 +121,7 @@ async function runSelectorHealthCheck() {
   const resultsDiv = document.getElementById('healthCheckResults');
   resultsDiv.style.display = '';
 
-  const [qbo, tms] = await Promise.all([
-    agentBridge.checkQboSelectorHealth(),
-    agentBridge.checkTmsSelectorHealth(),
-  ]);
-
-  document.getElementById('healthCheckQbo').innerHTML = formatHealthResult('QBO', qbo);
+  const tms = await agentBridge.checkTmsSelectorHealth();
   document.getElementById('healthCheckTms').innerHTML = formatHealthResult('TMS', tms);
 
   btn.disabled = false;
@@ -349,10 +331,6 @@ async function loadQboApiStatus() {
 
   try {
     const status = await agentBridge.checkQBOStatus();
-    const mode = status.mode || 'browser';
-
-    // Update mode toggle buttons
-    updateModeToggle(mode);
 
     // Update API connection status
     const api = status.api || {};
@@ -379,7 +357,7 @@ async function loadQboApiStatus() {
 
       reauthWarning.style.display = api.needs_reauth_warning ? '' : 'none';
     } else {
-      statusEl.textContent = mode === 'api' ? 'Not connected \u2014 authorize below' : 'Not connected';
+      statusEl.textContent = 'Not connected \u2014 authorize below';
       statusEl.style.color = '#94a3b8';
       connectedInfo.style.display = 'none';
       disconnectBtn.style.display = 'none';
@@ -388,48 +366,6 @@ async function loadQboApiStatus() {
     }
   } catch (e) {
     document.getElementById('settingsQboApiStatus').textContent = 'Error loading status';
-  }
-}
-
-function updateModeToggle(mode) {
-  const browserBtn = document.getElementById('qboModeBrowserBtn');
-  const apiBtn = document.getElementById('qboModeApiBtn');
-
-  if (mode === 'api') {
-    apiBtn.style.background = '#16a34a';
-    apiBtn.style.color = '#fff';
-    apiBtn.style.fontWeight = '600';
-    browserBtn.style.background = '#f8fafc';
-    browserBtn.style.color = '#64748b';
-    browserBtn.style.fontWeight = '500';
-  } else {
-    browserBtn.style.background = '#ea580c';
-    browserBtn.style.color = '#fff';
-    browserBtn.style.fontWeight = '600';
-    apiBtn.style.background = '#f8fafc';
-    apiBtn.style.color = '#64748b';
-    apiBtn.style.fontWeight = '500';
-  }
-}
-
-async function setQboMode(mode) {
-  if (!state.agentConnected) {
-    settingsShowResult('Agent is offline. Start the agent first.', false);
-    return;
-  }
-
-  updateModeToggle(mode);
-
-  try {
-    const result = await agentBridge.setQboMode(mode);
-    if (result.error) {
-      settingsShowResult('Failed to set QBO mode: ' + result.error, false);
-      return;
-    }
-    settingsShowResult(`QBO mode set to: ${mode === 'api' ? 'API (Official)' : 'Browser (Playwright)'}`, true);
-    await loadQboApiStatus();
-  } catch (e) {
-    settingsShowResult('Failed to set QBO mode: ' + e.message, false);
   }
 }
 
@@ -543,6 +479,5 @@ window.openAddUserModal = openAddUserModal;
 window.openEditUserModal = openEditUserModal;
 window.saveUser = saveUser;
 window.doChangePassword = doChangePassword;
-window.setQboMode = setQboMode;
 window.connectQboApi = connectQboApi;
 window.disconnectQboApi = disconnectQboApi;

@@ -293,7 +293,7 @@
             <div class="connection-name">QuickBooks Online</div>
             <div class="connection-status" id="homeQboStatus">Checking...</div>
           </div>
-          <button class="connection-btn" id="homeQboBtn" onclick="agentOpenQBOLogin()" style="display:none;">
+          <button class="connection-btn" id="homeQboBtn" style="display:none;">
             Log in
           </button>
           <div class="connection-dot" id="homeQboDot"></div>
@@ -948,22 +948,6 @@
             </div>
           </div>
 
-          <!-- QBO Login Section — only shown when login required -->
-          <div id="qboLoginSection" style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:12px; margin-bottom:12px; display:none;">
-            <div style="font-size:0.82rem; color:#92400e; margin-bottom:8px;">
-              <strong>Step 1:</strong> Log into QuickBooks to enable auto-fetch.
-            </div>
-            <div style="font-size:0.75rem; color:#a16207; margin-bottom:10px;">
-              Clicking below opens a Chrome window. Log in there, then come back here.
-            </div>
-            <button class="btn btn-secondary" style="width:100%; justify-content:center; padding:8px 14px; font-size:0.82rem;" onclick="agentOpenQBOLogin()" id="qboLoginBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
-              </svg>
-              <span id="qboLoginBtnText">Open QBO Login</span>
-            </button>
-          </div>
-
           <!-- TMS Login Section — only shown when login required -->
           <div id="tmsLoginSection" style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px; margin-bottom:12px; display:none;">
             <div style="font-size:0.82rem; color:#1e40af; margin-bottom:8px;">
@@ -1148,6 +1132,13 @@
         Send Invoices
       </button>
 
+      <button id="invResendAllBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem; display:none; border-color:#f59e0b; color:#92400e; background:#fffbeb;" onclick="invResendAll()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+        </svg>
+        Resend All
+      </button>
+
       <button id="invAuditLogBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem;" onclick="invLoadAuditLog()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
@@ -1296,37 +1287,8 @@
   <div style="max-width:640px; margin:0 auto; padding:24px;">
     <h2 style="font-size:1.2rem; font-weight:700; color:#0f172a; margin-bottom:4px;">Settings</h2>
     <p style="font-size:0.82rem; color:#64748b; margin-bottom:24px;">
-      Auto-login credentials for QBO and TMS. Saved locally in your agent's .env file.
+      Auto-login credentials and connection settings. Saved locally in your agent's .env file.
     </p>
-
-    <!-- QBO Credentials -->
-    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-        <div style="width:36px; height:36px; background:#fff7ed; border-radius:8px; display:flex; align-items:center; justify-content:center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-          </svg>
-        </div>
-        <div>
-          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">QuickBooks Online</div>
-          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsQboStatus">Not configured</div>
-        </div>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <div>
-          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Intuit Email</label>
-          <input type="email" id="settingsQboEmail" placeholder="your-email@company.com"
-            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
-            onfocus="this.style.borderColor='#ea580c'" onblur="this.style.borderColor='#e2e8f0'" />
-        </div>
-        <div>
-          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Password</label>
-          <input type="password" id="settingsQboPassword" placeholder="Enter password"
-            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
-            onfocus="this.style.borderColor='#ea580c'" onblur="this.style.borderColor='#e2e8f0'" />
-        </div>
-      </div>
-    </div>
 
     <!-- TMS Credentials -->
     <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
@@ -1369,26 +1331,6 @@
           <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">QBO API Connection</div>
           <div style="font-size:0.72rem; color:#94a3b8;" id="settingsQboApiStatus">Not connected</div>
         </div>
-      </div>
-
-      <!-- Mode toggle -->
-      <div style="margin-bottom:14px;">
-        <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:6px;">QBO Send Method</label>
-        <div style="display:flex; gap:0; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
-          <button id="qboModeBrowserBtn" onclick="setQboMode('browser')"
-            style="flex:1; padding:8px 12px; font-size:0.8rem; border:none; cursor:pointer; transition:all 0.15s;
-                   background:#ea580c; color:#fff; font-weight:600;">
-            Browser (Playwright)
-          </button>
-          <button id="qboModeApiBtn" onclick="setQboMode('api')"
-            style="flex:1; padding:8px 12px; font-size:0.8rem; border:none; cursor:pointer; transition:all 0.15s;
-                   background:#f8fafc; color:#64748b; font-weight:500;">
-            API (Official)
-          </button>
-        </div>
-        <p style="font-size:0.68rem; color:#94a3b8; margin:6px 0 0;">
-          Browser = current Playwright automation &nbsp;|&nbsp; API = official Intuit QBO API (faster, more reliable)
-        </p>
       </div>
 
       <!-- API connection status + connect button -->
@@ -1465,7 +1407,6 @@
         </button>
       </div>
       <div id="healthCheckResults" style="display:none;">
-        <div id="healthCheckQbo" style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:10px; font-size:0.8rem;"></div>
         <div id="healthCheckTms" style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; font-size:0.8rem;"></div>
       </div>
     </div>

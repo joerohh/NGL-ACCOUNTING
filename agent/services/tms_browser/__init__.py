@@ -68,7 +68,11 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
     # Debug
     # ------------------------------------------------------------------
     async def _debug(self, label: str) -> None:
-        """Save a debug screenshot + HTML to agent/debug/tms/."""
+        """Save a debug screenshot to agent/debug/tms/.
+
+        Uses viewport-only screenshots (not full_page) for speed.
+        HTML capture is skipped to avoid slowing down the TMS flow.
+        """
         from config import TMS_DEBUG_DIR
 
         self._debug_step += 1
@@ -76,29 +80,7 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
         try:
             if self._page:
                 screenshot_path = TMS_DEBUG_DIR / f"{prefix}.png"
-                await self._page.screenshot(path=str(screenshot_path), full_page=True)
-
-                html = await self._page.evaluate("""() => {
-                    if (!document.body) return '<empty>';
-                    // Try focused capture: grid body first (avoids truncation from notification headers)
-                    const gridBody = document.querySelector('.ag-body-viewport')
-                        || document.querySelector('[ref="eBodyViewport"]')
-                        || document.querySelector('.ag-center-cols-viewport');
-                    let gridHtml = '';
-                    if (gridBody) {
-                        gridHtml = '<!-- AG GRID BODY -->' + gridBody.outerHTML.substring(0, 100000);
-                    }
-                    // Also capture the main page structure (removing hidden/notification bloat)
-                    const clone = document.body.cloneNode(true);
-                    clone.querySelectorAll('.hidden, [style*="display: none"], [style*="display:none"]').forEach(el => el.remove());
-                    // Remove notification/early-warning containers that consume 50K+ chars
-                    clone.querySelectorAll('[class*="early-warning"], [class*="notification"], [class*="EarlyWarning"]').forEach(el => el.remove());
-                    const bodyHtml = clone.outerHTML.substring(0, 150000);
-                    return gridHtml + '\\n<!-- PAGE BODY -->' + bodyHtml;
-                }""")
-                html_path = TMS_DEBUG_DIR / f"{prefix}.html"
-                html_path.write_text(html, encoding="utf-8")
-
+                await self._page.screenshot(path=str(screenshot_path))
                 logger.info("TMS DEBUG [%s]: saved → %s", label, prefix)
         except Exception as e:
             logger.warning("TMS debug capture failed for '%s': %s", label, e)

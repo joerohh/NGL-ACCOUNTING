@@ -149,6 +149,10 @@ def _migrate_if_needed(conn: sqlite3.Connection) -> None:
     customers_json = DATA_DIR / "customers.json"
     audit_jsonl = DATA_DIR / "audit_log.jsonl"
 
+    # Skip entirely if no legacy files exist (common case after first migration)
+    if not customers_json.exists() and not audit_jsonl.exists():
+        return
+
     # Migrate customers
     row = conn.execute("SELECT COUNT(*) FROM customers").fetchone()
     if row[0] == 0 and customers_json.exists():

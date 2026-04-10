@@ -18,12 +18,11 @@ from config import (
     DAILY_API_CALL_LIMIT, GMAIL_ADDRESS, GMAIL_APP_PASSWORD,
     TRANZACT_USERNAME, TRANZACT_PASSWORD,
     DEBUG_DIR, DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS,
-    SELECTORS_FILE, TMS_SELECTORS_FILE,
+    TMS_SELECTORS_FILE,
     WEB_UPDATE_URL, WEBAPP_CACHE_DIR,
 )
 from routers import auth, jobs, files, qbo, customers, audit, tms, settings
 from services.shared_browser import SharedBrowser
-from services.qbo_browser import QBOBrowser
 from services.qbo_api import QBOApiClient
 from services.tms_browser import TMSBrowser
 from services.claude_classifier import ClaudeClassifier
@@ -52,7 +51,6 @@ def _handle_unhandled_exception(loop, context):
 
 # ── Shared instances ─────────────────────────────────────────────────
 shared_browser = SharedBrowser()
-qbo_browser = QBOBrowser()
 qbo_api = QBOApiClient()
 tms_browser = TMSBrowser()
 classifier = None
@@ -61,7 +59,7 @@ portal_uploader = None
 job_manager = None
 
 # Session alerts — set by keep-alive loop when auto-reconnect fails
-_session_alerts = {"qbo_needs_login": False, "tms_needs_login": False}
+_session_alerts = {"tms_needs_login": False}
 
 
 KEEPALIVE_INTERVAL_S = 300  # 5 minutes between keep-alive pings
@@ -90,31 +88,6 @@ async def _session_keepalive_loop():
     await asyncio.sleep(60)  # Wait 1 min after startup before first check
     while True:
         try:
-            # QBO keep-alive — skip if a job is actively using the browser
-            has_running_job = job_manager and any(
-                j.status == "running" for j in job_manager._jobs.values()
-            )
-            if has_running_job:
-                logger.debug("Skipping QBO keep-alive — job is running")
-            else:
-                qbo_alive = await qbo_browser.keep_alive()
-                if not qbo_alive:
-                    logger.warning("QBO session lost — attempting auto-reconnect...")
-                    try:
-                        reconnected = await qbo_browser.auto_login()
-                        if reconnected:
-                            logger.info("QBO auto-reconnect successful!")
-                            _session_alerts["qbo_needs_login"] = False
-                        else:
-                            logger.warning("QBO auto-reconnect failed — opening login page")
-                            _session_alerts["qbo_needs_login"] = True
-                            await qbo_browser.open_login_page()
-                            _notify("QBO Session Expired", "Auto-reconnect failed. Please log in manually.")
-                    except Exception as e:
-                        logger.error("QBO auto-reconnect error: %s", e)
-                        _session_alerts["qbo_needs_login"] = True
-                        _notify("QBO Error", f"Session reconnect failed: {e}")
-
             # TMS keep-alive — skip if TMS context hasn't been created yet (lazy init)
             if not tms_browser.is_initialized:
                 pass  # TMS not active yet — nothing to keep alive
@@ -197,8 +170,22 @@ def _migrate_data_to_appdata():
             else:
                 logger.warning("No seed database found at %s", seed_db)
 
+    # Migrate .env credentials (prevents silent credential loss on upgrade)
+    old_env = BASE_DIR / ".env"
+    new_env = APPDATA_DIR / ".env"
+    if old_env.exists() and not new_env.exists():
+        try:
+            shutil.copy2(old_env, new_env)
+            old_env.rename(old_env.with_suffix(".env.bak"))
+            logger.info("Migrated .env credentials to AppData: %s", new_env)
+            # Reload so this process picks up the migrated values
+            from dotenv import load_dotenv
+            load_dotenv(new_env, override=True)
+        except Exception as e:
+            logger.error("Failed to migrate .env to AppData: %s — credentials may be missing!", e)
+
     # Migrate browser profiles
-    for name in [".browser_profile", ".tms_browser_profile"]:
+    for name in [".tms_browser_profile"]:
         old = BASE_DIR / name
         new = APPDATA_DIR / name
         if old.is_dir() and not new.exists():
@@ -231,8 +218,6 @@ async def lifespan(app: FastAPI):
     # ── One-time migration: copy data from old install dir to AppData ──
     if _is_frozen and APPDATA_DIR != BASE_DIR:
         _migrate_data_to_appdata()
-    if not SELECTORS_FILE.exists():
-        logger.error("MISSING: %s — QBO automation will fail!", SELECTORS_FILE)
     if not TMS_SELECTORS_FILE.exists():
         logger.error("MISSING: %s — TMS automation will fail!", TMS_SELECTORS_FILE)
     if not CLAUDE_API_KEY:
@@ -252,8 +237,8 @@ async def lifespan(app: FastAPI):
     cleanup_old_debug_files(DEBUG_DIR)
     backup_data_files(DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS)
 
-    # Init shared Playwright browser (single Chrome process for QBO + TMS)
-    from config import BROWSER_HEADLESS, BROWSER_DOWNLOADS_DIR, TMS_DOWNLOADS_DIR, TMS_VIEWPORT
+    # Init shared Playwright browser (single Chrome process for TMS + portals)
+    from config import BROWSER_HEADLESS, TMS_DOWNLOADS_DIR, TMS_VIEWPORT
     from utils import cleanup_old_profiles
 
     await shared_browser.start(headless=BROWSER_HEADLESS)
@@ -261,14 +246,6 @@ async def lifespan(app: FastAPI):
 
     # Clean dead Chrome profile cache from old launch_persistent_context() usage
     cleanup_old_profiles()
-
-    # Create QBO context and initialize
-    qbo_ctx = await shared_browser.create_context("qbo",
-        viewport={"width": 1920, "height": 960},
-        accept_downloads=True,
-    )
-    await qbo_browser.init(context=qbo_ctx, shared_browser=shared_browser)
-    logger.info("QBO browser ready (shared context)")
 
     # TMS: lazy initialization — context created on first use
     tms_browser.set_shared_browser(shared_browser)
@@ -291,8 +268,12 @@ async def lifespan(app: FastAPI):
 
     # Init portal uploader (TrueVal flow)
     if TRANZACT_USERNAME and TRANZACT_PASSWORD:
+        portal_ctx = await shared_browser.create_context("portal",
+            viewport={"width": 1920, "height": 960},
+            accept_downloads=True,
+        )
         portal_uploader = PortalUploader(
-            browser_context=qbo_browser._context,
+            browser_context=portal_ctx,
             username=TRANZACT_USERNAME,
             password=TRANZACT_PASSWORD,
         )
@@ -306,13 +287,11 @@ async def lifespan(app: FastAPI):
         email_sender=email_sender,
         portal_uploader=portal_uploader,
         tms_browser=tms_browser,
-        qbo_browser=qbo_browser,
     )
     jobs.set_job_manager(job_manager)
-    qbo.set_qbo_browser(qbo_browser)
     qbo.set_qbo_api(qbo_api)
     tms.set_tms_browser(tms_browser)
-    settings.set_browsers(qbo_browser, tms_browser)
+    settings.set_tms_browser(tms_browser)
 
     # Log QBO API status
     if qbo_api.is_connected:
@@ -327,25 +306,7 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("QBO API not configured (no QBO_CLIENT_ID in .env)")
 
-    from config import QBO_MODE
-    logger.info("QBO mode: %s", QBO_MODE)
     logger.info("Job manager ready")
-
-    # Auto-check sessions — try auto-login if cookies didn't restore
-    try:
-        qbo_logged_in = await qbo_browser.is_logged_in()
-        if qbo_logged_in:
-            logger.info("QBO session restored — already logged in!")
-        else:
-            logger.info("QBO session not active — attempting auto-login...")
-            auto_ok = await qbo_browser.auto_login()
-            if auto_ok:
-                logger.info("QBO auto-login successful!")
-            else:
-                logger.info("QBO auto-login needs manual step — opening login page")
-                await qbo_browser.open_login_page()
-    except Exception as e:
-        logger.warning("QBO session check failed: %s", e)
 
     # TMS session check skipped — TMS uses lazy initialization.
     # Context will be created on first TMS operation (login checked then).
@@ -366,7 +327,6 @@ async def lifespan(app: FastAPI):
     if portal_uploader:
         await portal_uploader.close()
     await tms_browser.close()     # saves TMS cookies (if initialized)
-    await qbo_browser.close()     # saves QBO cookies
     await shared_browser.close()  # kills the ONE Chrome process + Playwright
     from services.database import close_db
     close_db()
@@ -500,15 +460,11 @@ async def health():
         }
     # Read and clear session alerts (one-time notifications)
     alerts = dict(_session_alerts)
-    _session_alerts["qbo_needs_login"] = False
     _session_alerts["tms_needs_login"] = False
 
-    from config import QBO_MODE
     return {
         "status": "ok",
         "service": "ngl-agent",
-        "qbo_mode": QBO_MODE,
-        "qbo_browser": "initialized",
         "qbo_api": "connected" if qbo_api.is_connected else "not_connected",
         "tms_browser": "initialized" if tms_browser.is_initialized else "lazy_pending",
         "classifier": "ready" if classifier else "no_api_key",

@@ -50,13 +50,16 @@ main.py                           (FastAPI entry point, localhost:8787)
 config.py                         (paths, environment, constants)
 utils.py                          (shared utilities — strip_motw)
 services/
-  qbo_browser.py                  (Playwright QBO automation)
+  qbo_api/                        (QBO REST API — OAuth, invoices, attachments)
+  tms_browser/                    (TMS portal automation — Playwright)
+  job_manager/                    (background job orchestration, SSE streaming)
   claude_classifier.py            (Claude Haiku document classification)
-  job_manager.py                  (background job orchestration, SSE streaming)
+  email_sender.py                 (Gmail SMTP for invoice delivery)
+  portal_uploader.py              (TranzAct portal uploads)
 routers/
   jobs.py                         (job endpoints)
   files.py                        (file serving + saving)
-  qbo.py                          (QBO status + login endpoints)
+  qbo.py                          (QBO OAuth + status endpoints)
 ```
 
 ## Core Workflows

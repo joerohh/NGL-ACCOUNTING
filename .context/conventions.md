@@ -36,15 +36,15 @@
 - `__init__.py` combines mixins and re-exports the main class
 
 ### Naming
-- Files: snake_case — `qbo_browser.py`, `job_manager.py`
-- Classes: PascalCase — `QBOBrowser`, `TMSBrowser`
+- Files: snake_case — `qbo_api.py`, `job_manager.py`
+- Classes: PascalCase — `QBOApiClient`, `TMSBrowser`
 - Private methods: `_prefixed` — `_debug()`, `_ensure_browser()`
 - Logger per module: `logging.getLogger("ngl.{module}")`
 
 ### Config
 - All settings in `config.py`
 - Secrets in `.env` (loaded via python-dotenv)
-- DOM selectors in `selectors.json` / `tms_selectors.json`
+- DOM selectors in `tms_selectors.json`
 
 ### Error Handling
 - Browser automation methods return structured result objects

@@ -123,6 +123,7 @@ class SendQBOApiMixin:
 
                     tms_pod, tms_do_sender = await self._tms.fetch_pod_and_do_sender(
                         container, temp_dir, invoice_number=invoice.invoice_number,
+                        skip_do_sender=True,
                     )
 
                     if tms_pod and tms_pod.exists():
@@ -187,6 +188,7 @@ class SendQBOApiMixin:
 
         # Step 4: Build email fields
         container = verification.get("found_container", invoice.container_number)
+        # Use subject as-is if provided (frontend handles [NGL_INV_REVISED] prefix for resends)
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
         to_emails = customer_emails
         cc_emails = ["ar@ngltrans.net"] + customer.get("ccEmails", [])

@@ -1,4 +1,4 @@
-"""QBO connection endpoints — browser login + OAuth API integration."""
+"""QBO connection endpoints — OAuth API integration."""
 
 import os
 import signal
@@ -6,18 +6,12 @@ import signal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, HTMLResponse
 
-from config import QBO_MODE, QBO_CLIENT_ID
+from config import QBO_CLIENT_ID
 
 router = APIRouter(prefix="/qbo", tags=["qbo"])
 
 # Injected by main.py on startup
-_qbo_browser = None
 _qbo_api = None
-
-
-def set_qbo_browser(qbo):
-    global _qbo_browser
-    _qbo_browser = qbo
 
 
 def set_qbo_api(api):
@@ -27,37 +21,14 @@ def set_qbo_api(api):
 
 @router.get("/status")
 async def qbo_status():
-    """Check QBO connection status — works for both browser and API modes."""
-    from config import QBO_MODE
+    """Check QBO API connection status."""
+    result = {"mode": "api"}
 
-    result = {"mode": QBO_MODE}
-
-    # API status (always report if configured)
     if _qbo_api:
         api_status = _qbo_api.get_status()
         result["api"] = api_status
-
-    # Browser status (always report if initialized)
-    if _qbo_browser:
-        try:
-            url = _qbo_browser.current_url
-            logged_in = bool(url) and "qbo.intuit.com" in url and "sign-in" not in url
-            result["browser"] = {
-                "status": "connected" if logged_in else "login_required",
-                "loggedIn": logged_in,
-                "currentUrl": url,
-            }
-        except Exception as e:
-            result["browser"] = {"status": "error", "loggedIn": False, "error": str(e)}
-
-    # Top-level convenience fields based on active mode
-    if QBO_MODE == "api" and _qbo_api:
         result["loggedIn"] = _qbo_api.is_connected
         result["status"] = "connected" if _qbo_api.is_connected else "api_not_connected"
-    elif _qbo_browser:
-        browser = result.get("browser", {})
-        result["loggedIn"] = browser.get("loggedIn", False)
-        result["status"] = browser.get("status", "not_initialized")
     else:
         result["loggedIn"] = False
         result["status"] = "not_initialized"
@@ -65,51 +36,10 @@ async def qbo_status():
     return result
 
 
-@router.post("/open-login")
-async def open_qbo_login():
-    """Open the QBO login page in the agent's browser for manual authentication."""
-    if not _qbo_browser:
-        raise HTTPException(503, "QBO browser not initialized")
-
-    try:
-        url = await _qbo_browser.open_login_page()
-        return {
-            "status": "login_page_opened",
-            "url": url,
-            "message": "Please log into QuickBooks in the Chrome window that opened.",
-        }
-    except Exception as e:
-        raise HTTPException(500, f"Failed to open login page: {e}")
-
-
-@router.post("/wait-for-login")
-async def wait_for_qbo_login():
-    """Wait for the user to complete manual QBO login (up to 2 minutes)."""
-    if not _qbo_browser:
-        raise HTTPException(503, "QBO browser not initialized")
-
-    try:
-        success = await _qbo_browser.wait_for_login(timeout_s=120)
-        if success:
-            return {"status": "logged_in", "message": "QBO login successful!"}
-        else:
-            return {"status": "timeout", "message": "Login timed out. Please try again."}
-    except Exception as e:
-        raise HTTPException(500, f"Error waiting for login: {e}")
-
-
-@router.get("/selector-health")
-async def qbo_selector_health():
-    """Check if critical QBO DOM selectors are present on the current page."""
-    from services.health_check import check_qbo_selectors
-    return await check_qbo_selectors(_qbo_browser)
-
-
 @router.post("/shutdown")
 async def shutdown_server():
     """Gracefully shut down the agent server so Chrome saves cookies/session properly."""
     # Send SIGINT to ourselves — this triggers FastAPI's lifespan shutdown
-    # which calls qbo_browser.close() → Chrome exits cleanly → cookies saved
     os.kill(os.getpid(), signal.SIGINT)
     return {"status": "shutting_down", "message": "Server shutting down gracefully..."}
 

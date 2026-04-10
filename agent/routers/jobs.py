@@ -33,6 +33,7 @@ class SendInvoiceItem(BaseModel):
     amount: str = ""
     subject: str = ""
     doSenderEmail: str = ""
+    isResend: bool = False
 
 
 class SendRequest(BaseModel):

@@ -27,7 +27,6 @@ export async function agentHealthCheck() {
   const clsDetails = document.getElementById('classifierDetails');
   const clsUsage = document.getElementById('classifierUsage');
   const qboEl = document.getElementById('qboStatus');
-  const qboLoginSection = document.getElementById('qboLoginSection');
 
   if (data && data.status === 'ok') {
     state.agentConnected = true;
@@ -50,10 +49,6 @@ export async function agentHealthCheck() {
 
     // Session alert notifications from keep-alive auto-reconnect
     if (data.session_alerts) {
-      if (data.session_alerts.qbo_needs_login) {
-        addLog('warning', '[Agent] QBO session expired — auto-login failed. Please log in manually in Chrome.');
-        showBrowserNotification('QBO Session Expired', 'Auto-login failed. Please log in manually.');
-      }
       if (data.session_alerts.tms_needs_login) {
         addLog('warning', '[Agent] TMS session expired — auto-login failed. Please log in manually in Chrome.');
         showBrowserNotification('TMS Session Expired', 'Auto-login failed. Please log in manually.');
@@ -103,13 +98,11 @@ export async function agentHealthCheck() {
     if (!state.activeJobId) {
       const qbo = await agentBridge.checkQBOStatus();
       if (qbo.loggedIn) {
-        qboEl.textContent = 'Logged in';
+        qboEl.textContent = 'Connected';
         qboEl.style.color = '#16a34a';
-        qboLoginSection.style.display = 'none';
       } else {
-        qboEl.textContent = 'Not logged in';
+        qboEl.textContent = 'Not connected';
         qboEl.style.color = '#d97706';
-        qboLoginSection.style.display = '';
       }
 
       // Passive TMS status
@@ -141,7 +134,6 @@ export async function agentHealthCheck() {
     clsDetails.style.display = 'none';
     qboEl.textContent = '--';
     qboEl.style.color = '#94a3b8';
-    qboLoginSection.style.display = 'none';
     const tmsElOff = document.getElementById('tmsStatus');
     if (tmsElOff) { tmsElOff.textContent = '--'; tmsElOff.style.color = '#94a3b8'; }
     const tmsLoginOff = document.getElementById('tmsLoginSection');
@@ -179,10 +171,10 @@ function _updateHomeConnections() {
   // Agent server
   setCard('homeAgent', 'Running on :8787', true, false);
 
-  // QBO
+  // QBO API
   const qboText = document.getElementById('qboStatus');
-  const qboLoggedIn = qboText && qboText.textContent === 'Logged in';
-  setCard('homeQbo', qboLoggedIn ? 'Logged in' : 'Not logged in', qboLoggedIn, true);
+  const qboConnected = qboText && qboText.textContent === 'Connected';
+  setCard('homeQbo', qboConnected ? 'Connected' : 'Not connected', qboConnected, false);
 
   // TMS
   const tmsText = document.getElementById('tmsStatus');
@@ -219,66 +211,6 @@ function updateHeaderAgentButtons(connected) {
     b.style.borderColor = connected ? '#bbf7d0' : '#e2e8f0';
     b.style.background = connected ? '#f0fdf4' : '#fff';
   });
-}
-
-async function agentOpenQBOLogin() {
-  if (!state.agentConnected) {
-    addLog('error', '[Agent] Agent server is offline. Start it with: python main.py');
-    return;
-  }
-
-  const btn = document.getElementById('qboLoginBtn');
-  const btnText = document.getElementById('qboLoginBtnText');
-  const qboEl = document.getElementById('qboStatus');
-  btn.disabled = true;
-  btnText.textContent = 'Opening Chrome...';
-
-  addLog('info', '[Agent] Opening QBO login page in Chrome...');
-  const result = await agentBridge.openQBOLogin();
-
-  if (result.status === 'login_page_opened') {
-    qboEl.textContent = 'Waiting...';
-    qboEl.style.color = '#d97706';
-    btnText.textContent = 'Waiting for you to log in...';
-    addLog('info', '[Agent] Chrome window opened — log in to QuickBooks there, then come back');
-
-    // Poll wait-for-login endpoint (waits up to 2 min server-side)
-    try {
-      const waitRes = await agentBridge._authFetch(agentBridge.baseUrl + '/qbo/wait-for-login', { method: 'POST' });
-      const waitData = await waitRes.json();
-      if (waitData.status === 'logged_in') {
-        qboEl.textContent = 'Logged in';
-        qboEl.style.color = '#16a34a';
-        document.getElementById('qboLoginSection').style.display = 'none';
-        document.getElementById('fetchMissingBtn').disabled = false;
-        addLog('success', '[Agent] QBO login successful!');
-      } else {
-        qboEl.textContent = 'Not logged in';
-        qboEl.style.color = '#d97706';
-        btnText.textContent = 'Open QBO Login';
-        btn.disabled = false;
-        addLog('warning', '[Agent] QBO login timed out — try again');
-      }
-    } catch (e) {
-      btnText.textContent = 'Open QBO Login';
-      btn.disabled = false;
-      addLog('error', '[Agent] Error waiting for login: ' + e.message);
-    }
-  } else {
-    const errMsg = result.detail || result.error || 'Unknown error';
-    addLog('error', '[Agent] Failed to open QBO login: ' + errMsg);
-    btnText.textContent = 'Retry QBO Login';
-    btn.disabled = false;
-    // Show inline error so user doesn't need to check the log
-    let errDiv = document.getElementById('qboLoginError');
-    if (!errDiv) {
-      errDiv = document.createElement('div');
-      errDiv.id = 'qboLoginError';
-      errDiv.style.cssText = 'font-size:0.75rem; color:#dc2626; margin-top:8px; padding:6px 8px; background:#fef2f2; border-radius:6px;';
-      btn.parentElement.appendChild(errDiv);
-    }
-    errDiv.textContent = 'Chrome failed to open. The agent will relaunch it — click Retry.';
-  }
 }
 
 async function agentOpenTMSLogin() {
@@ -500,10 +432,9 @@ async function handleAgentEvent(event, jobId) {
     }
 
     case 'login_required':
-      addLog('error', '[Agent] QBO session expired — please log in again');
-      document.getElementById('qboStatus').textContent = 'Not logged in';
+      addLog('error', '[Agent] QBO API session expired — please re-authorize in Settings');
+      document.getElementById('qboStatus').textContent = 'Not connected';
       document.getElementById('qboStatus').style.color = '#d97706';
-      document.getElementById('qboLoginSection').style.display = '';
       resetFetchButton();
       state.activeJobId = null;
       break;
@@ -629,7 +560,6 @@ window.__nglAgent = {
 
 // ── Window assignments for inline HTML handlers ──
 window.toggleAgentPanel = toggleAgentPanel;
-window.agentOpenQBOLogin = agentOpenQBOLogin;
 window.agentOpenTMSLogin = agentOpenTMSLogin;
 window.agentFetchMissing = agentFetchMissing;
 window.agentPauseJob = agentPauseJob;

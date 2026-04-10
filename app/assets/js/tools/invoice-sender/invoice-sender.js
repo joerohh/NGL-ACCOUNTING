@@ -2,28 +2,15 @@
 //  INVOICE SENDING TOOL — CSV parsing, table, send flow, audit
 // ══════════════════════════════════════════════════════════════════
 import { state, invoiceState, sendState } from '../../shared/state.js';
-import { uid, escHtml, findColumnKey } from '../../shared/utils.js';
+import { uid, escHtml, findColumnKey, CSV_ALIASES } from '../../shared/utils.js';
 import { setupDrop } from '../../shared/dom-helpers.js';
 import { invAddLog, invClearLog, invSetProgress, invToggleLog } from '../../shared/log.js';
 import { agentBridge } from '../../shared/agent-client.js';
 import { LS_SEND_HISTORY, LS_LAST_SEND_RUN } from '../../shared/constants.js';
 import { fetchJobResultsForHistory } from '../session-history/session-history.js';
 
-// ── CSV Column Aliases ──
-const INV_CSV_ALIASES = {
-  invoiceNumber:   ['invoicenumber', 'invoice', 'invoiceno', 'invno', 'inv', 'invnum', 'docnumber', 'docno', 'invoicenum'],
-  customerName:    ['customername', 'customer', 'name', 'client', 'clientname', 'companyname', 'company'],
-  invoiceDate:     ['invoicedate', 'date', 'invdate', 'docdate', 'createdate', 'txndate', 'transactiondate'],
-  dueDate:         ['duedate', 'due', 'paymentdue', 'dueby', 'paydate'],
-  amount:          ['amount', 'total', 'balance', 'amountdue', 'openbalance', 'totalamount', 'invoiceamount', 'balancedue', 'bill'],
-  email:           ['email', 'emailaddress', 'billemail', 'contactemail', 'customeremail', 'billtoemail'],
-  poNumber:        ['ponumber', 'po', 'purchaseorder', 'purchaseordernumber', 'pono', 'ponum', 'purchaseordernum'],
-  containerNumber: ['containernumber', 'container', 'containerid', 'containerno', 'cntr', 'cntrnumber', 'cntrno', 'ctr', 'ctrno', 'ctrnumber', 'equipment', 'equipmentnumber', 'equipmentno', 'equipmentid', 'eqno', 'eqnumber', 'cont', 'contno', 'contnumber'],
-  bolNumber:       ['bolnumber', 'bol', 'billoflading', 'blnumber', 'bl', 'billofladingno'],
-  customerCode:    ['customercode', 'custcode', 'customer_code', 'code', 'custid', 'customerid', 'custno', 'billto'],
-  subject:         ['subject', 'emailsubject', 'subjectline', 'emailtitle'],
-  doSenderEmail:   ['dosenderemail', 'do_sender_email', 'dosender', 'do_email', 'deliveryordersender', 'deliveryorderemail', 'do_sender', 'dosenderemailaddress'],
-};
+// CSV column aliases — imported from shared/utils.js (single source of truth)
+const INV_CSV_ALIASES = CSV_ALIASES;
 
 // ── Logging: invAddLog, invClearLog, invToggleLog, invSetProgress → shared/log.js ──
 

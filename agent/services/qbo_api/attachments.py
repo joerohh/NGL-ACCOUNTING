@@ -78,9 +78,14 @@ class QBOAttachmentsMixin:
         for att in attachments:
             found_types.add(att["docType"])
 
-        # Check required docs
-        found = [doc for doc in required_docs if doc.lower() in found_types]
-        missing = [doc for doc in required_docs if doc.lower() not in found_types]
+        # Return ALL detected types (consistent with browser path)
+        found = sorted(found_types)
+        # Missing = required docs not present in found types
+        missing = []
+        for req in required_docs:
+            parts = [p.strip().lower() for p in req.split('/') if p.strip()]
+            if not any(p in found_types for p in parts):
+                missing.append(req)
 
         return {
             "found": found,

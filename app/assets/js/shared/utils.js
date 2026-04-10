@@ -43,16 +43,26 @@ export function normalizeHeader(raw) {
   return String(raw).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-export const CONTAINER_ALIASES = [
-  'containernumber', 'container', 'containerid', 'containerno',
-  'cont', 'contno', 'contnumber', 'cntr', 'cntrnumber', 'cntrno', 'cntrid',
-  'ctr', 'ctrno', 'ctrnumber', 'equipment', 'equipmentnumber', 'equipmentno', 'equipmentid', 'eqno', 'eqnumber',
-];
-export const INVOICE_ALIASES = [
-  'invoicenumber', 'invoice', 'invoiceid', 'invoiceno',
-  'inv', 'invno', 'invnumber', 'invnum', 'invid',
-  'docnumber', 'docno',
-];
+// Master alias lists — shared by Merge Tool and Invoice Sender.
+// Update HERE to keep both tools in sync.
+export const CSV_ALIASES = {
+  invoiceNumber:   ['invoicenumber', 'invoice', 'invoiceid', 'invoiceno', 'inv', 'invno', 'invnumber', 'invnum', 'invid', 'docnumber', 'docno', 'invoicenum'],
+  containerNumber: ['containernumber', 'container', 'containerid', 'containerno', 'cont', 'contno', 'contnumber', 'cntr', 'cntrnumber', 'cntrno', 'cntrid', 'ctr', 'ctrno', 'ctrnumber', 'equipment', 'equipmentnumber', 'equipmentno', 'equipmentid', 'eqno', 'eqnumber'],
+  customerName:    ['customername', 'customer', 'name', 'client', 'clientname', 'companyname', 'company'],
+  invoiceDate:     ['invoicedate', 'date', 'invdate', 'docdate', 'createdate', 'txndate', 'transactiondate'],
+  dueDate:         ['duedate', 'due', 'paymentdue', 'dueby', 'paydate'],
+  amount:          ['amount', 'total', 'balance', 'amountdue', 'openbalance', 'totalamount', 'invoiceamount', 'balancedue', 'bill'],
+  email:           ['email', 'emailaddress', 'billemail', 'contactemail', 'customeremail', 'billtoemail'],
+  poNumber:        ['ponumber', 'po', 'purchaseorder', 'purchaseordernumber', 'pono', 'ponum', 'purchaseordernum'],
+  bolNumber:       ['bolnumber', 'bol', 'billoflading', 'blnumber', 'bl', 'billofladingno'],
+  customerCode:    ['customercode', 'custcode', 'customer_code', 'code', 'custid', 'customerid', 'custno', 'billto'],
+  subject:         ['subject', 'emailsubject', 'subjectline', 'emailtitle'],
+  doSenderEmail:   ['dosenderemail', 'do_sender_email', 'dosender', 'do_email', 'deliveryordersender', 'deliveryorderemail', 'do_sender', 'dosenderemailaddress'],
+};
+
+// Convenience shortcuts used by the Merge Tool
+export const CONTAINER_ALIASES = CSV_ALIASES.containerNumber;
+export const INVOICE_ALIASES   = CSV_ALIASES.invoiceNumber;
 
 export function findColumnKey(headers, aliases) {
   // Try exact normalized match first

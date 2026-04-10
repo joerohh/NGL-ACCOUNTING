@@ -11,7 +11,7 @@ from typing import Optional
 
 from playwright.async_api import Browser, BrowserContext, Playwright, async_playwright
 
-from config import BROWSER_PROFILE_DIR, TMS_PROFILE_DIR
+from config import TMS_PROFILE_DIR
 
 logger = logging.getLogger("ngl.shared_browser")
 
@@ -36,7 +36,6 @@ class SharedBrowser:
 
         # Kill orphaned Chrome processes from previous runs
         from utils import kill_chrome_with_profile, kill_orphaned_playwright_chrome
-        kill_chrome_with_profile(BROWSER_PROFILE_DIR)
         kill_chrome_with_profile(TMS_PROFILE_DIR)
         kill_orphaned_playwright_chrome()
 

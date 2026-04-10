@@ -343,6 +343,34 @@ app.whenReady().then(async () => {
   log(`userData: ${app.getPath("userData")}`);
   log(`logFile: ${_logFile}`);
 
+  // ── Migrate .env from old install dir to AppData ──────────────────
+  // Prevents silent credential loss when upgrading to AppData-based storage.
+  // Must run BEFORE startAgent() so Python sees the file at import time.
+  if (!isDev) {
+    const userData = app.getPath("userData"); // %LOCALAPPDATA%/NGL Accounting
+    const legacyEnvPaths = [
+      path.join(path.dirname(agentExe), ".env"),           // next to exe
+      path.join(path.dirname(agentExe), "_internal", ".env"), // PyInstaller _internal/
+    ];
+    const newEnv = path.join(userData, ".env");
+
+    if (!fs.existsSync(newEnv)) {
+      for (const legacyEnv of legacyEnvPaths) {
+        if (fs.existsSync(legacyEnv)) {
+          try {
+            fs.mkdirSync(userData, { recursive: true });
+            fs.copyFileSync(legacyEnv, newEnv);
+            fs.renameSync(legacyEnv, legacyEnv + ".bak");
+            log(`Migrated .env to AppData: ${legacyEnv} → ${newEnv}`);
+          } catch (err) {
+            log(`WARNING: .env migration failed: ${err.message} — credentials may be missing`);
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // Check if agent is already running (e.g. started from terminal)
   const agentAlreadyRunning = await new Promise((resolve) => {
     const req = http.get(`${AGENT_URL}/health`, (res) => {

@@ -47,11 +47,11 @@ agent/                        Python backend (FastAPI)
   config.py                   All configuration
   .env                        Credentials (not committed)
   services/                   Core services
-    qbo_browser/              QBO browser automation (Playwright)
+    qbo_api/                  QBO REST API (OAuth, invoices, attachments)
     tms_browser/              TMS portal automation (Playwright)
     job_manager/              Background job orchestration + SSE
     claude_classifier.py      AI document classification
-    email_sender.py           Gmail SMTP for OEC flow
+    email_sender.py           Gmail SMTP for invoice delivery
     portal_uploader.py        TranzAct portal uploads
   routers/                    API endpoints
   data/                       Customer data, audit logs

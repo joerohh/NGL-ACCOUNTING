@@ -121,24 +121,6 @@ export const agentBridge = {
     } catch { return { status: 'error', loggedIn: false }; }
   },
 
-  async openQBOLogin() {
-    try {
-      const res = await this._authFetch(this.baseUrl + '/qbo/open-login', { method: 'POST' });
-      return await res.json();
-    } catch (e) { return { status: 'error', error: e.message }; }
-  },
-
-  async setQboMode(mode) {
-    try {
-      const res = await this._authFetch(this.baseUrl + '/settings/qbo-mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode }),
-      });
-      return await res.json();
-    } catch (e) { return { error: e.message }; }
-  },
-
   async disconnectQboApi() {
     try {
       const res = await this._authFetch(this.baseUrl + '/qbo/oauth/disconnect', { method: 'POST' });
@@ -583,14 +565,6 @@ export const agentBridge = {
   },
 
   // ── Selector Health Checks ──
-  async checkQboSelectorHealth() {
-    try {
-      const res = await this._authFetch(this.baseUrl + '/qbo/selector-health');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
-    } catch (e) { return { status: 'error', error: e.message }; }
-  },
-
   async checkTmsSelectorHealth() {
     try {
       const res = await this._authFetch(this.baseUrl + '/tms/selector-health');

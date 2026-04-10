@@ -108,7 +108,8 @@ async def save_cookies_async(context, cookie_file: Path) -> None:
 def update_env_file(key: str, value: str, env_path: Path = None) -> None:
     """Update or add a key=value pair in the .env file."""
     if env_path is None:
-        env_path = Path(__file__).resolve().parent / ".env"
+        from config import APPDATA_DIR
+        env_path = APPDATA_DIR / ".env"
 
     lines = []
     found = False
@@ -134,9 +135,7 @@ def reload_env_credentials():
     """Re-read .env and update config module globals for credential fields."""
     import config as _cfg
     from dotenv import load_dotenv as _load
-    _load(override=True)
-    _cfg.QBO_EMAIL = os.getenv("QBO_EMAIL", "")
-    _cfg.QBO_PASSWORD = os.getenv("QBO_PASSWORD", "")
+    _load(_cfg.APPDATA_DIR / ".env", override=True)
     _cfg.TMS_EMAIL = os.getenv("TMS_EMAIL", "")
     _cfg.TMS_PASSWORD = os.getenv("TMS_PASSWORD", "")
 

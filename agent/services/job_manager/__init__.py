@@ -64,13 +64,14 @@ class SendRequest:
 
     def __init__(self, invoice_number: str, container_number: str,
                  customer_code: str, amount: str = "", subject: str = "",
-                 do_sender_email: str = "") -> None:
+                 do_sender_email: str = "", is_resend: bool = False) -> None:
         self.invoice_number = invoice_number
         self.container_number = container_number
         self.customer_code = customer_code
         self.amount = amount
         self.subject = subject
         self.do_sender_email = do_sender_email
+        self.is_resend = is_resend
 
 
 class SendResult:
@@ -228,10 +229,8 @@ class JobManager(
     def __init__(self, qbo_api: QBOApiClient, classifier: ClaudeClassifier,
                  email_sender: Optional["EmailSender"] = None,
                  portal_uploader: Optional["PortalUploader"] = None,
-                 tms_browser: Optional["TMSBrowser"] = None,
-                 qbo_browser=None) -> None:
-        self._qbo_api = qbo_api   # REST API client (all send flows)
-        self._qbo = qbo_browser   # Playwright browser (fetch jobs only)
+                 tms_browser: Optional["TMSBrowser"] = None) -> None:
+        self._qbo_api = qbo_api   # REST API client (all flows)
         self._classifier = classifier
         self._email_sender = email_sender
         self._portal_uploader = portal_uploader

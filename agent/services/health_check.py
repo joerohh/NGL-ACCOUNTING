@@ -1,53 +1,12 @@
-"""Selector health checks for QBO and TMS browsers.
+"""Selector health checks for TMS browser.
 
 Checks critical DOM selectors on the current page without navigating.
 Returns a report of which selectors were found/missing.
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger("ngl.health_check")
-
-
-# -- QBO selector checks ---------------------------------------------------
-
-# Selectors grouped by the page they should appear on
-QBO_CHECKS = {
-    "login_page": {
-        "description": "QBO Login Page",
-        "url_match": "accounts.intuit.com",
-        "selectors": {
-            "email_input": "input#ius-userid",
-            "password_input": "input#ius-password",
-            "sign_in_button": "button[data-testid='ius-sign-in-submit-btn']",
-        },
-    },
-    "app_page": {
-        "description": "QBO App (any page)",
-        "url_match": "qbo.intuit.com",
-        "selectors": {
-            "global_search": (
-                "#global-search-input, "
-                'input[placeholder*="search" i], '
-                'input[placeholder*="navigate" i], '
-                "input[data-id='global-search-input']"
-            ),
-            "navigation": "[data-testid='qbo-nav'], .qbo-nav, #globalNavigation",
-        },
-    },
-    "invoice_page": {
-        "description": "QBO Invoice Detail",
-        "url_match": "invoice",
-        "selectors": {
-            "attachments_area": (
-                "[data-testid='attachments'], "
-                ".attachments-section, "
-                ".txn-attachments"
-            ),
-        },
-    },
-}
 
 
 # -- TMS selector checks ---------------------------------------------------
@@ -92,78 +51,6 @@ TMS_CHECKS = {
         },
     },
 }
-
-
-async def check_qbo_selectors(qbo_browser) -> dict:
-    """Run selector health checks against the current QBO page.
-
-    Returns:
-        {
-            "status": "ok" | "warning" | "error" | "offline",
-            "current_url": "...",
-            "page_type": "app_page" | "login_page" | ...,
-            "checks": [
-                {"name": "global_search", "selector": "...", "found": True},
-                ...
-            ],
-            "passed": 2,
-            "failed": 0,
-            "total": 2,
-        }
-    """
-    result = {
-        "status": "offline",
-        "current_url": "",
-        "page_type": "unknown",
-        "checks": [],
-        "passed": 0,
-        "failed": 0,
-        "total": 0,
-    }
-
-    if not qbo_browser or not qbo_browser._page:
-        return result
-
-    try:
-        await qbo_browser._page.evaluate("() => true")
-    except Exception:
-        return result
-
-    url = qbo_browser._page.url or ""
-    result["current_url"] = url
-
-    # Determine which check group applies based on current URL
-    matched_group = None
-    for group_name, group in QBO_CHECKS.items():
-        if group["url_match"] in url:
-            matched_group = (group_name, group)
-            # Don't break — later matches (more specific) override
-
-    if not matched_group:
-        result["status"] = "ok"
-        result["page_type"] = "other"
-        return result
-
-    group_name, group = matched_group
-    result["page_type"] = group_name
-
-    for sel_name, selector in group["selectors"].items():
-        found = await _check_selector(qbo_browser._page, selector)
-        result["checks"].append({
-            "name": sel_name,
-            "selector": selector[:80],
-            "found": found,
-        })
-        result["total"] += 1
-        if found:
-            result["passed"] += 1
-        else:
-            result["failed"] += 1
-
-    result["status"] = "ok" if result["failed"] == 0 else (
-        "warning" if result["failed"] < result["total"] else "error"
-    )
-    return result
 
 
 async def check_tms_selectors(tms_browser) -> dict:

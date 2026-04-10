@@ -36,6 +36,7 @@ class SendJobMixin:
                 amount=inv.get("amount", ""),
                 subject=inv.get("subject", ""),
                 do_sender_email=inv.get("doSenderEmail", ""),
+                is_resend=inv.get("isResend", False),
             )
             for inv in invoices
         ]

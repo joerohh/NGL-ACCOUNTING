@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # Paths — NGL_AGENT_DIR is set by PyInstaller runtime hook when running as bundled exe
 BASE_DIR = Path(os.environ["NGL_AGENT_DIR"]) if "NGL_AGENT_DIR" in os.environ else Path(__file__).resolve().parent
 # BUNDLE_DIR = where PyInstaller extracts read-only data files (_internal/ in packaged mode)
@@ -18,10 +16,15 @@ BUNDLE_DIR = Path(os.environ["NGL_BUNDLE_DIR"]) if "NGL_BUNDLE_DIR" in os.enviro
 _is_packaged = "NGL_AGENT_DIR" in os.environ
 APPDATA_DIR = Path(os.environ.get("LOCALAPPDATA", "")) / "NGL Accounting" if _is_packaged else BASE_DIR
 
+# Load .env: first from BASE_DIR (bundled/dev fallback), then from APPDATA_DIR (user overrides).
+# Explicit paths ensure this works regardless of CWD (which is unpredictable in packaged mode).
+load_dotenv(BASE_DIR / ".env")
+_appdata_env = APPDATA_DIR / ".env"
+if _appdata_env.exists():
+    load_dotenv(_appdata_env, override=True)
+
 DOWNLOADS_DIR = BASE_DIR / "downloads"
-BROWSER_DOWNLOADS_DIR = BASE_DIR / ".browser_downloads"  # temp dir for Playwright auto-downloads
 BROWSER_PROFILE_DIR = APPDATA_DIR / ".browser_profile"
-SELECTORS_FILE = BUNDLE_DIR / "selectors.json"
 JOB_STATE_DIR = BASE_DIR / ".job_state"
 DEBUG_DIR = BASE_DIR / "debug"
 OUTPUT_DIR = BASE_DIR / "output"  # Final merged PDFs saved here (no MOTW)
@@ -35,7 +38,6 @@ BACKUP_RETAIN_DAYS = 30  # keep last 30 daily backups
 # Ensure directories exist
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOADS_DIR.mkdir(exist_ok=True)
-BROWSER_DOWNLOADS_DIR.mkdir(exist_ok=True)
 BROWSER_PROFILE_DIR.mkdir(exist_ok=True)
 JOB_STATE_DIR.mkdir(exist_ok=True)
 DEBUG_DIR.mkdir(exist_ok=True)
@@ -63,10 +65,6 @@ CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 # Browser (shared Playwright instance)
 BROWSER_HEADLESS = False  # set True to run Chrome headless (no visible window)
 
-# QBO
-QBO_BASE_URL = "https://app.qbo.intuit.com"
-QBO_LOGIN_URL = "https://qbo.intuit.com/app/homepage"
-
 # Timing — guards against rate limiting
 QBO_ACTION_DELAY_S = 1.0        # seconds between QBO actions (was 2.5)
 QBO_RETRY_COUNT = 3             # retries per failed download
@@ -78,7 +76,7 @@ CLASSIFICATION_DPI = 100                    # lower DPI = smaller image = cheape
 MAX_BATCH_SIZE = 200                        # max containers per job
 CONTAINER_TIMEOUT_S = 120                   # max seconds per container in fetch jobs
 FETCH_CONCURRENCY = 1                       # max parallel container fetches (1 = sequential)
-SEND_TIMEOUT_S = 180                        # max seconds per invoice in send jobs (OEC/portal flows are slower)
+SEND_TIMEOUT_S = 300                        # max seconds per invoice (TMS POD fetch via Playwright needs headroom)
 RESEND_NOTICE = True                        # prepend transmission error notice to outgoing emails (turn off when done)
 DAILY_API_CALL_LIMIT = 200                  # max Claude API calls per day (safety cap)
 API_USAGE_FILE = APPDATA_DIR / ".api_usage.json"  # tracks daily usage
@@ -91,11 +89,7 @@ GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 TRANZACT_USERNAME = os.getenv("TRANZACT_USERNAME", "")
 TRANZACT_PASSWORD = os.getenv("TRANZACT_PASSWORD", "")
 
-# QBO auto-login credentials (browser automation — legacy)
-QBO_EMAIL = os.getenv("QBO_EMAIL", "")
-QBO_PASSWORD = os.getenv("QBO_PASSWORD", "")
-
-# QBO API (OAuth 2.0) — replaces browser automation
+# QBO API (OAuth 2.0)
 QBO_CLIENT_ID = os.getenv("QBO_CLIENT_ID", "")
 QBO_CLIENT_SECRET = os.getenv("QBO_CLIENT_SECRET", "")
 QBO_REALM_ID = os.getenv("QBO_REALM_ID", "")
@@ -104,9 +98,6 @@ QBO_API_BASE_URL = "https://quickbooks.api.intuit.com"  # Production
 QBO_API_BASE_URL_SANDBOX = "https://sandbox-quickbooks.api.intuit.com"  # Sandbox
 QBO_USE_SANDBOX = os.getenv("QBO_USE_SANDBOX", "false").lower() in ("true", "1", "yes")
 QBO_TOKENS_FILE = APPDATA_DIR / ".qbo_tokens.json"
-
-# QBO mode: "browser" (Playwright, legacy) or "api" (official QBO API)
-QBO_MODE = os.getenv("QBO_MODE", "browser")
 
 # TMS auto-login credentials (Google SSO)
 TMS_EMAIL = os.getenv("TMS_EMAIL", "")
