@@ -77,7 +77,7 @@ MAX_BATCH_SIZE = 200                        # max containers per job
 CONTAINER_TIMEOUT_S = 120                   # max seconds per container in fetch jobs
 FETCH_CONCURRENCY = 1                       # max parallel container fetches (1 = sequential)
 SEND_TIMEOUT_S = 300                        # max seconds per invoice (TMS POD fetch via Playwright needs headroom)
-RESEND_NOTICE = True                        # prepend transmission error notice to outgoing emails (turn off when done)
+RESEND_NOTICE = False                       # prepend transmission error notice to outgoing emails (turn off when done)
 DAILY_API_CALL_LIMIT = 200                  # max Claude API calls per day (safety cap)
 API_USAGE_FILE = APPDATA_DIR / ".api_usage.json"  # tracks daily usage
 
