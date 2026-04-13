@@ -46,20 +46,26 @@ class QBOAttachmentsMixin:
         )
         data = await self._api_query(query)
         if not data:
+            logger.warning("Attachable query returned no data for invoice %s (API error or empty response)", invoice_id)
             return []
 
-        attachables = data.get("QueryResponse", {}).get("Attachable", [])
+        qr = data.get("QueryResponse", {})
+        attachables = qr.get("Attachable", [])
+        logger.info("Attachable query for invoice %s: QueryResponse keys=%s, attachable_count=%d",
+                     invoice_id, list(qr.keys()), len(attachables))
         results = []
         for att in attachables:
             filename = att.get("FileName", "unknown")
+            doc_type = classify_attachment(filename)
             results.append({
                 "id": att.get("Id"),
                 "fileName": filename,
                 "contentType": att.get("ContentType", ""),
                 "size": att.get("Size", 0),
                 "tempDownloadUri": att.get("TempDownloadUri"),
-                "docType": classify_attachment(filename),
+                "docType": doc_type,
             })
+            logger.info("  Attachment: '%s' → classified as '%s'", filename, doc_type)
 
         logger.info("Found %d attachments for invoice %s", len(results), invoice_id)
         return results

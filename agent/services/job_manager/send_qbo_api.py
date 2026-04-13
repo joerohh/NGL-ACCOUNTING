@@ -94,6 +94,11 @@ class SendQBOApiMixin:
         pod_missing = "pod" not in found_types
         temp_dir = None
 
+        logger.info("Attachment check for %s: found_types=%s, pod_missing=%s, tms_available=%s",
+                     invoice.invoice_number, found_types, pod_missing, bool(self._tms))
+        for a in all_attachments:
+            logger.info("  -> '%s' classified as '%s'", a.get("fileName"), a.get("docType"))
+
         if pod_missing and self._tms:
             temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
             try:
@@ -116,7 +121,7 @@ class SendQBOApiMixin:
                         })
 
                 if self._tms.is_logged_in():
-                    container = verification.get("found_container", invoice.container_number)
+                    container = verification.get("found_container") or invoice.container_number or ""
                     await self._emit_send(job, "tms_fetching_pod", {
                         "invoiceNumber": invoice.invoice_number,
                         "containerNumber": container,
@@ -188,7 +193,7 @@ class SendQBOApiMixin:
             return
 
         # Step 4: Build email fields
-        container = verification.get("found_container", invoice.container_number)
+        container = verification.get("found_container") or invoice.container_number or ""
         # Use subject as-is if provided (frontend handles [NGL_INV_REVISED] prefix for resends)
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
         to_emails = customer_emails

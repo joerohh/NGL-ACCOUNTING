@@ -25,7 +25,7 @@ def build_invoice_email_html(
     """Build an HTML email body that matches the QBO invoice email style."""
 
     # Build reference line — container number only
-    ref_line = f"&gt;&gt;&gt; {container}"
+    ref_line = f"&gt;&gt;&gt; {container}" if container else ""
 
     # Format amount
     try:
@@ -110,7 +110,7 @@ def build_invoice_email_html(
         <p style="margin:0 0 14px;">Dear {customer_name},</p>
         {'<p style="margin:0 0 14px; padding:10px 14px; background:#fff8e1; border-left:4px solid #f9a825; border-radius:4px; color:#555555; font-size:13px;">We recently identified a transmission error with our previous email, which may have affected the attached documents. We are resending this invoice for your records. We apologize for any inconvenience.</p>' if resend_notice else ''}
         <p style="margin:0 0 14px;">Attached is the invoice for the load or container referenced in the subject line.</p>
-        <p style="margin:0 0 14px; font-weight:600; color:#111111;">{ref_line}</p>
+        {f'<p style="margin:0 0 14px; font-weight:600; color:#111111;">{ref_line}</p>' if ref_line else ''}
         <p style="margin:0 0 14px;">Please confirm receipt and contact us if you have any questions.<br/>Have a great day.</p>
       </div>
     </td>

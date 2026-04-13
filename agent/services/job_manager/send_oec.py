@@ -1,4 +1,4 @@
-"""OEC send mixin — invoice-only via QBO API, then POD via separate Gmail email."""
+"""OEC send mixin — invoice via Gmail SMTP, then POD via separate Gmail email."""
 
 import asyncio
 import logging
@@ -7,6 +7,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import httpx
+
+from services.email_template import build_invoice_email_html
 from services.job_manager.util import normalize_email_list
 
 logger = logging.getLogger("ngl.job_manager")
@@ -111,8 +114,9 @@ class SendOECFlowMixin:
                     logger.info("POD downloaded from QBO API: %s", pod_path.name)
                 break
 
-        # ── Part A: Send invoice-only via QBO API ──
-        subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{invoice.container_number}"
+        # ── Part A: Send invoice via Gmail SMTP ──
+        container = verification.get("found_container") or invoice.container_number or ""
+        subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
         to_emails = customer_emails
         cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
         bcc_emails = normalize_email_list(customer.get("bccEmails", []))
@@ -128,13 +132,10 @@ class SendOECFlowMixin:
             "subject": subject,
         })
 
-        # Test mode approval for QBO send
+        # Test mode approval
         if job.test_mode:
-            saved_att = result.attachments_found
-            result.attachments_found = ["QBO invoice (no file attachments)"]
             approved = await self._wait_for_approval(job, invoice, result, index,
                                                       to_emails, cc_emails, bcc_emails, subject)
-            result.attachments_found = saved_att
             if not approved:
                 return
 
@@ -142,19 +143,74 @@ class SendOECFlowMixin:
             "invoiceNumber": invoice.invoice_number,
         })
 
-        # Send invoice-only via QBO API (bare invoice, no PDF attachments)
-        send_result = await api.send_invoice_email(
-            invoice_id=invoice_id,
-            sync_token=sync_token,
-            to_emails=to_emails,
-            cc_emails=cc_emails,
-            bcc_emails=bcc_emails,
+        # Download invoice PDF from QBO
+        invoice_pdf = await api.download_invoice_pdf(invoice_id)
+        if not invoice_pdf:
+            result.status = "error"
+            result.error = "Failed to download invoice PDF from QBO"
+            await self._emit_send(job, "invoice_error", {
+                "invoiceNumber": invoice.invoice_number,
+                "error": result.error,
+            })
+            return
+
+        email_attachments = [{
+            "filename": f"{invoice.invoice_number}.pdf",
+            "data": invoice_pdf,
+        }]
+
+        # Build HTML email body
+        customer_name = invoice_data.get("CustomerRef", {}).get("name", "")
+        if "] " in customer_name:
+            customer_name = customer_name.split("] ", 1)[1]
+
+        ngl_ref = ""
+        customer_ref = ""
+        for field in invoice_data.get("CustomField", []):
+            name = field.get("Name", "").upper()
+            val = field.get("StringValue", "")
+            if "REF" in name and "/" in val:
+                parts = val.split("/", 1)
+                ngl_ref = parts[0].strip()
+                customer_ref = parts[1].strip() if len(parts) > 1 else ""
+
+        due_date = invoice_data.get("DueDate", "")
+        amount = str(invoice_data.get("TotalAmt", ""))
+        invoice_link = await api.get_invoice_link(invoice_id)
+
+        body = build_invoice_email_html(
+            invoice_number=invoice.invoice_number,
+            container=container,
+            customer_name=customer_name,
+            amount=amount,
+            due_date=due_date,
+            ngl_ref=ngl_ref,
+            customer_ref=customer_ref,
+            invoice_link=invoice_link,
+        )
+
+        # Send via Gmail SMTP
+        if not self._email_sender:
+            result.status = "error"
+            result.error = "Gmail email sender not configured"
+            await self._emit_send(job, "invoice_error", {
+                "invoiceNumber": invoice.invoice_number,
+                "error": result.error,
+            })
+            return
+
+        send_result = await self._email_sender.send_invoice_email(
+            to=to_emails,
+            cc=cc_emails,
+            bcc=bcc_emails,
             subject=subject,
+            body=body,
+            attachments=email_attachments,
         )
 
         if not send_result.get("sent"):
             result.status = "error"
-            result.error = f"QBO API send failed: {send_result.get('error', 'Unknown')}"
+            result.error = f"Gmail send failed: {send_result.get('error', 'Unknown')}"
             await self._emit_send(job, "invoice_error", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": result.error,

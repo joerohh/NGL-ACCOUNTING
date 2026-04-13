@@ -29,7 +29,7 @@ export const state = {
 export const invoiceState = {
   csvLoaded: false,
   invoices: [],           // Array<InvoiceRecord>
-  subjectTemplate: 'Invoice {invoice_number} - {customer_name}',
+  subjectTemplate: '[NGL_INV] {invoice_number} - Container#{container_number}',
   selectedIds: new Set(),
   reviewingId: null,
   isProcessing: false,
