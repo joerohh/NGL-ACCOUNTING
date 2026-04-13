@@ -103,10 +103,10 @@ class TMSDownloadMixin:
                 if clicked:
                     logger.info("Clicked %s row via %s", doc_type, clicked)
                     # Wait for network response with PDF data
-                    for _ in range(20):  # 10 seconds max
+                    for _ in range(20):  # 5 seconds max
                         if pdf_data_holder["data"]:
                             break
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.25)
 
                     if pdf_data_holder["data"]:
                         save_path = download_dir / filename
@@ -126,7 +126,7 @@ class TMSDownloadMixin:
 
             # ── Method B: Check viewer for iframe/embed/object ──
             logger.info("Download Method B: checking viewer for embedded content")
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
 
             viewer_src = await self._page.evaluate("""() => {
                 for (const tag of ['iframe', 'embed', 'object']) {
@@ -193,7 +193,7 @@ class TMSDownloadMixin:
 
             # ── Method C: Check TMS downloads directory for new files ──
             logger.info("Download Method C: checking TMS downloads dir")
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
             for f in sorted(TMS_DOWNLOADS_DIR.glob("*"), key=os.path.getmtime, reverse=True):
                 if f.name in dl_before:
                     continue  # Skip files that existed before the click
@@ -306,7 +306,7 @@ class TMSDownloadMixin:
             logger.info("[POD_DO] Direct nav to Document tab: %s", doc_url)
             try:
                 await self._page.goto(doc_url, wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.5)
                 docs_found = True
             except Exception as e:
                 logger.warning("[POD_DO] Direct doc URL failed: %s — falling back", e)

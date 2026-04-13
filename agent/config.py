@@ -100,7 +100,7 @@ TMS_PROFILE_DIR = APPDATA_DIR / ".tms_browser_profile"
 TMS_DOWNLOADS_DIR = BASE_DIR / ".tms_downloads"
 TMS_DEBUG_DIR = DEBUG_DIR / "tms"
 TMS_SELECTORS_FILE = BUNDLE_DIR / "tms_selectors.json"
-TMS_ACTION_DELAY_S = 2.0  # seconds between TMS actions
+TMS_ACTION_DELAY_S = 0.5  # seconds between TMS actions (reduced from 2.0)
 TMS_VIEWPORT = {"width": 1600, "height": 1000}  # fixed viewport to prevent layout shifts
 
 TMS_PROFILE_DIR.mkdir(exist_ok=True)

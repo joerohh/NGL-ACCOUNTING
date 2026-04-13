@@ -70,7 +70,7 @@ class TMSSearchMixin:
                 logger.warning("[LOCATION] Could not open location dropdown: %s", switched)
                 return True  # non-fatal
 
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(0.3)
 
             # Click the target location in the dropdown menu
             clicked = await self._page.evaluate("""(target) => {
@@ -90,7 +90,7 @@ class TMSSearchMixin:
 
             if clicked and clicked.get("clicked"):
                 logger.info("[LOCATION] Switched to %s", target_loc)
-                await asyncio.sleep(2)  # wait for grid to reload
+                await asyncio.sleep(0.5)  # wait for grid to reload
             else:
                 logger.warning("[LOCATION] Could not click '%s' in dropdown", target_loc)
                 return True  # non-fatal
@@ -131,7 +131,7 @@ class TMSSearchMixin:
 
             if tab_clicked:
                 logger.info("[LOCATION] Switched to %s tab", tab_text)
-                await asyncio.sleep(2)  # wait for grid to reload
+                await asyncio.sleep(0.5)  # wait for grid to reload
             else:
                 # Fallback: direct URL navigation
                 base = self._page.url.split("//")[0] + "//" + self._page.url.split("//")[1].split("/")[0]
@@ -140,7 +140,7 @@ class TMSSearchMixin:
                         base + "/main/" + url_seg,
                         wait_until="domcontentloaded", timeout=15000,
                     )
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(0.5)
                     logger.info("[LOCATION] Switched to %s tab via URL", tab_text)
                 except Exception as e:
                     logger.warning("[LOCATION] URL fallback failed: %s", e)
@@ -169,7 +169,7 @@ class TMSSearchMixin:
             base = self._page.url.split("//")[0] + "//" + self._page.url.split("//")[1].split("/")[0]
             try:
                 await self._page.goto(base + "/main/imp", wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.5)
                 page_text = await self._page.evaluate(
                     "() => (document.body.innerText || '').substring(0, 500)"
                 )
@@ -241,9 +241,8 @@ class TMSSearchMixin:
 
             if clicked:
                 logger.info("Clicked MAIN sidebar item via: %s", clicked)
-                await asyncio.sleep(TMS_ACTION_DELAY_S + 1)
                 await self._page.wait_for_load_state("domcontentloaded")
-                await asyncio.sleep(TMS_ACTION_DELAY_S)
+                await asyncio.sleep(0.5)
                 await self._debug("main_page")
 
                 page_text = await self._page.evaluate(
@@ -265,7 +264,7 @@ class TMSSearchMixin:
             for i, icon in enumerate(icons):
                 try:
                     await icon.click()
-                    await asyncio.sleep(TMS_ACTION_DELAY_S + 0.5)
+                    await asyncio.sleep(0.5)
                     heading = await self._page.evaluate("""() => {
                         const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6, .text-2xl, .text-xl');
                         for (const h of headings) {
@@ -346,10 +345,10 @@ class TMSSearchMixin:
         await asyncio.sleep(0.1)
         await self._page.keyboard.press("Backspace")
         await asyncio.sleep(0.2)
-        await self._page.keyboard.type(container_number, delay=50)
-        await asyncio.sleep(0.5)
+        await self._page.keyboard.type(container_number, delay=20)
+        await asyncio.sleep(0.2)
         await self._page.keyboard.press("Enter")
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.8)
         await self._debug_rich("cont_filter_typed")
 
         # Verify filter value
@@ -512,10 +511,10 @@ class TMSSearchMixin:
             url_changed = current_url != url_before
             marker = await self._has_detail_markers()
 
-            # SPA may take time to render — retry for up to 6 seconds
+            # SPA may take time to render — retry for up to 3 seconds
             if not url_changed and not marker:
-                for _ in range(12):
-                    await asyncio.sleep(0.5)
+                for _ in range(15):
+                    await asyncio.sleep(0.2)
                     current_url = self._page.url
                     url_changed = current_url != url_before
                     marker = await self._has_detail_markers()
@@ -527,8 +526,8 @@ class TMSSearchMixin:
                     return False
 
             if not marker:
-                for _ in range(6):
-                    await asyncio.sleep(0.5)
+                for _ in range(10):
+                    await asyncio.sleep(0.2)
                     marker = await self._has_detail_markers()
                     if marker:
                         break
@@ -544,7 +543,7 @@ class TMSSearchMixin:
             ready_state = await self._page.evaluate("() => document.readyState")
             if ready_state != "complete":
                 for _ in range(10):
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.2)
                     ready_state = await self._page.evaluate("() => document.readyState")
                     if ready_state == "complete":
                         break
@@ -612,7 +611,7 @@ class TMSSearchMixin:
             base_url = url_before.split("/main/")[0] if "/main/" in url_before else url_before.rsplit("/", 1)[0]
             full_url = base_url.rstrip("/") + detail_url
             await self._page.goto(full_url, wait_until="domcontentloaded", timeout=15000)
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
             if await self._verify_detail_page(url_before):
                 result.success = True
                 result.strategy_used = strategy
@@ -635,9 +634,8 @@ class TMSSearchMixin:
                 box = await wo_locator.nth(i).bounding_box()
                 if box and box["y"] > 200:
                     await wo_locator.nth(i).click()
-                    await asyncio.sleep(3)
                     await self._page.wait_for_load_state("domcontentloaded")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
                     if await self._verify_detail_page(url_before):
                         result.success = True
                         result.strategy_used = strategy
@@ -659,9 +657,8 @@ class TMSSearchMixin:
                 box = await wo_locator.nth(i).bounding_box()
                 if box and box["y"] > 200:
                     await wo_locator.nth(i).dblclick()
-                    await asyncio.sleep(3)
                     await self._page.wait_for_load_state("domcontentloaded")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
                     if await self._verify_detail_page(url_before):
                         result.success = True
                         result.strategy_used = strategy
@@ -678,9 +675,8 @@ class TMSSearchMixin:
         logger.info("[NAV] Strategy %s: double-click at (%d, %d)", strategy, hit["x"], hit["y"])
         try:
             await self._page.mouse.dblclick(hit["x"], hit["y"])
-            await asyncio.sleep(3)
             await self._page.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
             if await self._verify_detail_page(url_before):
                 result.success = True
                 result.strategy_used = strategy
@@ -701,7 +697,7 @@ class TMSSearchMixin:
             logger.info("[NAV] Strategy %s: navigating via href -> %s", strategy, href)
             try:
                 await self._page.goto(href, wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.5)
                 if await self._verify_detail_page(url_before):
                     result.success = True
                     result.strategy_used = strategy
@@ -770,7 +766,7 @@ class TMSSearchMixin:
             if invoice_number:
                 await self._ensure_correct_location(invoice_number)
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
 
             # Step 2: Filter grid by container number
             filter_result = await self._filter_grid_by_container(container_number)

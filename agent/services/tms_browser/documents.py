@@ -180,7 +180,7 @@ class TMSDocumentsMixin:
             logger.info("[GRID_DO_SENDER] Column col-id=%s, scrolled to left=%s",
                         col_id, scroll_info.get("left"))
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.3)
 
             cell_val = await self._page.evaluate("""(colId) => {
                 const rows = document.querySelectorAll('.ag-row, [role="row"]');
@@ -260,7 +260,7 @@ class TMSDocumentsMixin:
                 }""")
                 if detail_visible:
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
 
             logger.info("[DO_SENDER] Detail Info visible = %s (after %d polls)",
                         detail_visible, attempt + 1)
@@ -268,9 +268,8 @@ class TMSDocumentsMixin:
             if not detail_visible:
                 logger.warning("[DO_SENDER] Detail Info section not visible")
 
-            await asyncio.sleep(1)
             try:
-                await self._page.wait_for_load_state("networkidle", timeout=5000)
+                await self._page.wait_for_load_state("networkidle", timeout=3000)
             except Exception:
                 pass
 
@@ -550,7 +549,7 @@ class TMSDocumentsMixin:
             if doc_url:
                 logger.info("Navigating to Document tab via URL: %s", doc_url)
                 await self._page.goto(doc_url, wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.5)
             else:
                 # Strategy 2: Click the tab
                 tab_names = ["Document", "Documents"]
@@ -575,7 +574,7 @@ class TMSDocumentsMixin:
                 }""")
                 if content_loaded:
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
 
             if not content_loaded:
                 logger.warning("Document tab opened but file inputs not found")
