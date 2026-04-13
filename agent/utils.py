@@ -166,8 +166,8 @@ def cleanup_old_profiles() -> None:
     (Chrome cache, GPU cache, Local Storage, etc.) is dead weight.
     Runs once on startup to reclaim disk space (can be 100-300 MB).
     """
-    from config import BROWSER_PROFILE_DIR, TMS_PROFILE_DIR
-    for profile_dir in [BROWSER_PROFILE_DIR, TMS_PROFILE_DIR]:
+    from config import TMS_PROFILE_DIR
+    for profile_dir in [TMS_PROFILE_DIR]:
         if not profile_dir.exists():
             continue
         cleaned = 0

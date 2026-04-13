@@ -5,7 +5,7 @@ import { state, invoiceState } from './shared/state.js';
 import { addLog, invAddLog } from './shared/log.js';
 import { setupDrop } from './shared/dom-helpers.js';
 import { escHtml } from './shared/utils.js';
-import { LS_CUSTOMERS, LS_REMEMBER_ME } from './shared/constants.js';
+import { LS_CUSTOMERS } from './shared/constants.js';
 import { agentBridge } from './shared/agent-client.js';
 import { agentHealthCheck } from './agent-ui.js';
 import { renderPdfQueue, updateUI, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
@@ -23,14 +23,25 @@ document.addEventListener('drop', function(e) { e.preventDefault(); });
 //  AUTH GATE — login before showing the app
 // ══════════════════════════════════════════════════════════
 
-function showLogin() {
-  document.getElementById('loginScreen').style.display = '';
+function hideAllScreens() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('setupScreen').style.display = 'none';
   document.getElementById('appLayout').style.display = 'none';
+}
+
+function showLogin() {
+  hideAllScreens();
+  document.getElementById('loginScreen').style.display = '';
+}
+
+function showSetup() {
+  hideAllScreens();
+  document.getElementById('setupScreen').style.display = '';
 }
 
 function showApp(user) {
   state.currentUser = user;
-  document.getElementById('loginScreen').style.display = 'none';
+  hideAllScreens();
   document.getElementById('appLayout').style.display = '';
 
   // Update sidebar user info
@@ -57,7 +68,8 @@ async function doLogin() {
   btnText.textContent = 'Signing in...';
   errorEl.style.display = 'none';
 
-  const result = await agentBridge.login(username, password);
+  const rememberMe = document.getElementById('loginRememberMe').checked;
+  const result = await agentBridge.login(username, password, rememberMe);
 
   btn.disabled = false;
   btnText.textContent = 'Sign In';
@@ -68,13 +80,8 @@ async function doLogin() {
     return;
   }
 
-  // Save credentials if "Remember me" is checked
-  const rememberMe = document.getElementById('loginRememberMe').checked;
-  if (rememberMe) {
-    localStorage.setItem(LS_REMEMBER_ME, btoa(JSON.stringify({ u: username, p: password })));
-  } else {
-    localStorage.removeItem(LS_REMEMBER_ME);
-  }
+  // JWT is persisted by agentBridge._saveAuth(). "Remember me" controls the
+  // token expiry (30 days vs 72 hours) — no credentials stored in localStorage.
 
   showApp(result.user);
   initApp();
@@ -83,12 +90,123 @@ async function doLogin() {
 function doLogout() {
   agentBridge.logout();
   state.currentUser = null;
-  localStorage.removeItem(LS_REMEMBER_ME);
   showLogin();
   // Clear password field and uncheck remember me for next login
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginRememberMe').checked = false;
   document.getElementById('loginError').style.display = 'none';
+}
+
+async function doSetup() {
+  const username = document.getElementById('setupUsername').value.trim();
+  const displayName = document.getElementById('setupDisplayName').value.trim();
+  const password = document.getElementById('setupPassword').value;
+  const confirm = document.getElementById('setupPasswordConfirm').value;
+  const errorEl = document.getElementById('setupError');
+  const btn = document.getElementById('setupBtn');
+  const btnText = document.getElementById('setupBtnText');
+
+  if (!username) { errorEl.textContent = 'Username is required.'; errorEl.style.display = ''; return; }
+  if (password.length < 4) { errorEl.textContent = 'Password must be at least 4 characters.'; errorEl.style.display = ''; return; }
+  if (password !== confirm) { errorEl.textContent = 'Passwords do not match.'; errorEl.style.display = ''; return; }
+
+  btn.disabled = true;
+  btnText.textContent = 'Creating account...';
+  errorEl.style.display = 'none';
+
+  try {
+    const res = await fetch(agentBridge.baseUrl + '/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, displayName: displayName || username }),
+    });
+    const data = await res.json();
+
+    btn.disabled = false;
+    btnText.textContent = 'Create Admin Account';
+
+    if (!res.ok) {
+      errorEl.textContent = data.detail || 'Setup failed.';
+      errorEl.style.display = '';
+      return;
+    }
+
+    // Setup complete — show login screen so they can sign in
+    showLogin();
+    document.getElementById('loginUsername').value = username;
+    document.getElementById('loginUsername').focus();
+  } catch (e) {
+    btn.disabled = false;
+    btnText.textContent = 'Create Admin Account';
+    errorEl.textContent = 'Cannot connect to agent: ' + e.message;
+    errorEl.style.display = '';
+  }
+}
+
+// ── Google Sign-In (redirect flow) ──
+
+let _googlePollTimer = null;
+
+async function initGoogleSignIn() {
+  try {
+    const res = await fetch(agentBridge.baseUrl + '/auth/google/available');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.available) return;
+
+    const section = document.getElementById('googleLoginSection');
+    if (section) section.style.display = '';
+  } catch { /* Google Sign-In not available */ }
+}
+
+function doGoogleLogin() {
+  if (!state.agentConnected) {
+    document.getElementById('loginError').textContent = 'Agent is offline.';
+    document.getElementById('loginError').style.display = '';
+    return;
+  }
+
+  const btn = document.getElementById('googleLoginBtn');
+  const btnText = document.getElementById('googleLoginBtnText');
+  btn.disabled = true;
+  btnText.textContent = 'Opening Google...';
+
+  // Open Google login in system browser
+  window.open(agentBridge.baseUrl + '/auth/google/login', '_blank');
+
+  // Poll for completion
+  btnText.textContent = 'Waiting for sign-in...';
+  const startTime = Date.now();
+  const TIMEOUT_MS = 5 * 60 * 1000;
+
+  if (_googlePollTimer) clearInterval(_googlePollTimer);
+  _googlePollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(agentBridge.baseUrl + '/auth/google/poll');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated) {
+          clearInterval(_googlePollTimer);
+          _googlePollTimer = null;
+          agentBridge._saveAuth(data.token, data.user);
+          btn.disabled = false;
+          btnText.textContent = 'Sign in with Google';
+          showApp(data.user);
+          initApp();
+          return;
+        }
+      }
+    } catch { /* keep polling */ }
+
+    if (Date.now() - startTime > TIMEOUT_MS) {
+      clearInterval(_googlePollTimer);
+      _googlePollTimer = null;
+      btn.disabled = false;
+      btnText.textContent = 'Sign in with Google';
+      document.getElementById('loginError').textContent = 'Google sign-in timed out. Try again.';
+      document.getElementById('loginError').style.display = '';
+    }
+  }, 2000);
 }
 
 // Auth hooks — agentBridge calls these when session expires
@@ -97,6 +215,8 @@ agentBridge.hooks.onAuthRequired = showLogin;
 // Global handlers for inline onclick
 window.doLogin = doLogin;
 window.doLogout = doLogout;
+window.doSetup = doSetup;
+window.doGoogleLogin = doGoogleLogin;
 
 
 // ══════════════════════════════════════════════════════════
@@ -104,17 +224,20 @@ window.doLogout = doLogout;
 // ══════════════════════════════════════════════════════════
 
 async function startup() {
-  // Check if agent is running first
-  const statusEl = document.getElementById('loginAgentStatus');
-
   agentBridge._loadSavedAuth();
+
+  // Update agent status on both login and setup screens
+  const statusEls = [document.getElementById('loginAgentStatus'), document.getElementById('setupAgentStatus')];
+  function setAgentStatus(text, color) {
+    statusEls.forEach(el => { if (el) { el.textContent = text; el.style.color = color; } });
+  }
 
   const health = await agentBridge.checkHealth();
   if (health) {
-    if (statusEl) { statusEl.textContent = 'Agent connected'; statusEl.style.color = '#16a34a'; }
+    setAgentStatus('Agent connected', '#16a34a');
     state.agentConnected = true;
   } else {
-    if (statusEl) { statusEl.textContent = 'Agent offline — start the agent server first'; statusEl.style.color = '#dc2626'; }
+    setAgentStatus('Agent offline — start the agent server first', '#dc2626');
     state.agentConnected = false;
   }
 
@@ -137,7 +260,22 @@ async function startup() {
     return;
   }
 
-  // Try to restore existing session
+  // Check if first-run setup is needed (no users exist yet)
+  if (state.agentConnected) {
+    try {
+      const res = await fetch(agentBridge.baseUrl + '/auth/setup-required');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.setupRequired) {
+          showSetup();
+          document.getElementById('setupUsername').focus();
+          return;
+        }
+      }
+    } catch { /* fall through to login */ }
+  }
+
+  // Try to restore existing session (JWT persisted in localStorage)
   if (agentBridge.isLoggedIn()) {
     const valid = await agentBridge.validateSession();
     if (valid) {
@@ -147,28 +285,9 @@ async function startup() {
     }
   }
 
-  // Try auto-login from "Remember me" saved credentials
-  const saved = localStorage.getItem(LS_REMEMBER_ME);
-  if (saved && state.agentConnected) {
-    try {
-      const { u, p } = JSON.parse(atob(saved));
-      const result = await agentBridge.login(u, p);
-      if (!result.error) {
-        showApp(result.user);
-        initApp();
-        return;
-      }
-      // Saved credentials invalid — clear them
-      localStorage.removeItem(LS_REMEMBER_ME);
-    } catch {
-      localStorage.removeItem(LS_REMEMBER_ME);
-    }
-  }
-
   // No valid session — show login
   showLogin();
-  // Pre-check "Remember me" if credentials were previously saved (but expired)
-  // Focus username field
+  initGoogleSignIn();
   document.getElementById('loginUsername').focus();
 }
 

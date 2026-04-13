@@ -6,7 +6,7 @@ All functions match the signatures in database.py so they can be swapped in tran
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -364,6 +364,18 @@ def audit_stats() -> dict:
         "missingDocs": counts.get("missing_docs", 0),
         "successRate": f"{(sent / total * 100):.1f}%" if total > 0 else "N/A",
     }
+
+
+def was_recently_sent(invoice_number: str, hours: int = 6) -> bool:
+    """Check if an invoice was successfully sent within the last N hours."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    resp = httpx.get(
+        f"{_BASE}/audit_log?select=id&invoice_number=eq.{invoice_number}"
+        f"&status=eq.sent&timestamp=gte.{cutoff}&limit=1",
+        headers=_HEADERS, timeout=_TIMEOUT,
+    )
+    _check_response(resp, "was_recently_sent")
+    return len(resp.json()) > 0
 
 
 def get_all_audit_entries() -> list:

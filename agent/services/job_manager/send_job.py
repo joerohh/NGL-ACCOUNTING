@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from config import (
-    DEBUG_DIR, QBO_ACTION_DELAY_S, MAX_BATCH_SIZE, SEND_TIMEOUT_S,
+    DEBUG_DIR, MAX_BATCH_SIZE, SEND_TIMEOUT_S,
 )
+from services.database import was_recently_sent
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -139,6 +140,24 @@ class SendJobMixin:
             })
 
             try:
+                # Step 0: Duplicate-send guard — skip if already sent recently
+                if not invoice.is_resend and was_recently_sent(invoice.invoice_number):
+                    result.status = "skipped"
+                    result.error = "Already sent within the last 6 hours (duplicate guard)"
+                    logger.warning(
+                        "DUPLICATE GUARD: skipping %s — already sent recently",
+                        invoice.invoice_number,
+                    )
+                    await self._emit_send(job, "invoice_skipped", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "reason": "duplicate",
+                        "message": "Already sent within the last 6 hours",
+                    })
+                    job.results.append(result)
+                    self._write_audit_log(result.to_dict())
+                    job._save_state()
+                    continue
+
                 # Step 1: Look up customer
                 customer = customers.get(invoice.customer_code.upper())
                 if not customer or not customer.get("active", True):
@@ -192,7 +211,7 @@ class SendJobMixin:
             job.results.append(result)
             self._write_audit_log(result.to_dict())
             job._save_state()
-            await asyncio.sleep(QBO_ACTION_DELAY_S)
+            await asyncio.sleep(1.0)
 
         # Job finished
         job.progress = job.total

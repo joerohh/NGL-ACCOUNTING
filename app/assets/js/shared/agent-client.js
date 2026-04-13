@@ -52,12 +52,12 @@ export const agentBridge = {
     return this._currentUser;
   },
 
-  async login(username, password) {
+  async login(username, password, remember = false) {
     try {
       const res = await fetch(this.baseUrl + '/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, remember }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

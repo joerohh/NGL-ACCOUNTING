@@ -1,6 +1,5 @@
 # Browser profile data (Playwright/Chromium)
 agent/.tms_browser_profile/
-agent/.qbo_browser_profile/
 
 # Python environment
 agent/venv/
@@ -11,6 +10,8 @@ __pycache__/
 # API keys — NEVER commit these
 .env
 agent/.env
+agent/gdrive_credentials.json
+agent/.gdrive_token.json
 desktop/build-env/
 
 # Windows junk

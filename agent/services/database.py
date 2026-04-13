@@ -7,8 +7,9 @@ Original files are renamed to .bak (never deleted).
 
 import json
 import logging
+import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -92,6 +93,11 @@ def init_db() -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
 
     conn.commit()
@@ -100,11 +106,6 @@ def init_db() -> None:
     _run_migrations(conn)
 
     logger.info("Database schema initialized: %s", DB_FILE)
-
-    # Seed default admin user if no users exist (first-run bootstrap)
-    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    if user_count == 0:
-        _seed_default_admin(conn)
 
     # Migrate existing data files if the tables are empty
     _migrate_if_needed(conn)
@@ -122,10 +123,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         conn.commit()
         logger.info("Migration: added 'username' column to audit_log")
 
-    # Seed a default admin user if users table is empty
-    row = conn.execute("SELECT COUNT(*) FROM users").fetchone()
-    if row[0] == 0:
-        _seed_default_admin(conn)
+    # Note: admin user creation is handled by the first-run setup wizard
 
 
 def _seed_default_admin(conn: sqlite3.Connection) -> None:
@@ -142,6 +140,44 @@ def _seed_default_admin(conn: sqlite3.Connection) -> None:
     """, (admin_user, admin_name, pw_hash, "admin", now, now))
     conn.commit()
     logger.info("Seeded default admin user: %s", admin_user)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# App Settings (key-value store for runtime config)
+# ──────────────────────────────────────────────────────────────────────
+
+def get_setting(key: str) -> Optional[str]:
+    """Get an app setting by key. Returns None if not set."""
+    conn = _get_conn()
+    row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_setting(key: str, value: str) -> None:
+    """Set an app setting (upsert)."""
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+        (key, value, value),
+    )
+    conn.commit()
+
+
+def get_or_create_jwt_secret() -> str:
+    """Return a persistent JWT signing secret, generating one on first run."""
+    existing = get_setting("jwt_secret")
+    if existing:
+        return existing
+    secret = secrets.token_urlsafe(48)
+    set_setting("jwt_secret", secret)
+    logger.info("Generated new JWT signing secret")
+    return secret
+
+
+def get_user_count() -> int:
+    """Return the total number of users (active + inactive)."""
+    conn = _get_conn()
+    return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
 
 def _migrate_if_needed(conn: sqlite3.Connection) -> None:
@@ -568,6 +604,22 @@ def audit_stats() -> dict:
     }
 
 
+def was_recently_sent(invoice_number: str, hours: int = 6) -> bool:
+    """Check if an invoice was successfully sent within the last N hours.
+
+    Used to prevent duplicate sends when SSE connection drops and the
+    frontend loses track of send status.
+    """
+    conn = _get_conn()
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    row = conn.execute(
+        "SELECT 1 FROM audit_log WHERE invoice_number = ? AND status = 'sent' "
+        "AND timestamp > ? LIMIT 1",
+        (invoice_number, cutoff),
+    ).fetchone()
+    return row is not None
+
+
 def get_all_audit_entries() -> list[dict]:
     """Return all audit entries sorted newest first — for CSV export."""
     conn = _get_conn()
@@ -618,6 +670,27 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
     conn = _get_conn()
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     return _row_to_user(row) if row else None
+
+
+def get_user_by_username(username: str) -> Optional[dict]:
+    """Look up a user by username (case-insensitive). Returns user dict or None."""
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    return _row_to_user(row) if row else None
+
+
+def create_google_user(email: str, display_name: str) -> dict:
+    """Create an operator account for a Google-authenticated user (no password)."""
+    conn = _get_conn()
+    now = datetime.now(timezone.utc).isoformat()
+    # Random password hash — account is Google-only, password login won't work
+    pw_hash = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode("utf-8")
+    conn.execute("""
+        INSERT INTO users (username, display_name, password_hash, role, active, created_at, updated_at)
+        VALUES (?, ?, ?, 'operator', 1, ?, ?)
+    """, (email, display_name, pw_hash, now, now))
+    conn.commit()
+    return get_user_by_id(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
 
 
 def list_users(active_only: bool = True) -> list[dict]:
@@ -722,6 +795,7 @@ def _maybe_use_supabase() -> None:
             query_audit_log as sb_query_audit,
             audit_stats as sb_audit_stats,
             get_all_audit_entries as sb_get_all_audit,
+            was_recently_sent as sb_was_recently_sent,
             migrate_audit_to_supabase,
             # Users
             sb_authenticate_user,
@@ -787,6 +861,7 @@ def _maybe_use_supabase() -> None:
     _self.query_audit_log = sb_query_audit
     _self.audit_stats = sb_audit_stats
     _self.get_all_audit_entries = sb_get_all_audit
+    _self.was_recently_sent = sb_was_recently_sent
 
     # Override user functions
     _self.authenticate_user = sb_authenticate_user

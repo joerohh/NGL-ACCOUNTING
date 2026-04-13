@@ -80,8 +80,7 @@ async function settingsSaveAndConnect() {
   // Show results
   let msg = 'Credentials saved. ';
   const r = result.results || {};
-  if (r.qbo === 'logged_in') msg += 'QBO: Logged in! ';
-  else if (r.qbo === 'needs_manual_login') msg += 'QBO: Needs manual login (check Chrome for 2FA). ';
+  if (r.qbo === 'logged_in') msg += 'QBO: Connected! ';
   else if (r.qbo) msg += 'QBO: ' + r.qbo + '. ';
   if (r.tms === 'logged_in') msg += 'TMS: Logged in! ';
   else if (r.tms === 'needs_manual_login') msg += 'TMS: Needs manual login (check Chrome for 2FA). ';
@@ -369,50 +368,107 @@ async function loadQboApiStatus() {
   }
 }
 
+let _oauthPollTimer = null;
+
 async function connectQboApi() {
   if (!state.agentConnected) {
     settingsShowResult('Agent is offline. Start the agent first.', false);
     return;
   }
-  // Get the Intuit auth URL from the agent and open it directly in the system browser
   try {
     const resp = await agentBridge._authFetch(`${agentBridge.baseUrl}/qbo/oauth/auth-url`);
     if (resp.ok) {
       const data = await resp.json();
       if (data.auth_url) {
         window.open(data.auth_url, '_blank');
-        settingsShowResult('Intuit authorization opened in your browser. After clicking Connect, copy the redirect URL and paste it below.', true);
-        showOAuthPasteBox();
+        showOAuthPolling();
         return;
       }
     }
   } catch (e) {
-    // Fallback to the old method
+    // Fallback to the manual authorize page
   }
   window.open(`${agentBridge.baseUrl}/qbo/oauth/authorize`, '_blank');
-  settingsShowResult('Opening QBO authorization page... After authorizing, come back and click Reload.', true);
+  showOAuthPolling();
 }
 
-function showOAuthPasteBox() {
-  // Remove existing paste box if any
+function showOAuthPolling() {
+  // Remove existing UI if any
   const existing = document.getElementById('qboOAuthPasteBox');
   if (existing) existing.remove();
+  if (_oauthPollTimer) { clearInterval(_oauthPollTimer); _oauthPollTimer = null; }
 
   const container = document.getElementById('qboApiConnectBtn').parentElement;
   const box = document.createElement('div');
   box.id = 'qboOAuthPasteBox';
-  box.style.cssText = 'margin-top:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;';
+  box.style.cssText = 'margin-top:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;text-align:center;';
   box.innerHTML = `
-    <p style="margin:0 0 10px;font-weight:600;font-size:0.85rem;color:#c2410c;">Paste the redirect URL after authorizing:</p>
-    <input type="text" id="qboOAuthRedirectUrl" placeholder="Paste the full URL here..."
-           style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.84rem;box-sizing:border-box;margin-bottom:10px;" />
-    <button onclick="window.submitOAuthUrl()" id="qboOAuthSubmitBtn"
-            style="background:#ea580c;color:#fff;padding:8px 20px;border:none;border-radius:8px;font-weight:600;font-size:0.84rem;cursor:pointer;">
-      Complete Connection
-    </button>
+    <div id="qboOAuthSpinner" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;">
+        <circle cx="12" cy="12" r="10" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="50 20" stroke-linecap="round"/>
+      </svg>
+      <span style="font-weight:600;font-size:0.85rem;color:#c2410c;">Waiting for authorization...</span>
+    </div>
+    <p style="margin:0 0 10px;font-size:0.78rem;color:#94a3b8;">Complete the sign-in in the browser tab that just opened. This will update automatically.</p>
     <p id="qboOAuthResultMsg" style="display:none;margin:10px 0 0;padding:8px;border-radius:8px;font-size:0.82rem;"></p>
+    <div id="qboOAuthManualFallback" style="display:none;margin-top:12px;border-top:1px solid #fed7aa;padding-top:12px;">
+      <p style="margin:0 0 8px;font-weight:600;font-size:0.82rem;color:#64748b;">Having trouble? Paste the redirect URL manually:</p>
+      <input type="text" id="qboOAuthRedirectUrl" placeholder="Paste the full redirect URL here..."
+             style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.84rem;box-sizing:border-box;margin-bottom:10px;" />
+      <button onclick="window.submitOAuthUrl()" id="qboOAuthSubmitBtn"
+              style="background:#ea580c;color:#fff;padding:8px 20px;border:none;border-radius:8px;font-weight:600;font-size:0.84rem;cursor:pointer;">
+        Complete Connection
+      </button>
+    </div>
   `;
+  // Add spin animation if not already present
+  if (!document.getElementById('_nglSpinStyle')) {
+    const style = document.createElement('style');
+    style.id = '_nglSpinStyle';
+    style.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+  }
   container.appendChild(box);
+
+  // Poll /qbo/status every 2 seconds for up to 5 minutes
+  const startTime = Date.now();
+  const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+  _oauthPollTimer = setInterval(async () => {
+    try {
+      const status = await agentBridge.checkQBOStatus();
+      if (status && status.api && status.api.connected) {
+        clearInterval(_oauthPollTimer);
+        _oauthPollTimer = null;
+        // Show success
+        const spinner = document.getElementById('qboOAuthSpinner');
+        if (spinner) spinner.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          <span style="font-weight:600;font-size:0.85rem;color:#16a34a;">QBO API Connected!</span>
+        `;
+        setTimeout(() => {
+          document.getElementById('qboOAuthPasteBox')?.remove();
+          loadQboApiStatus();
+        }, 2000);
+        return;
+      }
+    } catch { /* keep polling */ }
+
+    // Check timeout
+    if (Date.now() - startTime > TIMEOUT_MS) {
+      clearInterval(_oauthPollTimer);
+      _oauthPollTimer = null;
+      const spinner = document.getElementById('qboOAuthSpinner');
+      if (spinner) spinner.innerHTML = `
+        <span style="font-weight:600;font-size:0.85rem;color:#dc2626;">Authorization timed out.</span>
+      `;
+      // Show manual paste fallback
+      const fallback = document.getElementById('qboOAuthManualFallback');
+      if (fallback) fallback.style.display = '';
+    }
+  }, 2000);
 }
 
 window.submitOAuthUrl = async function() {
@@ -427,7 +483,7 @@ window.submitOAuthUrl = async function() {
     msg.style.display = ''; msg.style.color = '#dc2626'; return;
   }
   const code = params.get('code');
-  const state = params.get('state');
+  const oauthState = params.get('state');
   const realmId = params.get('realmId');
   if (!code) {
     msg.textContent = 'No authorization code found. Make sure you clicked Connect on Intuit\'s page.';
@@ -436,7 +492,7 @@ window.submitOAuthUrl = async function() {
 
   btn.disabled = true; btn.textContent = 'Connecting...';
   try {
-    const resp = await fetch(`${agentBridge.baseUrl}/qbo/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}&realmId=${encodeURIComponent(realmId || '')}`);
+    const resp = await fetch(`${agentBridge.baseUrl}/qbo/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(oauthState || '')}&realmId=${encodeURIComponent(realmId || '')}`);
     const text = await resp.text();
     if (resp.ok && text.includes('Connected')) {
       msg.innerHTML = '<strong style="color:#16a34a;">QBO API Connected!</strong>';

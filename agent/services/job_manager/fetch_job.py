@@ -7,7 +7,7 @@ import uuid
 
 from config import (
     DOWNLOADS_DIR, DEBUG_DIR,
-    QBO_ACTION_DELAY_S, MAX_BATCH_SIZE, CONTAINER_TIMEOUT_S,
+    MAX_BATCH_SIZE, CONTAINER_TIMEOUT_S,
     FETCH_CONCURRENCY,
 )
 from utils import strip_motw
@@ -264,7 +264,7 @@ class FetchJobMixin:
 
             job.results.append(result)
             job._save_state()
-            await asyncio.sleep(QBO_ACTION_DELAY_S)
+            await asyncio.sleep(1.0)
 
         await self._finish_job(job)
 
@@ -327,7 +327,7 @@ class FetchJobMixin:
                 job.progress = completed_count
                 job._save_state()
 
-                await asyncio.sleep(QBO_ACTION_DELAY_S)
+                await asyncio.sleep(1.0)
 
         tasks = [
             asyncio.create_task(process_one(i, c))

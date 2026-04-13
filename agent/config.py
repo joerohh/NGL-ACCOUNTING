@@ -24,7 +24,6 @@ if _appdata_env.exists():
     load_dotenv(_appdata_env, override=True)
 
 DOWNLOADS_DIR = BASE_DIR / "downloads"
-BROWSER_PROFILE_DIR = APPDATA_DIR / ".browser_profile"
 JOB_STATE_DIR = BASE_DIR / ".job_state"
 DEBUG_DIR = BASE_DIR / "debug"
 OUTPUT_DIR = BASE_DIR / "output"  # Final merged PDFs saved here (no MOTW)
@@ -38,7 +37,6 @@ BACKUP_RETAIN_DAYS = 30  # keep last 30 daily backups
 # Ensure directories exist
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOADS_DIR.mkdir(exist_ok=True)
-BROWSER_PROFILE_DIR.mkdir(exist_ok=True)
 JOB_STATE_DIR.mkdir(exist_ok=True)
 DEBUG_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -61,14 +59,6 @@ ALLOWED_ORIGINS = [
 # Claude API
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
-
-# Browser (shared Playwright instance)
-BROWSER_HEADLESS = False  # set True to run Chrome headless (no visible window)
-
-# Timing — guards against rate limiting
-QBO_ACTION_DELAY_S = 1.0        # seconds between QBO actions (was 2.5)
-QBO_RETRY_COUNT = 3             # retries per failed download
-QBO_RETRY_BACKOFF_S = 5.0       # initial backoff (doubles each retry)
 
 # Classification
 CLASSIFICATION_CONFIDENCE_THRESHOLD = 0.80  # below this → flag for manual review
@@ -130,5 +120,9 @@ WEBAPP_CACHE_DIR = APPDATA_DIR / "webapp-cache"
 
 # Auth token for local server (simple security)
 AUTH_TOKEN = os.getenv("NGL_AGENT_TOKEN", "ngl-local-dev-token")
-# Set to True to enforce JWT login (disabled until auth UI is fully tested)
-AUTH_ENABLED = os.getenv("NGL_AUTH_ENABLED", "false").lower() in ("true", "1", "yes")
+# Enforce JWT login by default; set NGL_AUTH_ENABLED=false in .env to disable for dev
+AUTH_ENABLED = os.getenv("NGL_AUTH_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# Google OAuth (Sign in with Google)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")

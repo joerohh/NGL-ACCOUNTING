@@ -683,6 +683,7 @@ function invResendAll() {
     inv.sendStatus = null;
     inv.sentAt = null;
     inv.errorMessage = null;
+    inv.isResend = true;
     // Force the subject to [NGL_INV_REVISED] so Gmail creates a new thread
     inv.resendSubject = '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
   });
@@ -737,6 +738,7 @@ async function invSendViaQBO() {
       if (confirm(msg)) {
         alreadySent.forEach(inv => {
           inv.sendStatus = '';
+          inv.isResend = true;
           inv.resendSubject = '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
         });
         invAddLog('info', 'Resending ' + alreadySent.length + ' invoices...');
@@ -781,6 +783,7 @@ async function invSendViaQBO() {
     amount: inv.amount || '',
     subject: inv.resendSubject || inv.subject || invRenderSubject(invoiceState.subjectTemplate, inv),
     doSenderEmail: inv.doSenderEmail || '',
+    isResend: inv.isResend || false,
   }));
 
   const testMode = document.getElementById('invTestModeToggle')?.checked || false;
@@ -966,10 +969,14 @@ const _sendEventHandlers = {
   invoice_skipped(event) {
     sendState.skipped++;
     sendState.completedCount++;
-    invAddLog('warning', '  SKIPPED: ' + event.invoiceNumber + ' (' + event.reason + ')');
-    if (event.reason === 'no_attachments') {
+    if (event.reason === 'duplicate') {
+      invAddLog('warning', '  DUPLICATE: ' + event.invoiceNumber + ' — already sent recently, skipping');
+      invUpdateInvoiceSendStatus(event.invoiceNumber, 'sent', { errorMessage: 'Duplicate — already sent' });
+    } else if (event.reason === 'no_attachments') {
+      invAddLog('warning', '  SKIPPED: ' + event.invoiceNumber + ' (' + event.reason + ')');
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped_no_attachments');
     } else {
+      invAddLog('warning', '  SKIPPED: ' + event.invoiceNumber + ' (' + event.reason + ')');
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped', { errorMessage: event.reason });
     }
   },

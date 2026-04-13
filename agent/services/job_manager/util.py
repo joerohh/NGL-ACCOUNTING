@@ -12,6 +12,20 @@ import services.database as db
 logger = logging.getLogger("ngl.job_manager")
 
 
+def normalize_email_list(emails: list) -> list[str]:
+    """Split any comma-separated email strings into individual addresses.
+
+    Fixes data like ["a@x.com, b@x.com"] → ["a@x.com", "b@x.com"].
+    """
+    result = []
+    for entry in emails:
+        if isinstance(entry, str) and "," in entry:
+            result.extend(e.strip() for e in entry.split(",") if e.strip())
+        elif isinstance(entry, str) and entry.strip():
+            result.append(entry.strip())
+    return result
+
+
 class JobManagerUtilMixin:
     """Shared utility methods used across fetch and send jobs."""
 

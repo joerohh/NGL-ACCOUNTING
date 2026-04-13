@@ -7,6 +7,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from services.job_manager.util import normalize_email_list
+
 logger = logging.getLogger("ngl.job_manager")
 
 
@@ -16,7 +18,7 @@ class SendOECFlowMixin:
     async def _send_oec_flow(self, job, invoice, customer: dict,
                               result, index: int) -> None:
         """OEC flow: Send invoice-only via QBO API, then POD via separate Gmail email."""
-        customer_emails = customer.get("emails", [])
+        customer_emails = normalize_email_list(customer.get("emails", []))
         if not customer_emails:
             result.status = "skipped"
             result.error = f"No emails configured for customer: {invoice.customer_code}"
@@ -112,8 +114,8 @@ class SendOECFlowMixin:
         # ── Part A: Send invoice-only via QBO API ──
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{invoice.container_number}"
         to_emails = customer_emails
-        cc_emails = ["ar@ngltrans.net"] + customer.get("ccEmails", [])
-        bcc_emails = customer.get("bccEmails", [])
+        cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
+        bcc_emails = normalize_email_list(customer.get("bccEmails", []))
 
         result.to_emails = to_emails
         result.cc_emails = cc_emails
@@ -346,8 +348,8 @@ class SendOECFlowMixin:
             return
 
         # ── Build POD email recipients ──
-        pod_to = list(customer.get("podEmailTo", []))
-        pod_cc = list(customer.get("podEmailCc", []))
+        pod_to = normalize_email_list(customer.get("podEmailTo", []))
+        pod_cc = normalize_email_list(customer.get("podEmailCc", []))
 
         logger.info("[POD_EMAIL] Building CC list for %s:", invoice.invoice_number)
         logger.info("[POD_EMAIL]   Customer podEmailCc: %s", customer.get("podEmailCc", []))

@@ -39,7 +39,6 @@ a = Analysis(
     binaries=[],
     datas=[
         # Agent data files
-        (str(AGENT_DIR / "selectors.json"), "."),
         (str(AGENT_DIR / "tms_selectors.json"), "."),
         # Seed database (copied to AppData on first launch if no DB exists)
         (str(AGENT_DIR / "data" / "ngl.db"), "seed-data"),
@@ -79,7 +78,7 @@ a = Analysis(
         "routers.auth",
         "services",
         "services.database",
-        "services.qbo_browser",
+        "services.qbo_api",
         "services.tms_browser",
         "services.claude_classifier",
         "services.email_sender",
@@ -91,12 +90,10 @@ a = Analysis(
         "services.supabase_client",
         "services.web_updater",
         # Packages (split into submodules)
-        "services.qbo_browser.__init__",
-        "services.qbo_browser.login",
-        "services.qbo_browser.search",
-        "services.qbo_browser.download",
-        "services.qbo_browser.invoice",
-        "services.qbo_browser.send",
+        "services.qbo_api.__init__",
+        "services.qbo_api.oauth",
+        "services.qbo_api.invoices",
+        "services.qbo_api.attachments",
         "services.tms_browser.__init__",
         "services.tms_browser.login",
         "services.tms_browser.search",
@@ -105,7 +102,6 @@ a = Analysis(
         "services.job_manager.__init__",
         "services.job_manager.fetch_job",
         "services.job_manager.send_job",
-        "services.job_manager.send_qbo",
         "services.job_manager.send_oec",
         "services.job_manager.send_portal",
         "services.job_manager.util",

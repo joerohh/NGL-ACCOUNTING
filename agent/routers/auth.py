@@ -9,16 +9,24 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
-from config import AUTH_TOKEN
-
 logger = logging.getLogger("ngl.auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# JWT secret — use the existing AUTH_TOKEN as the signing key (local-only)
-JWT_SECRET = AUTH_TOKEN
+# JWT config — secret is loaded from DB on first use (persistent per installation)
+_jwt_secret: Optional[str] = None
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 72  # 3-day sessions
+JWT_EXPIRE_HOURS = 72          # default session (no "remember me")
+JWT_EXPIRE_HOURS_REMEMBER = 720  # 30-day session ("remember me" checked)
+
+
+def _get_jwt_secret() -> str:
+    """Lazy-load the JWT secret from the database (generated on first run)."""
+    global _jwt_secret
+    if _jwt_secret is None:
+        from services.database import get_or_create_jwt_secret
+        _jwt_secret = get_or_create_jwt_secret()
+    return _jwt_secret
 
 
 # ── Models ──
@@ -26,6 +34,7 @@ JWT_EXPIRE_HOURS = 72  # 3-day sessions
 class LoginRequest(BaseModel):
     username: str
     password: str
+    remember: Optional[bool] = False
 
 
 class CreateUserRequest(BaseModel):
@@ -47,24 +56,36 @@ class ChangePasswordRequest(BaseModel):
     newPassword: str
 
 
+class SetupRequest(BaseModel):
+    username: str
+    password: str
+    displayName: Optional[str] = ""
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str  # Google ID token from Sign In with Google
+    remember: Optional[bool] = False
+
+
 # ── Helpers ──
 
-def create_jwt(user: dict) -> str:
+def create_jwt(user: dict, remember: bool = False) -> str:
     """Create a JWT token for an authenticated user."""
+    hours = JWT_EXPIRE_HOURS_REMEMBER if remember else JWT_EXPIRE_HOURS
     payload = {
         "sub": str(user["id"]),
         "username": user["username"],
         "role": user["role"],
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=hours),
         "iat": datetime.now(timezone.utc),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def decode_jwt(token: str) -> Optional[dict]:
     """Decode and validate a JWT. Returns payload or None."""
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
@@ -87,6 +108,30 @@ async def get_auth_token():
     return {"token": None, "loginRequired": AUTH_ENABLED}
 
 
+@router.get("/setup-required")
+async def setup_required():
+    """Check if first-run setup is needed (no users exist yet)."""
+    from services.database import get_user_count
+    return {"setupRequired": get_user_count() == 0}
+
+
+@router.post("/setup")
+async def first_run_setup(data: SetupRequest):
+    """Create the initial admin account. Only works when no users exist."""
+    from services.database import get_user_count, create_user
+    if get_user_count() > 0:
+        return JSONResponse(status_code=400, content={"detail": "Setup already completed"})
+
+    if not data.username.strip():
+        return JSONResponse(status_code=400, content={"detail": "Username is required"})
+    if len(data.password) < 4:
+        return JSONResponse(status_code=400, content={"detail": "Password must be at least 4 characters"})
+
+    user = create_user(data.username.strip(), data.password, data.displayName or data.username.strip(), "admin")
+    logger.info("First-run setup: admin user '%s' created", user["username"])
+    return {"status": "ok", "user": user}
+
+
 @router.post("/login")
 async def login(data: LoginRequest):
     """Authenticate with username + password. Returns JWT token + user info."""
@@ -95,9 +140,155 @@ async def login(data: LoginRequest):
     if not user:
         return JSONResponse(status_code=401, content={"detail": "Invalid username or password"})
 
-    token = create_jwt(user)
+    token = create_jwt(user, remember=data.remember)
     logger.info("User logged in: %s (role: %s)", user["username"], user["role"])
     return {"token": token, "user": user}
+
+
+@router.get("/google/available")
+async def google_available():
+    """Check if Google login is configured."""
+    from config import GOOGLE_CLIENT_ID
+    return {"available": bool(GOOGLE_CLIENT_ID)}
+
+
+@router.get("/google/login")
+async def google_login_redirect():
+    """Redirect to Google's OAuth authorization page."""
+    import secrets as _secrets
+    from config import GOOGLE_CLIENT_ID
+    from starlette.responses import RedirectResponse
+
+    if not GOOGLE_CLIENT_ID:
+        return JSONResponse(status_code=400, content={"detail": "Google login not configured"})
+
+    state = _secrets.token_urlsafe(32)
+    # Store state for CSRF validation
+    from services.database import set_setting
+    set_setting("google_oauth_state", state)
+
+    params = (
+        f"client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri=http://localhost:8787/auth/google/callback"
+        f"&response_type=code"
+        f"&scope=openid%20email%20profile"
+        f"&state={state}"
+        f"&access_type=online"
+        f"&prompt=select_account"
+    )
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@router.get("/google/callback")
+async def google_callback(code: str = "", state: str = ""):
+    """Handle Google OAuth redirect — exchange code for user info."""
+    import httpx
+    from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+    from starlette.responses import HTMLResponse
+
+    if not code:
+        return HTMLResponse("<h3>Authorization failed — no code received.</h3>")
+
+    # Validate CSRF state
+    from services.database import get_setting, set_setting
+    saved_state = get_setting("google_oauth_state")
+    if not saved_state or state != saved_state:
+        return HTMLResponse("<h3>Authorization failed — invalid state.</h3>")
+    set_setting("google_oauth_state", "")  # Clear after use
+
+    # Exchange code for tokens
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post("https://oauth2.googleapis.com/token", data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": "http://localhost:8787/auth/google/callback",
+                "grant_type": "authorization_code",
+            })
+            if token_resp.status_code != 200:
+                logger.error("Google token exchange failed: %s", token_resp.text)
+                return HTMLResponse("<h3>Authorization failed — could not exchange code.</h3>")
+            tokens = token_resp.json()
+
+            # Get user info
+            userinfo_resp = await client.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={
+                "Authorization": f"Bearer {tokens['access_token']}"
+            })
+            if userinfo_resp.status_code != 200:
+                return HTMLResponse("<h3>Authorization failed — could not fetch user info.</h3>")
+            userinfo = userinfo_resp.json()
+    except Exception as e:
+        logger.error("Google OAuth error: %s", e)
+        return HTMLResponse(f"<h3>Authorization failed — {e}</h3>")
+
+    email = userinfo.get("email", "")
+    name = userinfo.get("name", "") or email.split("@")[0]
+
+    if not email:
+        return HTMLResponse("<h3>Authorization failed — no email from Google.</h3>")
+
+    # Only allow @ngltrans.net email addresses
+    if not email.lower().endswith("@ngltrans.net"):
+        return HTMLResponse("""
+            <html><body style="font-family:sans-serif;text-align:center;padding:60px;">
+                <h2 style="color:#dc2626;">Access Denied</h2>
+                <p>Only @ngltrans.net email addresses can sign in.</p>
+                <script>setTimeout(() => window.close(), 5000);</script>
+            </body></html>
+        """)
+
+    # Find or create user
+    from services.database import get_user_by_username, create_google_user
+    user = get_user_by_username(email)
+    if not user:
+        user = create_google_user(email, name)
+        logger.info("Google login: created new operator account for %s", email)
+    elif not user.get("active"):
+        return HTMLResponse("""
+            <html><body style="font-family:sans-serif;text-align:center;padding:60px;">
+                <h2 style="color:#dc2626;">Account Deactivated</h2>
+                <p>Contact your admin to reactivate your account.</p>
+                <script>setTimeout(() => window.close(), 5000);</script>
+            </body></html>
+        """)
+    else:
+        logger.info("Google login: %s (role: %s)", email, user["role"])
+
+    # Create JWT and store it so the frontend can pick it up via polling
+    token = create_jwt(user, remember=True)
+    set_setting("google_pending_auth", f"{token}|||{user['id']}")
+
+    return HTMLResponse("""
+        <html><body style="font-family:Inter,sans-serif;text-align:center;padding:60px;">
+            <h2 style="color:#16a34a;">Signed in!</h2>
+            <p style="color:#64748b;">You can close this tab and return to the app.</p>
+            <script>setTimeout(() => window.close(), 3000);</script>
+        </body></html>
+    """)
+
+
+@router.get("/google/poll")
+async def google_poll():
+    """Frontend polls this to check if Google auth completed."""
+    from services.database import get_setting, set_setting, get_user_by_id
+    pending = get_setting("google_pending_auth")
+    if not pending:
+        return {"authenticated": False}
+
+    # Clear immediately so it can only be consumed once
+    set_setting("google_pending_auth", "")
+
+    parts = pending.split("|||")
+    if len(parts) != 2:
+        return {"authenticated": False}
+
+    token, user_id = parts
+    user = get_user_by_id(int(user_id))
+    if not user:
+        return {"authenticated": False}
+
+    return {"authenticated": True, "token": token, "user": user}
 
 
 @router.get("/me")

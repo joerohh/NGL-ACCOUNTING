@@ -637,41 +637,34 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .send-tally-item.error { color: #dc2626; }
 .send-tally-item.mismatch { color: #dc2626; }
 
-/* ─── Agent Connections (Home) ─── */
-.agent-connections {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px; margin-bottom: 20px;
+/* ─── Status Pills (Home) ─── */
+.status-pills {
+  display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap;
 }
-.connection-card {
-  display: flex; align-items: center; gap: 12px;
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
-  padding: 14px 16px; position: relative; transition: border-color 0.2s;
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px;
+  padding: 6px 14px; font-size: 0.78rem; transition: border-color 0.2s;
 }
-.connection-card:hover { border-color: #cbd5e1; }
-.connection-card.connected { border-color: #bbf7d0; }
-.connection-card.disconnected { border-color: #fde68a; }
-.connection-card.offline { border-color: #e2e8f0; opacity: 0.6; }
-.connection-icon {
-  width: 40px; height: 40px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+.status-pill.connected { border-color: #bbf7d0; background: #f0fdf4; }
+.status-pill.disconnected { border-color: #fde68a; background: #fffbeb; }
+.status-pill.offline { border-color: #e2e8f0; opacity: 0.6; }
+.status-pill-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1; flex-shrink: 0;
 }
-.connection-info { flex: 1; min-width: 0; }
-.connection-name { font-size: 0.82rem; font-weight: 600; color: #1e293b; }
-.connection-status { font-size: 0.72rem; color: #94a3b8; margin-top: 1px; }
-.connection-btn {
-  padding: 5px 12px; font-size: 0.72rem; font-weight: 600;
-  border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;
-  color: #475569; cursor: pointer; white-space: nowrap; transition: all 0.15s;
+.status-pill-dot.green { background: #22c55e; }
+.status-pill-dot.amber { background: #f59e0b; }
+.status-pill-dot.gray { background: #cbd5e1; }
+.status-pill-label { font-weight: 600; color: #475569; }
+.status-pill-text { color: #94a3b8; }
+.status-pill.connected .status-pill-text { color: #16a34a; }
+.status-pill.disconnected .status-pill-text { color: #d97706; }
+.status-pill-btn {
+  padding: 2px 8px; font-size: 0.68rem; font-weight: 600;
+  border: 1px solid #e2e8f0; border-radius: 4px; background: #fff;
+  color: #475569; cursor: pointer; margin-left: 2px; transition: all 0.15s;
 }
-.connection-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
-.connection-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.connection-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-  background: #cbd5e1; position: absolute; top: 10px; right: 10px;
-}
-.connection-dot.green { background: #22c55e; }
-.connection-dot.amber { background: #f59e0b; }
-.connection-dot.gray { background: #cbd5e1; }
+.status-pill-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
 
 /* ─── Audit Log ─── */
 .audit-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from config import RESEND_NOTICE
 from services.email_template import build_invoice_email_html
+from services.job_manager.util import normalize_email_list
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -23,7 +24,7 @@ class SendQBOApiMixin:
     async def _send_qbo_api(self, job, invoice, customer: dict,
                              result, index: int) -> None:
         """Hybrid send: QBO API (search/verify/attachments) + Gmail (email with custom subject)."""
-        customer_emails = customer.get("emails", [])
+        customer_emails = normalize_email_list(customer.get("emails", []))
         if not customer_emails:
             result.status = "skipped"
             result.error = f"No emails configured for customer: {invoice.customer_code}"
@@ -191,8 +192,8 @@ class SendQBOApiMixin:
         # Use subject as-is if provided (frontend handles [NGL_INV_REVISED] prefix for resends)
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
         to_emails = customer_emails
-        cc_emails = ["ar@ngltrans.net"] + customer.get("ccEmails", [])
-        bcc_emails = customer.get("bccEmails", [])
+        cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
+        bcc_emails = normalize_email_list(customer.get("bccEmails", []))
 
         result.to_emails = to_emails
         result.cc_emails = cc_emails

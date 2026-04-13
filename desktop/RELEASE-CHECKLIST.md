@@ -10,14 +10,21 @@
 
 ## Build Steps (run from desktop/ folder)
 
-### Option A: Full build (recommended)
+### Option A: Build + Publish (recommended)
+```
+cd desktop
+publish-release.bat
+```
+This builds the app AND uploads it to GitHub Releases so users get the update automatically.
+
+### Option B: Build only (no publish)
 ```
 cd desktop
 build-all.bat
 ```
-This runs all 3 steps automatically.
+This builds locally without uploading. Use this for testing.
 
-### Option B: Step by step
+### Option C: Step by step
 ```
 cd desktop
 
@@ -26,7 +33,6 @@ build-agent.bat
 
 :: Step 2 — Verify agent bundle has correct files
 dir agent-dist\ngl-agent\_internal\.env
-dir agent-dist\ngl-agent\_internal\selectors.json
 dir agent-dist\ngl-agent\_internal\ms-playwright\
 
 :: Step 3 — Build the Electron installer
@@ -45,7 +51,6 @@ desktop\dist\win-unpacked\resources\
             ├── ngl-agent.exe
             └── _internal\
                  ├── .env              ← Shared secrets (no QBO/TMS passwords)
-                 ├── selectors.json
                  ├── tms_selectors.json
                  ├── playwright\       ← Playwright driver
                  └── ms-playwright\    ← Chromium browser

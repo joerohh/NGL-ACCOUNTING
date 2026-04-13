@@ -148,43 +148,33 @@ export async function agentHealthCheck() {
 }
 
 function _updateHomeConnections() {
-  const setCard = (id, status, isConnected, showBtn) => {
-    const card = document.getElementById(id + 'Card');
+  const setPill = (id, status, isConnected, showBtn) => {
+    const pill = document.getElementById(id + 'Card');
     const stat = document.getElementById(id + 'Status');
     const dot  = document.getElementById(id + 'Dot');
     const btn  = document.getElementById(id + 'Btn');
-    if (!card) return;
-    card.className = 'connection-card' + (state.agentConnected ? (isConnected ? ' connected' : ' disconnected') : ' offline');
-    if (stat) { stat.textContent = status; stat.style.color = isConnected ? '#16a34a' : state.agentConnected ? '#d97706' : '#94a3b8'; }
-    if (dot) dot.className = 'connection-dot ' + (isConnected ? 'green' : state.agentConnected ? 'amber' : 'gray');
+    if (!pill) return;
+    pill.className = 'status-pill' + (state.agentConnected ? (isConnected ? ' connected' : ' disconnected') : ' offline');
+    if (stat) stat.textContent = status;
+    if (dot) dot.className = 'status-pill-dot ' + (isConnected ? 'green' : state.agentConnected ? 'amber' : 'gray');
     if (btn) btn.style.display = (showBtn && state.agentConnected && !isConnected) ? '' : 'none';
   };
 
   if (!state.agentConnected) {
-    setCard('homeQbo', 'Agent offline', false, false);
-    setCard('homeTms', 'Agent offline', false, false);
-    setCard('homeCls', 'Agent offline', false, false);
-    setCard('homeAgent', 'Offline', false, false);
+    setPill('homeQbo', 'Offline', false, false);
+    setPill('homeTms', 'Offline', false, false);
     return;
   }
-
-  // Agent server
-  setCard('homeAgent', 'Running on :8787', true, false);
 
   // QBO API
   const qboText = document.getElementById('qboStatus');
   const qboConnected = qboText && qboText.textContent === 'Connected';
-  setCard('homeQbo', qboConnected ? 'Connected' : 'Not connected', qboConnected, false);
+  setPill('homeQbo', qboConnected ? 'Connected' : 'Not connected', qboConnected, false);
 
   // TMS
   const tmsText = document.getElementById('tmsStatus');
   const tmsLoggedIn = tmsText && tmsText.textContent === 'Logged in';
-  setCard('homeTms', tmsLoggedIn ? 'Logged in' : 'Not logged in', tmsLoggedIn, true);
-
-  // Classifier
-  const clsText = document.getElementById('classifierStatus');
-  const clsReady = clsText && clsText.textContent === 'Ready';
-  setCard('homeCls', clsReady ? 'Ready' : 'No API key', clsReady, false);
+  setPill('homeTms', tmsLoggedIn ? 'Logged in' : 'Not logged in', tmsLoggedIn, true);
 }
 
 function agentHeaderBtnClick() {

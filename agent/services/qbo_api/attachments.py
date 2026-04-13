@@ -12,7 +12,7 @@ import httpx
 
 logger = logging.getLogger("ngl.qbo_api.attachments")
 
-# Filename patterns for document classification (same as qbo_browser/invoice.py)
+# Filename patterns for document classification
 DOC_PATTERNS = {
     "pod": [r"_pod", r"proof.of.delivery", r"pod\b"],
     "bol": [r"_bol", r"bill.of.lading", r"_bl\."],
@@ -69,7 +69,6 @@ class QBOAttachmentsMixin:
         """Check if required documents are present on an invoice.
 
         Returns: {found, missing, allPresent, attachments}
-        Same shape as qbo_browser's check_attachments_on_page() for compatibility.
         """
         attachments = await self.list_attachments(invoice_id)
 

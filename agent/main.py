@@ -238,10 +238,10 @@ async def lifespan(app: FastAPI):
     backup_data_files(DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS)
 
     # Init shared Playwright browser (single Chrome process for TMS + portals)
-    from config import BROWSER_HEADLESS, TMS_DOWNLOADS_DIR, TMS_VIEWPORT
+    from config import TMS_DOWNLOADS_DIR, TMS_VIEWPORT
     from utils import cleanup_old_profiles
 
-    await shared_browser.start(headless=BROWSER_HEADLESS)
+    await shared_browser.start(headless=False)
     logger.info("Shared browser started (1 Chrome process for all automation)")
 
     # Clean dead Chrome profile cache from old launch_persistent_context() usage
@@ -366,7 +366,7 @@ class NoCacheStaticMiddleware:
 
 # Auth middleware — validates JWT tokens on API routes
 # Exempts: health check, public auth endpoints, static file serving, and OPTIONS (CORS preflight)
-_AUTH_EXEMPT_PATHS = ("/health", "/auth/token", "/auth/login", "/qbo/oauth/")
+_AUTH_EXEMPT_PATHS = ("/health", "/auth/token", "/auth/login", "/auth/google", "/auth/setup", "/qbo/oauth/")
 
 
 class AuthTokenMiddleware:
