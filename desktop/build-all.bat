@@ -25,6 +25,7 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
+cd /d "%~dp0"
 
 REM Read and apply version
 set /p BUILD_VER=<VERSION
@@ -43,6 +44,13 @@ call npx electron-builder --win
 
 REM Check if the installer file was actually created
 if exist "dist\NGL_ACCOUNTING_INSTALLER_v%BUILD_VER%.0.exe" (
+    REM Upload installer to Google Drive
+    echo   [INFO] Uploading installer to Google Drive...
+    python upload-to-drive.py
+    if %errorlevel% neq 0 (
+        echo   [WARN] Google Drive upload failed — installer still built locally
+    )
+
     REM Bump version for next build
     node bump-version.js --bump
 

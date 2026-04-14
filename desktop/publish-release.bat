@@ -39,6 +39,7 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
+cd /d "%~dp0"
 
 REM ── Step 2: Bump version ────────────────────────────────────────
 set /p BUILD_VER=<VERSION
@@ -57,6 +58,13 @@ call npx electron-builder --win --publish always
 
 REM ── Verify and bump for next build ──────────────────────────────
 if exist "dist\NGL_ACCOUNTING_INSTALLER_v%BUILD_VER%.0.exe" (
+    REM Upload installer to Google Drive
+    echo   [INFO] Uploading installer to Google Drive...
+    python upload-to-drive.py
+    if %errorlevel% neq 0 (
+        echo   [WARN] Google Drive upload failed — installer still published to GitHub
+    )
+
     node bump-version.js --bump
 
     set /p NEXT_VER=<VERSION
