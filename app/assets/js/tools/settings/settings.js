@@ -41,6 +41,83 @@ export async function settingsLoad() {
 
   // Load QBO API status
   await loadQboApiStatus();
+
+  // Load email config
+  await loadEmailConfig();
+}
+
+// ── Email (Gmail) Settings ──
+async function loadEmailConfig() {
+  const statusEl = document.getElementById('settingsEmailStatus');
+  const addrEl = document.getElementById('settingsGmailAddress');
+  const pwEl = document.getElementById('settingsGmailAppPassword');
+  if (!statusEl) return;
+
+  const cfg = await agentBridge.getEmailConfig();
+  if (cfg.error) {
+    statusEl.textContent = 'Could not load';
+    return;
+  }
+  if (cfg.gmail_address) addrEl.value = cfg.gmail_address;
+  pwEl.value = '';
+  pwEl.placeholder = cfg.configured ? '(saved \u2014 enter new to change)' : '16-character app password';
+  statusEl.textContent = cfg.configured ? ('Configured (' + cfg.gmail_address + ')') : 'Not configured';
+  statusEl.style.color = cfg.configured ? '#16a34a' : '#94a3b8';
+}
+
+function showEmailResult(msg, success) {
+  const el = document.getElementById('emailResultMsg');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = '';
+  el.style.color = success ? '#15803d' : '#dc2626';
+  el.style.background = success ? '#f0fdf4' : '#fef2f2';
+  el.style.border = '1px solid ' + (success ? '#bbf7d0' : '#fecaca');
+  setTimeout(function() { el.style.display = 'none'; }, 10000);
+}
+
+async function saveEmailConfig() {
+  if (!state.agentConnected) { showEmailResult('Agent is offline.', false); return; }
+  const btn = document.getElementById('emailSaveBtn');
+  const btnText = document.getElementById('emailSaveBtnText');
+  const addr = document.getElementById('settingsGmailAddress').value.trim();
+  const pw = document.getElementById('settingsGmailAppPassword').value;
+
+  if (!addr) { showEmailResult('Enter your Gmail address.', false); return; }
+
+  const payload = { gmail_address: addr };
+  if (pw) payload.gmail_app_password = pw;
+
+  btn.disabled = true; btnText.textContent = 'Saving...';
+  const result = await agentBridge.saveEmailConfig(payload);
+  btn.disabled = false; btnText.textContent = 'Save';
+
+  if (result.error) { showEmailResult('Failed: ' + result.error, false); return; }
+  showEmailResult(result.configured ? 'Saved! Emails will be sent from ' + result.gmail_address + '.' : 'Saved (app password still needed).', result.configured);
+  await loadEmailConfig();
+}
+
+async function testEmailConfig() {
+  if (!state.agentConnected) { showEmailResult('Agent is offline.', false); return; }
+  const btn = document.getElementById('emailTestBtn');
+  const btnText = document.getElementById('emailTestBtnText');
+  const addr = document.getElementById('settingsGmailAddress').value.trim();
+  const pw = document.getElementById('settingsGmailAppPassword').value;
+
+  const payload = {};
+  if (addr) payload.gmail_address = addr;
+  if (pw) payload.gmail_app_password = pw;
+  if (addr) payload.to = addr; // send test to self
+
+  btn.disabled = true; btnText.textContent = 'Sending...';
+  const result = await agentBridge.testEmailConfig(payload);
+  btn.disabled = false; btnText.textContent = 'Send Test';
+
+  if (result.sent) {
+    showEmailResult('Test email sent! Check your inbox at ' + (addr || 'the saved address') + '.', true);
+  } else {
+    showEmailResult('Test failed: ' + (result.error || 'unknown error'), false);
+  }
 }
 
 async function settingsSaveAndConnect() {
@@ -537,3 +614,5 @@ window.saveUser = saveUser;
 window.doChangePassword = doChangePassword;
 window.connectQboApi = connectQboApi;
 window.disconnectQboApi = disconnectQboApi;
+window.saveEmailConfig = saveEmailConfig;
+window.testEmailConfig = testEmailConfig;

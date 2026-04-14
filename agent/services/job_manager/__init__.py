@@ -236,3 +236,7 @@ class JobManager(
         self._portal_uploader = portal_uploader
         self._tms = tms_browser
         self._jobs: dict[str, Job] = {}
+
+    def set_email_sender(self, email_sender) -> None:
+        """Swap the email sender at runtime (after Settings UI update)."""
+        self._email_sender = email_sender

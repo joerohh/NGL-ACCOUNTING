@@ -138,6 +138,8 @@ def reload_env_credentials():
     _load(_cfg.APPDATA_DIR / ".env", override=True)
     _cfg.TMS_EMAIL = os.getenv("TMS_EMAIL", "")
     _cfg.TMS_PASSWORD = os.getenv("TMS_PASSWORD", "")
+    _cfg.GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")
+    _cfg.GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 
 
 async def restore_cookies(context, cookie_file: Path) -> int:

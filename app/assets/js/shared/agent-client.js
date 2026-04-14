@@ -564,6 +564,39 @@ export const agentBridge = {
     } catch (e) { return { error: e.message }; }
   },
 
+  // ── Email (Gmail) Settings ──
+  async getEmailConfig() {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/settings/email');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async saveEmailConfig(data) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/settings/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async testEmailConfig(data) {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/settings/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {}),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { sent: false, error: e.message }; }
+  },
+
   // ── Selector Health Checks ──
   async checkTmsSelectorHealth() {
     try {

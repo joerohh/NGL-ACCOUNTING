@@ -292,6 +292,7 @@ async def lifespan(app: FastAPI):
     qbo.set_qbo_api(qbo_api)
     tms.set_tms_browser(tms_browser)
     settings.set_tms_browser(tms_browser)
+    settings.set_job_manager(job_manager)
 
     # Log QBO API status
     if qbo_api.is_connected:

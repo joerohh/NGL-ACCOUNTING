@@ -1403,6 +1403,56 @@
       </div>
     </div>
 
+    <!-- Email Sending (Gmail) -->
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+        <div style="width:36px; height:36px; background:#fef3c7; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">Email Sending (Gmail)</div>
+          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsEmailStatus">Not configured</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Your Gmail Address</label>
+          <input type="email" id="settingsGmailAddress" placeholder="you@ngltrans.net"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='#d97706'" onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Gmail App Password</label>
+          <input type="password" id="settingsGmailAppPassword" placeholder="16-character app password"
+            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='#d97706'" onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <button class="btn btn-primary" onclick="saveEmailConfig()" id="emailSaveBtn"
+            style="flex:1; justify-content:center; padding:9px 14px; font-size:0.82rem; background:#d97706; border-color:#d97706;">
+            <span id="emailSaveBtnText">Save</span>
+          </button>
+          <button class="btn btn-secondary" onclick="testEmailConfig()" id="emailTestBtn"
+            style="padding:9px 14px; font-size:0.82rem;">
+            <span id="emailTestBtnText">Send Test</span>
+          </button>
+        </div>
+        <div id="emailResultMsg" style="display:none; margin-top:4px; font-size:0.78rem; padding:9px 12px; border-radius:8px;"></div>
+        <details style="margin-top:6px; font-size:0.76rem; color:#64748b;">
+          <summary style="cursor:pointer; color:#2563eb;">How do I get a Gmail App Password?</summary>
+          <ol style="margin:8px 0 0 0; padding-left:20px; line-height:1.6;">
+            <li>Make sure <strong>2-Step Verification</strong> is turned on for your Google account.</li>
+            <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#2563eb;">myaccount.google.com/apppasswords</a>.</li>
+            <li>Create a new app password (name it e.g. "NGL Accounting"). Google gives you 16 letters.</li>
+            <li>Paste the 16-character code above (spaces are okay), then click <strong>Save</strong> and <strong>Send Test</strong>.</li>
+          </ol>
+          <p style="margin:8px 0 0;">Emails will be sent <strong>from your own Gmail</strong> and appear in <strong>your Sent folder</strong>.</p>
+        </details>
+      </div>
+    </div>
+
     <!-- Info banner -->
     <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; margin-bottom:16px; font-size:0.78rem; color:#15803d; line-height:1.5;">
       <strong>How it works:</strong> Credentials are saved locally to your agent's .env file (never sent to the internet).
