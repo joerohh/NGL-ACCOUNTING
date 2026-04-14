@@ -236,11 +236,14 @@ class SendQBOApiMixin:
             })
 
         # Download all linked attachments (POD, BOL, etc.)
-        # Prefer tempDownloadUri (direct file URL) over /download/{id} which
-        # returns a redirect URL as plain text rather than the actual file bytes.
+        # OEC flow (qbo_invoice_only_then_pod_email): send invoice PDF only —
+        # POD/DO go out in the separate POD email.
         import httpx
 
-        for att in all_attachments:
+        oec_invoice_only = customer.get("sendMethod") == "qbo_invoice_only_then_pod_email"
+        attachments_to_email = [] if oec_invoice_only else all_attachments
+
+        for att in attachments_to_email:
             fname = att.get("fileName", "attachment.pdf")
             try:
                 download_url = att.get("tempDownloadUri")
