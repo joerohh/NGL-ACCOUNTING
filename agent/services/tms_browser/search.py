@@ -792,18 +792,23 @@ class TMSSearchMixin:
                 )
                 return None
 
-            # Step 5: Verify the correct container loaded
-            # Check both visible text AND input field values (CONT# is often in an input)
-            container_found = await self._page.evaluate("""(cont) => {
+            # Step 5: Verify the correct container loaded.
+            # The detail page skeleton renders before React populates form fields,
+            # so poll up to 5s for the container to appear in page text or input values.
+            check_js = """(cont) => {
                 const upper = cont.toUpperCase();
-                // Check visible text
                 if ((document.body.innerText || '').toUpperCase().includes(upper)) return true;
-                // Check input values (CONT# field on detail page is an input)
                 for (const inp of document.querySelectorAll('input, textarea')) {
                     if ((inp.value || '').toUpperCase().includes(upper)) return true;
                 }
                 return false;
-            }""", container_number)
+            }"""
+            container_found = False
+            for _ in range(25):  # 25 × 0.2s = 5s max
+                container_found = await self._page.evaluate(check_js, container_number)
+                if container_found:
+                    break
+                await asyncio.sleep(0.2)
             if container_found:
                 work_order_url = self._page.url
                 logger.info("Navigated to work order for %s: %s", container_number, work_order_url)
