@@ -1294,8 +1294,8 @@ function invShowInlineApproval(event) {
   } else {
     borderColor = '#16a34a'; bgColor = '#f0fdf4'; dotColor = '#16a34a'; titleColor = '#15803d';
     borderDetail = '#dcfce7'; hintBg = '#fffbeb'; hintBorder = '#fde68a';
-    title = 'Ready to Send — Review in QBO Browser';
-    hint = 'Check the QBO browser window to confirm the form is filled correctly before approving.';
+    title = 'Invoice Email Ready — Review Before Sending';
+    hint = 'This will send the invoice + attachments via Gmail. Review recipients and subject above before approving.';
     approveLabel = 'Approve &amp; Send';
   }
 

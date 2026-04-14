@@ -265,7 +265,7 @@ class SendJobMixin:
             "attachmentsFound": result.attachments_found,
             "index": index,
             "total": job.total,
-            "message": "Form filled — review QBO browser and approve or skip",
+            "message": "Invoice email ready — review recipients and approve or skip",
         })
 
         logger.info("Test mode: waiting for approval on %s", invoice.invoice_number)
