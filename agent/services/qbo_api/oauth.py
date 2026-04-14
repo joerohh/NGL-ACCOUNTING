@@ -37,26 +37,59 @@ class QBOTokenManager:
         self._load_tokens()
 
     # ------------------------------------------------------------------
-    # Token persistence
+    # Token persistence (Supabase = source of truth, local file = offline cache)
     # ------------------------------------------------------------------
     def _load_tokens(self) -> None:
-        """Load saved tokens from disk."""
+        """Load tokens: try Supabase first, fall back to local file cache."""
+        try:
+            from services.supabase_client import load_qbo_tokens
+            remote = load_qbo_tokens()
+            if remote:
+                self._tokens = remote
+                self._write_local_cache()
+                logger.info("Loaded QBO tokens from Supabase (shared)")
+                return
+        except Exception as e:
+            logger.warning("Supabase token load failed, using local cache: %s", e)
+
         if self._tokens_file.exists():
             try:
                 with open(self._tokens_file, "r") as f:
                     self._tokens = json.load(f)
-                logger.info("Loaded QBO API tokens from %s", self._tokens_file.name)
+                logger.info("Loaded QBO tokens from local cache")
             except Exception as e:
-                logger.warning("Failed to load QBO tokens: %s", e)
+                logger.warning("Failed to load QBO tokens from cache: %s", e)
                 self._tokens = None
 
-    def _save_tokens(self) -> None:
-        """Persist tokens to disk."""
+    def _refresh_from_remote(self) -> None:
+        """Re-fetch latest tokens from Supabase (used before refresh to avoid stale refresh_token)."""
+        try:
+            from services.supabase_client import load_qbo_tokens
+            remote = load_qbo_tokens()
+            if remote:
+                self._tokens = remote
+                self._write_local_cache()
+        except Exception as e:
+            logger.warning("Could not re-fetch latest tokens from Supabase: %s", e)
+
+    def _write_local_cache(self) -> None:
+        """Write tokens to local file (cache for offline startup)."""
         if self._tokens:
             self._tokens_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self._tokens_file, "w") as f:
                 json.dump(self._tokens, f, indent=2)
-            logger.info("Saved QBO API tokens")
+
+    def _save_tokens(self) -> None:
+        """Persist tokens to Supabase (source of truth) + local file cache."""
+        if not self._tokens:
+            return
+        try:
+            from services.supabase_client import upsert_qbo_tokens
+            upsert_qbo_tokens(self._tokens)
+        except Exception as e:
+            logger.error("Failed to save QBO tokens to Supabase: %s", e)
+        self._write_local_cache()
+        logger.info("Saved QBO tokens (Supabase + local cache)")
 
     # ------------------------------------------------------------------
     # Authorization URL (step 1 of OAuth flow)
@@ -134,6 +167,10 @@ class QBOTokenManager:
 
     async def _refresh_access_token(self) -> bool:
         """Use the refresh token to get a new access token."""
+        # Re-fetch latest from Supabase first — another install may have just refreshed.
+        # QBO rotates refresh tokens, so an outdated refresh_token will fail.
+        self._refresh_from_remote()
+
         refresh_token = self._tokens.get("refresh_token") if self._tokens else None
         if not refresh_token:
             logger.error("No refresh token available — re-authorization required")
@@ -190,7 +227,12 @@ class QBOTokenManager:
         self._tokens = None
         if self._tokens_file.exists():
             self._tokens_file.unlink()
-        logger.info("QBO API tokens revoked and cleared")
+        try:
+            from services.supabase_client import delete_qbo_tokens
+            delete_qbo_tokens()
+        except Exception as e:
+            logger.warning("Failed to clear Supabase tokens: %s", e)
+        logger.info("QBO API tokens revoked and cleared (Supabase + local)")
         return True
 
     # ------------------------------------------------------------------

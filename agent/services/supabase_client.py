@@ -537,6 +537,86 @@ def sb_delete_user(user_id: int) -> bool:
     return len(resp.json()) > 0
 
 
+# ──────────────────────────────────────────────────────────────────────
+# QBO OAuth tokens (shared across all installs — single row)
+# ──────────────────────────────────────────────────────────────────────
+
+def load_qbo_tokens() -> Optional[dict]:
+    """Load the shared QBO OAuth tokens from Supabase. Returns None if not connected."""
+    try:
+        resp = httpx.get(
+            f"{_BASE}/qbo_tokens?id=eq.1&limit=1",
+            headers=_HEADERS, timeout=_TIMEOUT,
+        )
+        _check_response(resp, "load_qbo_tokens")
+        rows = resp.json()
+        if not rows:
+            return None
+        row = rows[0]
+        import time
+        return {
+            "access_token": row["access_token"],
+            "refresh_token": row["refresh_token"],
+            "realm_id": row["realm_id"],
+            "access_token_expires_at": _iso_to_ts(row["expires_at"]),
+            "refresh_token_expires_at": row.get("refresh_token_expires_at_ts") or (time.time() + 8726400),
+            "created_at": _iso_to_ts(row.get("updated_at")) or time.time(),
+        }
+    except Exception as e:
+        logger.warning("Failed to load QBO tokens from Supabase: %s", e)
+        return None
+
+
+def upsert_qbo_tokens(tokens: dict) -> bool:
+    """Save QBO OAuth tokens to Supabase (upsert into single-row table)."""
+    try:
+        row = {
+            "id": 1,
+            "realm_id": tokens.get("realm_id", ""),
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+            "expires_at": _ts_to_iso(tokens.get("access_token_expires_at", 0)),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        headers = {**_HEADERS, "Prefer": "resolution=merge-duplicates,return=minimal"}
+        resp = httpx.post(
+            f"{_BASE}/qbo_tokens?on_conflict=id",
+            headers=headers, timeout=_TIMEOUT, json=row,
+        )
+        _check_response(resp, "upsert_qbo_tokens")
+        return True
+    except Exception as e:
+        logger.error("Failed to save QBO tokens to Supabase: %s", e)
+        return False
+
+
+def delete_qbo_tokens() -> bool:
+    """Remove QBO tokens from Supabase (called on disconnect)."""
+    try:
+        resp = httpx.delete(
+            f"{_BASE}/qbo_tokens?id=eq.1",
+            headers=_HEADERS, timeout=_TIMEOUT,
+        )
+        _check_response(resp, "delete_qbo_tokens")
+        return True
+    except Exception as e:
+        logger.error("Failed to delete QBO tokens from Supabase: %s", e)
+        return False
+
+
+def _ts_to_iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+
+
+def _iso_to_ts(iso: Optional[str]) -> Optional[float]:
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
 def migrate_users_to_supabase(sqlite_users: list) -> int:
     """Push existing SQLite users to Supabase (one-time, preserves password hashes)."""
     if not sqlite_users:
