@@ -1,4 +1,4 @@
-"""OEC send mixin — invoice via Gmail SMTP, then POD via separate Gmail email."""
+"""OEC POD email mixin — sends separate POD email after standard invoice send."""
 
 import asyncio
 import logging
@@ -7,96 +7,43 @@ import shutil
 import tempfile
 from pathlib import Path
 
-import httpx
-
-from services.email_template import build_invoice_email_html
 from services.job_manager.util import normalize_email_list
 
 logger = logging.getLogger("ngl.job_manager")
 
 
 class SendOECFlowMixin:
-    """OEC flow: Send invoice-only via QBO API, then POD via separate Gmail email."""
+    """OEC POD email: fetch POD from QBO/TMS, send to POD recipients."""
 
-    async def _send_oec_flow(self, job, invoice, customer: dict,
-                              result, index: int) -> None:
-        """OEC flow: Send invoice-only via QBO API, then POD via separate Gmail email."""
-        customer_emails = normalize_email_list(customer.get("emails", []))
-        if not customer_emails:
-            result.status = "skipped"
-            result.error = f"No emails configured for customer: {invoice.customer_code}"
-            await self._emit_send(job, "invoice_skipped", {
-                "invoiceNumber": invoice.invoice_number,
-                "reason": "no_emails",
-                "customerCode": invoice.customer_code,
-            })
-            return
+    async def _send_oec_pod_email(self, job, invoice, customer: dict,
+                                   result, index: int) -> None:
+        """Send a separate POD email for OEC after the invoice was already sent.
 
-        # Check Gmail sender is configured
-        if not self._email_sender:
-            result.status = "skipped"
-            result.error = "Gmail not configured — add GMAIL_ADDRESS and GMAIL_APP_PASSWORD to .env"
-            await self._emit_send(job, "invoice_skipped", {
-                "invoiceNumber": invoice.invoice_number,
-                "reason": "gmail_not_configured",
-            })
-            return
-
+        Called AFTER _send_qbo_api succeeds. The invoice email is already done —
+        this only handles the POD delivery to separate recipients.
+        """
         api = self._qbo_api
 
-        # Step 1: Search QBO for the invoice
-        await self._emit_send(job, "searching_invoice", {
-            "invoiceNumber": invoice.invoice_number,
-        })
-
+        # Look up invoice in QBO to get attachments
         invoice_data = await api.search_invoice(invoice.invoice_number)
         if not invoice_data:
-            result.status = "error"
-            result.error = f"Invoice {invoice.invoice_number} not found in QBO"
-            await self._emit_send(job, "invoice_not_found", {
-                "invoiceNumber": invoice.invoice_number,
-            })
+            logger.warning("[OEC_POD] Invoice %s not found in QBO — skipping POD email",
+                           invoice.invoice_number)
             return
 
         invoice_id = invoice_data["Id"]
-        sync_token = invoice_data.get("SyncToken", "0")
 
-        # Step 2: Verify invoice details
-        await self._emit_send(job, "verifying_invoice", {
-            "invoiceNumber": invoice.invoice_number,
-            "containerNumber": invoice.container_number,
-        })
-
+        # Get container number from verification or CSV
         verification = await api.verify_invoice_details(
             invoice_data, invoice.container_number, invoice.amount or None
         )
-        if not verification.get("verified"):
-            result.status = "mismatch"
-            result.error = verification.get("reason", "Verification failed")
-            await self._emit_send(job, "invoice_mismatch", {
-                "invoiceNumber": invoice.invoice_number,
-                "containerNumber": invoice.container_number,
-                "reason": result.error,
-            })
-            return
+        container = (verification.get("found_container")
+                     or invoice.container_number or "")
 
-        if verification.get("amount_note"):
-            await self._emit_send(job, "invoice_amount_warning", {
-                "invoiceNumber": invoice.invoice_number,
-                "note": verification["amount_note"],
-            })
-
-        # Step 3: Check attachments — find POD for Part B
-        await self._emit_send(job, "checking_attachments", {
-            "invoiceNumber": invoice.invoice_number,
-        })
-
+        # Check QBO attachments for POD
         att_check = await api.check_attachments(invoice_id, ["invoice", "pod"])
-        result.attachments_found = att_check.get("found", [])
-        result.attachments_missing = att_check.get("missing", [])
         all_attachments = att_check.get("attachments", [])
 
-        # Find and download POD from QBO attachments
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
         pod_path = None
         pod_source = None
@@ -114,114 +61,7 @@ class SendOECFlowMixin:
                     logger.info("POD downloaded from QBO API: %s", pod_path.name)
                 break
 
-        # ── Part A: Send invoice via Gmail SMTP ──
-        container = verification.get("found_container") or invoice.container_number or ""
-        subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
-        to_emails = customer_emails
-        cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
-        bcc_emails = normalize_email_list(customer.get("bccEmails", []))
-
-        result.to_emails = to_emails
-        result.cc_emails = cc_emails
-        result.bcc_emails = bcc_emails
-        result.subject = subject
-
-        await self._emit_send(job, "filling_send_form", {
-            "invoiceNumber": invoice.invoice_number,
-            "toEmails": to_emails,
-            "subject": subject,
-        })
-
-        # Test mode approval
-        if job.test_mode:
-            approved = await self._wait_for_approval(job, invoice, result, index,
-                                                      to_emails, cc_emails, bcc_emails, subject)
-            if not approved:
-                return
-
-        await self._emit_send(job, "oec_qbo_sending", {
-            "invoiceNumber": invoice.invoice_number,
-        })
-
-        # Download invoice PDF from QBO
-        invoice_pdf = await api.download_invoice_pdf(invoice_id)
-        if not invoice_pdf:
-            result.status = "error"
-            result.error = "Failed to download invoice PDF from QBO"
-            await self._emit_send(job, "invoice_error", {
-                "invoiceNumber": invoice.invoice_number,
-                "error": result.error,
-            })
-            return
-
-        email_attachments = [{
-            "filename": f"{invoice.invoice_number}.pdf",
-            "data": invoice_pdf,
-        }]
-
-        # Build HTML email body
-        customer_name = invoice_data.get("CustomerRef", {}).get("name", "")
-        if "] " in customer_name:
-            customer_name = customer_name.split("] ", 1)[1]
-
-        ngl_ref = ""
-        customer_ref = ""
-        for field in invoice_data.get("CustomField", []):
-            name = field.get("Name", "").upper()
-            val = field.get("StringValue", "")
-            if "REF" in name and "/" in val:
-                parts = val.split("/", 1)
-                ngl_ref = parts[0].strip()
-                customer_ref = parts[1].strip() if len(parts) > 1 else ""
-
-        due_date = invoice_data.get("DueDate", "")
-        amount = str(invoice_data.get("TotalAmt", ""))
-        invoice_link = await api.get_invoice_link(invoice_id)
-
-        body = build_invoice_email_html(
-            invoice_number=invoice.invoice_number,
-            container=container,
-            customer_name=customer_name,
-            amount=amount,
-            due_date=due_date,
-            ngl_ref=ngl_ref,
-            customer_ref=customer_ref,
-            invoice_link=invoice_link,
-        )
-
-        # Send via Gmail SMTP
-        if not self._email_sender:
-            result.status = "error"
-            result.error = "Gmail email sender not configured"
-            await self._emit_send(job, "invoice_error", {
-                "invoiceNumber": invoice.invoice_number,
-                "error": result.error,
-            })
-            return
-
-        send_result = await self._email_sender.send_invoice_email(
-            to=to_emails,
-            cc=cc_emails,
-            bcc=bcc_emails,
-            subject=subject,
-            body=body,
-            attachments=email_attachments,
-        )
-
-        if not send_result.get("sent"):
-            result.status = "error"
-            result.error = f"Gmail send failed: {send_result.get('error', 'Unknown')}"
-            await self._emit_send(job, "invoice_error", {
-                "invoiceNumber": invoice.invoice_number,
-                "error": result.error,
-            })
-            return
-
-        await self._emit_send(job, "oec_qbo_sent", {
-            "invoiceNumber": invoice.invoice_number,
-        })
-
-        # ── Part B: Fetch DO SENDER from TMS (and POD if not on QBO) ──
+        # ── TMS lookup for POD and D/O sender ──
         csv_do_sender = invoice.do_sender_email or ""
         tms_failure_reason = ""
         tms_attempted = False
@@ -392,11 +232,11 @@ class SendOECFlowMixin:
         result.do_sender_email = invoice.do_sender_email or ""
         result.do_sender_source = do_sender_source
 
-        # No POD found anywhere — QBO invoice was sent but POD email can't go out
+        # No POD found anywhere — invoice was sent but POD email can't go out
         if not pod_path:
             source = "QBO or TMS" if self._tms else "QBO"
             result.status = "sent_no_pod"
-            result.error = f"QBO invoice sent but no POD found ({source}) — send POD manually"
+            result.error = f"Invoice sent but no POD found ({source}) — send POD manually"
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": f"No POD found in {source} — send POD manually",
@@ -425,10 +265,6 @@ class SendOECFlowMixin:
                                do_email, not do_email, '@' in do_email if do_email else False)
         else:
             logger.info("[POD_EMAIL] CC field: no DO SENDER email available for this invoice")
-
-        # Update result with actual POD email recipients
-        result.to_emails = pod_to
-        result.cc_emails = pod_cc
 
         logger.info("[POD_EMAIL] Final recipients for %s:", invoice.invoice_number)
         logger.info("[POD_EMAIL]   TO: %s", pod_to)
@@ -520,7 +356,7 @@ class SendOECFlowMixin:
             job._cc_override = None
             if not approved:
                 result.status = "sent_no_pod"
-                result.error = "QBO sent but POD email skipped by user"
+                result.error = "Invoice sent but POD email skipped by user"
                 await self._emit_send(job, "invoice_skipped", {
                     "invoiceNumber": invoice.invoice_number,
                     "reason": "user_skipped_pod_email",
@@ -565,7 +401,7 @@ class SendOECFlowMixin:
             })
         else:
             result.status = "error"
-            result.error = f"QBO sent but POD email failed: {email_result.get('error', 'Unknown')}"
+            result.error = f"Invoice sent but POD email failed: {email_result.get('error', 'Unknown')}"
             logger.error("[POD_EMAIL] FAILED: %s — %s", invoice.invoice_number, result.error)
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,

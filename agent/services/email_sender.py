@@ -106,8 +106,8 @@ class EmailSender:
             )
             msg.attach(pdf_part)
 
-        # All recipients (To + CC)
-        all_recipients = list(to) + list(cc)
+        # All recipients (To + CC), deduplicated to prevent double delivery
+        all_recipients = list(dict.fromkeys(list(to) + list(cc)))
 
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -168,8 +168,8 @@ class EmailSender:
             part.add_header("Content-Disposition", "attachment", filename=filename)
             msg.attach(part)
 
-        # All recipients (To + CC + BCC)
-        all_recipients = list(to) + list(cc) + list(bcc)
+        # All recipients (To + CC + BCC), deduplicated to prevent double delivery
+        all_recipients = list(dict.fromkeys(list(to) + list(cc) + list(bcc)))
 
         # Send via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:

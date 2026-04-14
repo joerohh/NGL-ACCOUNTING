@@ -92,6 +92,16 @@ routers/
 - **Agent Server:** Run `Start Agent.bat` or `cd agent && python main.py`
 - **Agent Setup:** Run `agent/setup.bat` for first-time Python environment setup
 
+## Rebuild Pipeline — MANDATORY
+**Every rebuild MUST complete the full pipeline. No exceptions. Never stop at just building.**
+1. Bump version in `desktop/VERSION`
+2. Build agent (PyInstaller) + Electron installer (`build-all.bat` or manual steps)
+3. `git add` + `git commit` all changes
+4. `git push` to remote
+5. `gh release create` with the installer `.exe` and `latest.yml` attached
+
+The user relies on the Electron auto-updater — without a GitHub release, the update won't reach the app. Never ask "want me to push?" — just do it all automatically.
+
 ## Context Management — MANDATORY
 **CRITICAL RULE: You MUST run `/compact` the moment context usage reaches 65%. No exceptions.**
 - This is a BLOCKING requirement — stop whatever you are doing and compact immediately.

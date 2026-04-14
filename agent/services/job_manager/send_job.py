@@ -177,12 +177,13 @@ class SendJobMixin:
                 method = customer.get("sendMethod", "email")
 
                 async def _dispatch_send():
-                    if method == "qbo_invoice_only_then_pod_email":
-                        await self._send_oec_flow(job, invoice, customer, result, i)
-                    elif method in ("portal_upload", "portal"):
+                    if method in ("portal_upload", "portal"):
                         await self._send_portal_upload(job, invoice, customer, result, i)
                     else:
                         await self._send_qbo_api(job, invoice, customer, result, i)
+                        # OEC: send separate POD email after invoice
+                        if method == "qbo_invoice_only_then_pod_email" and result.status == "sent":
+                            await self._send_oec_pod_email(job, invoice, customer, result, i)
 
                 await asyncio.wait_for(_dispatch_send(), timeout=SEND_TIMEOUT_S)
 
