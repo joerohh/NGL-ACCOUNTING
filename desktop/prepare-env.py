@@ -22,9 +22,8 @@ PER_USER_KEYS = {
     "NGL_ADMIN_USERNAME",
     "NGL_ADMIN_PASSWORD",
     "NGL_ADMIN_DISPLAY",
-    "GOOGLE_CLIENT_SECRET",
     # Note: GITHUB_PAT is intentionally NOT excluded — needed by electron-updater
-    # Note: GOOGLE_CLIENT_ID is intentionally NOT excluded — needed for Sign In with Google
+    # Note: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are intentionally NOT excluded — needed for Sign In with Google
 }
 
 def main():
