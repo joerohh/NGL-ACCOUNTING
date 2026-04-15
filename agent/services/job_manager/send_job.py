@@ -369,8 +369,18 @@ class SendJobMixin:
 
     async def _wait_for_approval(self, job, invoice, result, index: int,
                                   to_emails: list, cc_emails: list,
-                                  bcc_emails: list, subject: str) -> bool:
-        """Wait for user approval in test mode. Returns True if approved, False if skipped."""
+                                  bcc_emails: list, subject: str,
+                                  attachments_display: list = None) -> bool:
+        """Wait for user approval in test mode. Returns True if approved, False if skipped.
+
+        ``attachments_display`` lets the caller override what the approval-prompt
+        UI shows under "Attachments". Defaults to ``result.attachments_found``
+        (everything QBO has). For OEC, caller passes ['invoice'] since only the
+        invoice PDF will actually be attached.
+        """
+        if attachments_display is None:
+            attachments_display = result.attachments_found
+
         job._approval_event = asyncio.Event()
         job._approval_decision = None
 
@@ -382,7 +392,7 @@ class SendJobMixin:
             "ccEmails": cc_emails,
             "bccEmails": bcc_emails,
             "subject": subject,
-            "attachmentsFound": result.attachments_found,
+            "attachmentsFound": attachments_display,
             "index": index,
             "total": job.total,
             "message": "Invoice email ready — review recipients and approve or skip",

@@ -346,8 +346,15 @@ class SendQBOApiMixin:
 
         # Step 5: Test mode approval
         if job.test_mode:
-            approved = await self._wait_for_approval(job, invoice, result, index,
-                                                      to_emails, cc_emails, bcc_emails, subject)
+            # For OEC, the email will attach only the invoice PDF (POD/D-O doc
+            # goes out separately). Show that accurately in the approval preview
+            # instead of the QBO attachment list which would mislead the user.
+            attachments_display = ["invoice"] if is_oec else result.attachments_found
+            approved = await self._wait_for_approval(
+                job, invoice, result, index,
+                to_emails, cc_emails, bcc_emails, subject,
+                attachments_display=attachments_display,
+            )
             if not approved:
                 self._cleanup_temp(temp_dir)
                 return
