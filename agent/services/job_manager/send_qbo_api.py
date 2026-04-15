@@ -8,7 +8,15 @@ from pathlib import Path
 
 from config import RESEND_NOTICE, TMS_FETCH_TIMEOUT_S
 from services.email_template import build_invoice_email_html
-from services.job_manager.util import normalize_email_list, validate_and_append_email
+from services.job_manager.util import (
+    extract_wo_from_invoice,
+    normalize_email_list,
+    validate_and_append_email,
+)
+
+# Doc types supported by direct-URL TMS fetch (matches TMS Document tab rows).
+# Order determines preference when multiple are missing — POD + BL most common.
+SUPPORTED_DIRECT_URL_DOC_TYPES = {"do", "pod", "pol", "bl", "it", "ite"}
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -22,34 +30,106 @@ class SendQBOApiMixin:
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    async def _tms_fetch_and_upload_pod(self, job, invoice, api, invoice_id,
-                                          verification, temp_dir) -> bool:
-        """Fetch POD from TMS and upload to QBO. Returns True if POD uploaded.
+    async def _ensure_tms_login(self, job, invoice) -> bool:
+        """Ensure TMS is logged in. Returns True if logged in, False on timeout."""
+        if self._tms.is_logged_in():
+            return True
 
-        Runs inside a timeout wrapper (TMS_FETCH_TIMEOUT_S).
-        """
-        if not self._tms.is_logged_in():
-            await self._emit_send(job, "tms_login_required", {
-                "invoiceNumber": invoice.invoice_number,
-                "message": "TMS login required to fetch POD — please log in now",
+        await self._emit_send(job, "tms_login_required", {
+            "invoiceNumber": invoice.invoice_number,
+            "message": "TMS login required to fetch docs — please log in now",
+        })
+        await self._tms.open_login_page()
+        logged_in = await self._tms.wait_for_login(timeout_s=120)
+        if logged_in:
+            await self._emit_send(job, "tms_logged_in", {
+                "message": "TMS login successful — continuing",
             })
-            await self._tms.open_login_page()
-            logged_in = await self._tms.wait_for_login(timeout_s=120)
-            if logged_in:
-                await self._emit_send(job, "tms_logged_in", {
-                    "message": "TMS login successful — continuing",
-                })
-            else:
-                await self._emit_send(job, "tms_login_timeout", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "message": "TMS login timed out — skipping POD fetch",
-                })
-                return False
+            return True
 
-        if not self._tms.is_logged_in():
-            return False
+        await self._emit_send(job, "tms_login_timeout", {
+            "invoiceNumber": invoice.invoice_number,
+            "message": "TMS login timed out — skipping doc fetch",
+        })
+        return False
+
+    async def _tms_fetch_and_upload_missing_docs(
+        self, job, invoice, api, invoice_id, verification, temp_dir,
+        missing_docs, wo_no=None, detail_type=None,
+    ) -> list[str]:
+        """Fetch each missing required doc from TMS, upload to QBO.
+
+        Tries direct-URL navigation (per doc type) when wo_no + detail_type are
+        available — bypasses the main grid. Falls back to grid-based
+        fetch_pod_and_do_sender (POD-only) when direct URL isn't usable.
+
+        Returns the list of doc_types (lowercase) successfully uploaded to QBO.
+        """
+        uploaded: list[str] = []
+        if not await self._ensure_tms_login(job, invoice):
+            return uploaded
 
         container = verification.get("found_container") or invoice.container_number or ""
+
+        # ── Direct-URL path ─────────────────────────────────────────────
+        if wo_no and detail_type:
+            for raw_type in missing_docs:
+                dt = (raw_type or "").lower()
+                if dt == "invoice" or dt not in SUPPORTED_DIRECT_URL_DOC_TYPES:
+                    continue
+                await self._emit_send(job, "tms_fetching_doc_direct", {
+                    "invoiceNumber": invoice.invoice_number,
+                    "containerNumber": container,
+                    "docType": dt,
+                    "woNo": wo_no,
+                })
+                try:
+                    tms_doc = await self._tms.fetch_doc_by_wo(
+                        wo_no, detail_type, dt, container,
+                        invoice.invoice_number, temp_dir,
+                    )
+                except Exception as e:
+                    logger.warning("[DOC_BY_WO] fetch raised for type=%s: %s", dt, e)
+                    tms_doc = None
+
+                if not (tms_doc and tms_doc.exists()):
+                    await self._emit_send(job, "tms_doc_not_found", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "docType": dt,
+                        "woNo": wo_no,
+                    })
+                    continue
+
+                await self._emit_send(job, "uploading_doc_to_qbo", {
+                    "invoiceNumber": invoice.invoice_number,
+                    "docType": dt,
+                    "fileName": tms_doc.name,
+                })
+                if await api.upload_attachment(invoice_id, tms_doc):
+                    uploaded.append(dt)
+                    logger.info("%s uploaded to QBO for %s: %s",
+                                dt.upper(), invoice.invoice_number, tms_doc.name)
+                    await self._emit_send(job, "doc_uploaded_to_qbo", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "docType": dt,
+                        "fileName": tms_doc.name,
+                    })
+                else:
+                    logger.warning("Failed to upload %s to QBO for %s",
+                                   dt.upper(), invoice.invoice_number)
+                    await self._emit_send(job, "doc_upload_failed", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "docType": dt,
+                        "error": "QBO upload API returned no result",
+                    })
+            return uploaded
+
+        # ── Grid fallback (POD only — preserves legacy behavior) ────────
+        if "pod" not in (mt.lower() for mt in missing_docs):
+            return uploaded
+
+        logger.info("[DOC_FETCH] WO# unavailable for %s — using grid fallback (POD only)",
+                    invoice.invoice_number)
         await self._emit_send(job, "tms_fetching_pod", {
             "invoiceNumber": invoice.invoice_number,
             "containerNumber": container,
@@ -65,28 +145,27 @@ class SendQBOApiMixin:
                 "invoiceNumber": invoice.invoice_number,
                 "containerNumber": container,
             })
-            return False
+            return uploaded
 
         await self._emit_send(job, "uploading_pod_to_qbo", {
             "invoiceNumber": invoice.invoice_number,
             "fileName": tms_pod.name,
         })
-        uploaded = await api.upload_attachment(invoice_id, tms_pod)
-        if uploaded:
+        if await api.upload_attachment(invoice_id, tms_pod):
+            uploaded.append("pod")
             logger.info("POD uploaded to QBO for %s: %s",
                         invoice.invoice_number, tms_pod.name)
             await self._emit_send(job, "pod_uploaded_to_qbo", {
                 "invoiceNumber": invoice.invoice_number,
                 "fileName": tms_pod.name,
             })
-            return True
-
-        logger.warning("Failed to upload POD to QBO for %s", invoice.invoice_number)
-        await self._emit_send(job, "pod_upload_failed", {
-            "invoiceNumber": invoice.invoice_number,
-            "error": "QBO upload API returned no result",
-        })
-        return False
+        else:
+            logger.warning("Failed to upload POD to QBO for %s", invoice.invoice_number)
+            await self._emit_send(job, "pod_upload_failed", {
+                "invoiceNumber": invoice.invoice_number,
+                "error": "QBO upload API returned no result",
+            })
+        return uploaded
 
     async def _send_qbo_api(self, job, invoice, customer: dict,
                              result, index: int) -> None:
@@ -161,41 +240,50 @@ class SendQBOApiMixin:
         result.attachments_missing = att_check.get("missing", [])
         all_attachments = att_check.get("attachments", [])
 
-        # Step 3b: Auto-fetch missing POD from TMS and upload to QBO
-        found_types = {a.get("docType") for a in all_attachments}
-        pod_missing = "pod" not in found_types
+        # Step 3b: Auto-fetch missing docs from TMS and upload to QBO.
+        # Missing docs come from customer.requiredDocs vs what's attached to the
+        # QBO invoice. For OEC customers the D/O email step already handled TMS
+        # lookup + POD — so we skip the fetch-and-upload here.
+        missing_docs = [m for m in (result.attachments_missing or []) if (m or "").lower() != "invoice"]
         temp_dir = None
 
-        logger.info("Attachment check for %s: found_types=%s, pod_missing=%s, tms_available=%s",
-                     invoice.invoice_number, found_types, pod_missing, bool(self._tms))
+        logger.info("Attachment check for %s: found=%s, missing=%s, tms_available=%s",
+                     invoice.invoice_number, result.attachments_found,
+                     result.attachments_missing, bool(self._tms))
         for a in all_attachments:
             logger.info("  -> '%s' classified as '%s'", a.get("fileName"), a.get("docType"))
 
-        # OEC: POD email already ran first and handled TMS lookup — skip the
-        # inline TMS-fetch-and-upload here (would duplicate work / TMS round-trips).
-        if pod_missing and self._tms and not is_oec:
-            temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
+        # WO# + URL type for direct-URL navigation (extracted once, reused below)
+        wo_no = extract_wo_from_invoice(invoice_data)
+        detail_type = (self._tms.bc_detail_type_segment(invoice.invoice_number)
+                       if self._tms else None)
+        logger.info("[WO_EXTRACT] invoice=%s wo_no=%s type=%s",
+                    invoice.invoice_number, wo_no, detail_type)
+
+        if missing_docs and self._tms and not is_oec:
+            temp_dir = Path(tempfile.mkdtemp(prefix="ngl_docs_"))
             try:
-                uploaded_ok = await asyncio.wait_for(
-                    self._tms_fetch_and_upload_pod(
+                uploaded = await asyncio.wait_for(
+                    self._tms_fetch_and_upload_missing_docs(
                         job, invoice, api, invoice_id, verification, temp_dir,
+                        missing_docs, wo_no=wo_no, detail_type=detail_type,
                     ),
                     timeout=TMS_FETCH_TIMEOUT_S,
                 )
-                if uploaded_ok:
+                if uploaded:
                     att_check = await api.check_attachments(invoice_id, required_docs)
                     result.attachments_found = att_check.get("found", [])
                     result.attachments_missing = att_check.get("missing", [])
                     all_attachments = att_check.get("attachments", [])
             except asyncio.TimeoutError:
-                logger.warning("TMS POD fetch timed out after %ds for %s — skipping",
+                logger.warning("TMS doc fetch timed out after %ds for %s — skipping",
                                TMS_FETCH_TIMEOUT_S, invoice.invoice_number)
                 await self._emit_send(job, "tms_fetch_timeout", {
                     "invoiceNumber": invoice.invoice_number,
-                    "message": f"TMS POD fetch timed out after {TMS_FETCH_TIMEOUT_S}s — continuing without POD",
+                    "message": f"TMS doc fetch timed out after {TMS_FETCH_TIMEOUT_S}s — continuing without missing docs",
                 })
             except Exception as e:
-                logger.warning("TMS POD fetch failed for %s: %s",
+                logger.warning("TMS doc fetch failed for %s: %s",
                                invoice.invoice_number, e)
                 await self._emit_send(job, "tms_fetch_error", {
                     "invoiceNumber": invoice.invoice_number,
@@ -356,15 +444,20 @@ class SendQBOApiMixin:
         if "] " in customer_name:
             customer_name = customer_name.split("] ", 1)[1]
 
-        ngl_ref = ""
+        # Parse "NGL REF#/Your REF#" custom field for the email body.
+        # WO# (ngl_ref) is already available above via extract_wo_from_invoice —
+        # we keep the inline split here only to also capture customer_ref.
+        ngl_ref = wo_no or ""
         customer_ref = ""
         for field in invoice_data.get("CustomField", []):
             name = field.get("Name", "").upper()
             val = field.get("StringValue", "")
             if "REF" in name and "/" in val:
                 parts = val.split("/", 1)
-                ngl_ref = parts[0].strip()
+                if not ngl_ref:
+                    ngl_ref = parts[0].strip()
                 customer_ref = parts[1].strip() if len(parts) > 1 else ""
+                break
 
         due_date = invoice_data.get("DueDate", "")
         amount = str(invoice_data.get("TotalAmt", ""))

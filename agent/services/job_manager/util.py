@@ -29,6 +29,27 @@ def normalize_email_list(emails: list) -> list[str]:
     return result
 
 
+def extract_wo_from_invoice(invoice_data: dict) -> Optional[str]:
+    """Extract TMS WO# from QBO invoice's 'NGL REF#' custom field.
+
+    The field value is formatted as "WO#/CUSTOMER_REF" (e.g., "LM2603300024/TB00192691").
+    Returns the WO# portion if found and non-empty, else None.
+
+    This is the canonical link between a QBO invoice and its TMS work order —
+    used to build direct detail-page URLs and bypass the TMS main grid.
+    """
+    if not isinstance(invoice_data, dict):
+        return None
+    for field in invoice_data.get("CustomField", []) or []:
+        name = (field.get("Name") or "").upper()
+        val = (field.get("StringValue") or "").strip()
+        if "REF" in name and "/" in val:
+            wo = val.split("/", 1)[0].strip()
+            if wo:
+                return wo
+    return None
+
+
 def validate_and_append_email(cc_list: list[str], email: Optional[str],
                                label: str = "email") -> bool:
     """Append an email to cc_list if it's valid and not already present.

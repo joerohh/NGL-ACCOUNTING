@@ -534,6 +534,175 @@ class TMSDocumentsMixin:
         return do_sender
 
     # ------------------------------------------------------------------
+    # Direct-URL fetch (bypasses MAIN grid — requires WO# from QBO invoice)
+    # ------------------------------------------------------------------
+    async def _verify_detail_url_loaded(self, container_number: str,
+                                          detail_marker_required: bool = True) -> bool:
+        """Verify the current page is a loaded WO detail page for `container_number`.
+
+        Polls up to 5s for detail markers + container match (reuses existing
+        _has_detail_markers + the check_js pattern from search.py).
+        """
+        # Marker: 'DETAIL INFO' / 'BILLING INFO' text on the page
+        marker_ok = False
+        if detail_marker_required:
+            for _ in range(25):
+                marker_ok = bool(await self._has_detail_markers())
+                if marker_ok:
+                    break
+                await asyncio.sleep(0.2)
+            if not marker_ok:
+                return False
+
+        # Container match: text or input value
+        check_js = """(cont) => {
+            const upper = cont.toUpperCase();
+            if ((document.body.innerText || '').toUpperCase().includes(upper)) return true;
+            for (const inp of document.querySelectorAll('input, textarea')) {
+                if ((inp.value || '').toUpperCase().includes(upper)) return true;
+            }
+            return false;
+        }"""
+        for _ in range(25):
+            if await self._page.evaluate(check_js, container_number):
+                return True
+            await asyncio.sleep(0.2)
+        return False
+
+    async def fetch_do_sender_by_wo(self, wo_no: str, detail_type: str,
+                                      container_number: str,
+                                      invoice_number: str = "") -> Optional[str]:
+        """Fetch D/O sender by navigating directly to the WO detail page via URL.
+
+        Bypasses the MAIN grid entirely. Requires WO# (from QBO NGL REF# field)
+        and detail_type ('import' / 'export'). Returns the extracted email or
+        None. On failure, caller should fall back to grid-based fetch_do_sender_email.
+        """
+        self._last_do_sender_strategy = ""
+
+        try:
+            # Build URL from current page's origin
+            current_url = self._page.url if self._page else ""
+            if not current_url:
+                logger.warning("[DO_SENDER_BY_WO] no current page URL — cannot build direct URL")
+                return None
+            try:
+                origin = current_url.split("//")[0] + "//" + current_url.split("//")[1].split("/")[0]
+            except (IndexError, AttributeError):
+                logger.warning("[DO_SENDER_BY_WO] could not parse origin from '%s'", current_url)
+                return None
+
+            target_url = f"{origin}/bc-detail/detail-info/{detail_type}/{wo_no}"
+            logger.info("[DO_SENDER_BY_WO] goto %s (invoice=%s container=%s)",
+                        target_url, invoice_number, container_number)
+            await self._page.goto(target_url, wait_until="domcontentloaded", timeout=15000)
+            await asyncio.sleep(0.3)
+            await self._debug("direct_url_detail_info")
+
+            if not await self._verify_detail_url_loaded(container_number):
+                logger.warning("[DO_SENDER_BY_WO] detail page verify failed for wo=%s container=%s",
+                               wo_no, container_number)
+                return None
+
+            do_sender = await self._extract_do_sender()
+            if do_sender:
+                logger.info("[DO_SENDER_BY_WO] SUCCESS (direct_url): %s = %s",
+                            container_number, do_sender)
+                self._last_do_sender_strategy = "direct_url"
+                return do_sender
+
+            logger.warning("[DO_SENDER_BY_WO] detail page loaded but D/O sender not extracted for %s",
+                           container_number)
+            return None
+
+        except Exception as e:
+            logger.warning("[DO_SENDER_BY_WO] exception for wo=%s: %s", wo_no, e)
+            return None
+
+    async def fetch_doc_by_wo(self, wo_no: str, detail_type: str, doc_type: str,
+                                container_number: str, invoice_number: str,
+                                download_dir):
+        """Fetch a document by navigating directly to the WO document tab.
+
+        doc_type is case-insensitive ('pod', 'bl', 'do', 'pol', 'it', 'ite').
+        Returns a Path to the downloaded file or None. Caller should fall
+        back to grid-based flow on None.
+        """
+        try:
+            current_url = self._page.url if self._page else ""
+            if not current_url:
+                return None
+            try:
+                origin = current_url.split("//")[0] + "//" + current_url.split("//")[1].split("/")[0]
+            except (IndexError, AttributeError):
+                return None
+
+            target_url = f"{origin}/bc-detail/document/{detail_type}/{wo_no}"
+            logger.info("[DOC_BY_WO] goto %s (type=%s invoice=%s container=%s)",
+                        target_url, doc_type, invoice_number, container_number)
+            await self._page.goto(target_url, wait_until="domcontentloaded", timeout=15000)
+
+            # Wait for Document tab file inputs to render (same pattern as navigate_to_documents_tab)
+            content_loaded = False
+            for _ in range(25):  # up to 5s
+                content_loaded = await self._page.evaluate("""() => {
+                    const fileInputs = document.querySelectorAll('input[name^="file."]');
+                    return fileInputs.length >= 3;
+                }""")
+                if content_loaded:
+                    break
+                await asyncio.sleep(0.2)
+
+            await self._debug("direct_url_document_tab")
+
+            if not content_loaded:
+                logger.warning("[DOC_BY_WO] document tab did not load for wo=%s", wo_no)
+                return None
+
+            # Confirm we're on the right WO (container check)
+            if not await self._verify_detail_url_loaded(container_number,
+                                                         detail_marker_required=False):
+                logger.warning("[DOC_BY_WO] container mismatch on document tab wo=%s container=%s",
+                               wo_no, container_number)
+                return None
+
+            docs = await self.list_documents()
+            doc_type_upper = doc_type.upper()
+            target_row = None
+            for d in docs:
+                if (d.get("type") or "").upper() == doc_type_upper:
+                    target_row = d
+                    break
+
+            if not target_row:
+                logger.info("[DOC_BY_WO] no row for doc_type=%s on wo=%s", doc_type_upper, wo_no)
+                return None
+            if not target_row.get("has_file"):
+                logger.info("[DOC_BY_WO] row exists but no file uploaded: %s on wo=%s",
+                            doc_type_upper, wo_no)
+                return None
+
+            filename = target_row.get("filename") or f"{doc_type_upper}.pdf"
+            result = await self.download_document(doc_type_upper, download_dir, filename)
+            if result:
+                logger.info("[DOC_BY_WO] SUCCESS type=%s path=%s", doc_type_upper, result)
+            else:
+                logger.warning("[DOC_BY_WO] download_document returned None for %s", doc_type_upper)
+            return result
+
+        except Exception as e:
+            logger.warning("[DOC_BY_WO] exception for wo=%s type=%s: %s", wo_no, doc_type, e)
+            return None
+
+    async def fetch_pod_by_wo(self, wo_no: str, detail_type: str,
+                                container_number: str, invoice_number: str,
+                                download_dir):
+        """Thin wrapper around fetch_doc_by_wo for POD — keeps callers readable."""
+        return await self.fetch_doc_by_wo(
+            wo_no, detail_type, "pod", container_number, invoice_number, download_dir,
+        )
+
+    # ------------------------------------------------------------------
     # Stage 5: Document Tab Navigation
     # ------------------------------------------------------------------
     async def navigate_to_documents_tab(self) -> bool:

@@ -208,6 +208,10 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
     LOCATION_MAP = {"L": "LA", "P": "PHX", "H": "HOU", "S": "SAV", "M": "MOB"}
     TYPE_MAP = {"M": ("imp", "IMPORT"), "E": ("exp", "EXPORT")}
 
+    # Main-grid URL short form → bc-detail URL full form.
+    # bc-detail URLs use full words: /bc-detail/detail-info/{import|export|...}/{wo}
+    BC_DETAIL_TYPE_MAP = {"imp": "import", "exp": "export"}
+
     def parse_invoice_prefix(self, invoice_number: str) -> tuple:
         """Parse invoice number prefix to determine location and type.
 
@@ -222,5 +226,15 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
         if loc and type_info:
             return loc, type_info[0], type_info[1]
         return None, None, None
+
+    def bc_detail_type_segment(self, invoice_number: str):
+        """Return bc-detail URL type segment ('import' / 'export') or None.
+
+        None when invoice prefix is missing or doesn't map to import/export
+        (e.g., van, brokerage, bare-chassis). Callers should fall back to
+        grid-based navigation in that case.
+        """
+        _, url_seg, _ = self.parse_invoice_prefix(invoice_number)
+        return self.BC_DETAIL_TYPE_MAP.get(url_seg)
 
 
