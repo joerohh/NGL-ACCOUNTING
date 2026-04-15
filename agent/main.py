@@ -39,7 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger("ngl.main")
 
 # Bundle version — baked in at build time, visible via /health for diagnosing stale bundles.
-AGENT_VERSION = "2.25.0"
+AGENT_VERSION = "2.26.0"
 
 
 # ── Global exception handler — prevents silent crashes ──────────────
