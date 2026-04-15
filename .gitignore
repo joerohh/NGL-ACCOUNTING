@@ -12,6 +12,7 @@ __pycache__/
 agent/.env
 agent/gdrive_credentials.json
 agent/.gdrive_token.json
+agent/.qbo_tokens.json
 desktop/build-env/
 
 # Windows junk
@@ -60,9 +61,18 @@ desktop/build-temp/
 agent/data/ngl.db
 agent/data/ngl.db-shm
 agent/data/ngl.db-wal
+agent/data/ngl_accounting.db
+agent/data/ngl_accounting.db-shm
+agent/data/ngl_accounting.db-wal
 agent/data/*.bak
 agent/data/do_sender_cache.json
 agent/data/archive/
+
+# Claude Code workspace (personal tools)
+.claude/
+
+# Transient build logs
+desktop/build-log*.txt
 
 # Debug screenshots and HTML captures
 agent/debug/

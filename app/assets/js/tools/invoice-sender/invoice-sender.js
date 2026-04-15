@@ -891,6 +891,14 @@ const _sendEventHandlers = {
     // Push to session history
     if (sendState.jobId) fetchJobResultsForHistory(sendState.jobId, 'send', event);
   },
+  send_job_cancelled(event) {
+    sendState.isRunning = false;
+    invAddLog('warning', '═══ SEND JOB CANCELLED ═══');
+    invAddLog('info', '  Processed ' + (event.processed || 0) + ' of ' + event.total +
+      ' — Sent: ' + (event.sent || 0) + ' | Errors: ' + (event.errors || 0));
+    invShowSendResults(event);
+    if (sendState.jobId) fetchJobResultsForHistory(sendState.jobId, 'send', event);
+  },
   connection_warning(event) {
     invAddLog('warning', event.message);
     invShowConnectionWarning(event.message);
@@ -1112,7 +1120,10 @@ function invShowSendProgress() {
   panel.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
       <strong style="font-size:0.9rem;">Sending Invoices${testBadge}</strong>
-      <button class="btn btn-secondary" style="padding:5px 12px; font-size:0.78rem;" onclick="invPauseSendJob()">Pause</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-secondary" style="padding:5px 12px; font-size:0.78rem;" onclick="invPauseSendJob()">Pause</button>
+        <button class="btn btn-secondary" style="padding:5px 12px; font-size:0.78rem; color:#991b1b; border-color:#fecaca;" onclick="invCancelSendJob()">Cancel</button>
+      </div>
     </div>
     <div style="background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden;">
       <div id="invSendProgressBar" style="background:linear-gradient(90deg, #ea580c, #f97316); height:100%; width:0%; transition:width 0.3s;"></div>
@@ -1434,6 +1445,32 @@ async function invPauseSendJob() {
   }
 }
 
+async function invCancelSendJob() {
+  if (!sendState.jobId) {
+    // No active job id but local flag is stuck — clear it so the UI unlocks.
+    sendState.isRunning = false;
+    invAddLog('warning', 'No active job — local running flag cleared.');
+    return;
+  }
+  const ok = confirm('Cancel the current send job? Invoices already sent will not be reversed, but any in-progress invoice will stop and remaining ones will be skipped.');
+  if (!ok) return;
+  try {
+    const resp = await agentBridge._authFetch(agentBridge.baseUrl + '/jobs/' + sendState.jobId + '/cancel', { method: 'POST' });
+    const data = await resp.json().catch(function () { return {}; });
+    invAddLog('warning', 'Cancel requested — agent will stop after current step.');
+    // Also clear local flag immediately so the UI unlocks even if the SSE event is delayed.
+    sendState.isRunning = false;
+    if (sendState.eventSource) {
+      try { sendState.eventSource.close(); } catch (e) {}
+      sendState.eventSource = null;
+    }
+  } catch (e) {
+    invAddLog('error', 'Failed to cancel: ' + e.message);
+    // Still clear local flag so she can retry
+    sendState.isRunning = false;
+  }
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 //  AUDIT LOG PANEL
@@ -1513,6 +1550,7 @@ window.invRenderTable = invRenderTable;
 window.invClearAll = invClearAll;
 window.invSendViaQBO = invSendViaQBO;
 window.invPauseSendJob = invPauseSendJob;
+window.invCancelSendJob = invCancelSendJob;
 window.invApprovalDecision = invApprovalDecision;
 window.invLoadAuditLog = invLoadAuditLog;
 window.invToggleTestLimitVisibility = invToggleTestLimitVisibility;

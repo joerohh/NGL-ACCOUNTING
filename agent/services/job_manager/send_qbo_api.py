@@ -1,11 +1,12 @@
 """QBO API send mixin — hybrid: QBO API for lookup/verify + Gmail SMTP for send."""
 
+import asyncio
 import logging
 import shutil
 import tempfile
 from pathlib import Path
 
-from config import RESEND_NOTICE
+from config import RESEND_NOTICE, TMS_FETCH_TIMEOUT_S
 from services.email_template import build_invoice_email_html
 from services.job_manager.util import normalize_email_list
 
@@ -20,6 +21,72 @@ class SendQBOApiMixin:
         """Silently remove a temp directory if it exists."""
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    async def _tms_fetch_and_upload_pod(self, job, invoice, api, invoice_id,
+                                          verification, temp_dir) -> bool:
+        """Fetch POD from TMS and upload to QBO. Returns True if POD uploaded.
+
+        Runs inside a timeout wrapper (TMS_FETCH_TIMEOUT_S).
+        """
+        if not self._tms.is_logged_in():
+            await self._emit_send(job, "tms_login_required", {
+                "invoiceNumber": invoice.invoice_number,
+                "message": "TMS login required to fetch POD — please log in now",
+            })
+            await self._tms.open_login_page()
+            logged_in = await self._tms.wait_for_login(timeout_s=120)
+            if logged_in:
+                await self._emit_send(job, "tms_logged_in", {
+                    "message": "TMS login successful — continuing",
+                })
+            else:
+                await self._emit_send(job, "tms_login_timeout", {
+                    "invoiceNumber": invoice.invoice_number,
+                    "message": "TMS login timed out — skipping POD fetch",
+                })
+                return False
+
+        if not self._tms.is_logged_in():
+            return False
+
+        container = verification.get("found_container") or invoice.container_number or ""
+        await self._emit_send(job, "tms_fetching_pod", {
+            "invoiceNumber": invoice.invoice_number,
+            "containerNumber": container,
+        })
+
+        tms_pod, _ = await self._tms.fetch_pod_and_do_sender(
+            container, temp_dir, invoice_number=invoice.invoice_number,
+            skip_do_sender=True,
+        )
+
+        if not (tms_pod and tms_pod.exists()):
+            await self._emit_send(job, "tms_pod_not_found", {
+                "invoiceNumber": invoice.invoice_number,
+                "containerNumber": container,
+            })
+            return False
+
+        await self._emit_send(job, "uploading_pod_to_qbo", {
+            "invoiceNumber": invoice.invoice_number,
+            "fileName": tms_pod.name,
+        })
+        uploaded = await api.upload_attachment(invoice_id, tms_pod)
+        if uploaded:
+            logger.info("POD uploaded to QBO for %s: %s",
+                        invoice.invoice_number, tms_pod.name)
+            await self._emit_send(job, "pod_uploaded_to_qbo", {
+                "invoiceNumber": invoice.invoice_number,
+                "fileName": tms_pod.name,
+            })
+            return True
+
+        logger.warning("Failed to upload POD to QBO for %s", invoice.invoice_number)
+        await self._emit_send(job, "pod_upload_failed", {
+            "invoiceNumber": invoice.invoice_number,
+            "error": "QBO upload API returned no result",
+        })
+        return False
 
     async def _send_qbo_api(self, job, invoice, customer: dict,
                              result, index: int) -> None:
@@ -102,67 +169,24 @@ class SendQBOApiMixin:
         if pod_missing and self._tms:
             temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
             try:
-                # Check TMS login
-                if not self._tms.is_logged_in():
-                    await self._emit_send(job, "tms_login_required", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "message": "TMS login required to fetch POD — please log in now",
-                    })
-                    await self._tms.open_login_page()
-                    logged_in = await self._tms.wait_for_login(timeout_s=120)
-                    if logged_in:
-                        await self._emit_send(job, "tms_logged_in", {
-                            "message": "TMS login successful — continuing",
-                        })
-                    else:
-                        await self._emit_send(job, "tms_login_timeout", {
-                            "invoiceNumber": invoice.invoice_number,
-                            "message": "TMS login timed out — skipping POD fetch",
-                        })
-
-                if self._tms.is_logged_in():
-                    container = verification.get("found_container") or invoice.container_number or ""
-                    await self._emit_send(job, "tms_fetching_pod", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "containerNumber": container,
-                    })
-
-                    tms_pod, tms_do_sender = await self._tms.fetch_pod_and_do_sender(
-                        container, temp_dir, invoice_number=invoice.invoice_number,
-                        skip_do_sender=True,
-                    )
-
-                    if tms_pod and tms_pod.exists():
-                        # Upload POD to QBO
-                        await self._emit_send(job, "uploading_pod_to_qbo", {
-                            "invoiceNumber": invoice.invoice_number,
-                            "fileName": tms_pod.name,
-                        })
-                        uploaded = await api.upload_attachment(invoice_id, tms_pod)
-                        if uploaded:
-                            logger.info("POD uploaded to QBO for %s: %s",
-                                        invoice.invoice_number, tms_pod.name)
-                            await self._emit_send(job, "pod_uploaded_to_qbo", {
-                                "invoiceNumber": invoice.invoice_number,
-                                "fileName": tms_pod.name,
-                            })
-                            # Re-check attachments after upload
-                            att_check = await api.check_attachments(invoice_id, required_docs)
-                            result.attachments_found = att_check.get("found", [])
-                            result.attachments_missing = att_check.get("missing", [])
-                            all_attachments = att_check.get("attachments", [])
-                        else:
-                            logger.warning("Failed to upload POD to QBO for %s",
-                                           invoice.invoice_number)
-                            await self._emit_send(job, "pod_upload_failed", {
-                                "invoiceNumber": invoice.invoice_number,
-                                "error": "QBO upload API returned no result",
-                            })
-                    else:
-                        await self._emit_send(job, "tms_pod_not_found", {
-                            "invoiceNumber": invoice.invoice_number,
-                            "containerNumber": container,
-                        })
+                uploaded_ok = await asyncio.wait_for(
+                    self._tms_fetch_and_upload_pod(
+                        job, invoice, api, invoice_id, verification, temp_dir,
+                    ),
+                    timeout=TMS_FETCH_TIMEOUT_S,
+                )
+                if uploaded_ok:
+                    att_check = await api.check_attachments(invoice_id, required_docs)
+                    result.attachments_found = att_check.get("found", [])
+                    result.attachments_missing = att_check.get("missing", [])
+                    all_attachments = att_check.get("attachments", [])
+            except asyncio.TimeoutError:
+                logger.warning("TMS POD fetch timed out after %ds for %s — skipping",
+                               TMS_FETCH_TIMEOUT_S, invoice.invoice_number)
+                await self._emit_send(job, "tms_fetch_timeout", {
+                    "invoiceNumber": invoice.invoice_number,
+                    "message": f"TMS POD fetch timed out after {TMS_FETCH_TIMEOUT_S}s — continuing without POD",
+                })
             except Exception as e:
                 logger.warning("TMS POD fetch failed for %s: %s",
                                invoice.invoice_number, e)

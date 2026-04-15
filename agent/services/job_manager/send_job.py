@@ -77,6 +77,72 @@ class SendJobMixin:
             raise ValueError(f"Job {job_id} is already running")
         job._task = asyncio.create_task(self._run_send_job(job))
 
+    async def cancel_send_job(self, job_id: str) -> dict:
+        """Force-cancel a running send job.
+
+        Sets status to 'cancelled', emits a completion event so the UI cleans up,
+        and cancels the underlying asyncio task. If the task is wedged inside a
+        non-cancellable blocking call, the status flag still flips so a new job
+        can be started.
+        """
+        from services.job_manager import SendJob
+
+        job = self._jobs.get(job_id)
+        if not job or not isinstance(job, SendJob):
+            raise ValueError(f"Send job {job_id} not found")
+
+        if job.status in ("completed", "cancelled"):
+            return {"status": job.status, "already_done": True}
+
+        prev_status = job.status
+        job.status = "cancelled"
+        logger.warning("Send job %s cancelled by user (was %s, progress=%d/%d)",
+                       job_id, prev_status, job.progress, job.total)
+
+        # Clear any pending approval waiter so _wait_for_approval returns
+        if job._approval_event is not None:
+            job._approval_decision = False
+            try:
+                job._approval_event.set()
+            except Exception:
+                pass
+
+        # Emit summary so the frontend closes out the progress panel
+        sent = sum(1 for r in job.results if r.status == "sent")
+        skipped = sum(1 for r in job.results
+                      if r.status in ("skipped", "skipped_no_attachments"))
+        errors = sum(1 for r in job.results if r.status == "error")
+        mismatches = sum(1 for r in job.results if r.status == "mismatch")
+        missing_docs = sum(1 for r in job.results if r.status == "missing_docs")
+        no_attachments = sum(1 for r in job.results
+                             if r.status == "skipped_no_attachments")
+        await self._emit_send(job, "send_job_cancelled", {
+            "total": job.total,
+            "processed": len(job.results),
+            "sent": sent,
+            "skipped": skipped,
+            "errors": errors,
+            "mismatches": mismatches,
+            "missingDocs": missing_docs,
+            "noAttachments": no_attachments,
+        })
+
+        # Cancel the underlying task. May or may not succeed if the coroutine
+        # is blocked in a non-cancellable call — status flag flip is what matters.
+        if job._task and not job._task.done():
+            job._task.cancel()
+
+        try:
+            job._save_state()
+        except Exception:
+            pass
+
+        return {
+            "status": "cancelled",
+            "processed": len(job.results),
+            "total": job.total,
+        }
+
     async def _emit_send(self, job, event_type: str, data: dict) -> None:
         """Push an SSE event to the send job's event queue."""
         event = {"type": event_type, "timestamp": time.time(), **data}

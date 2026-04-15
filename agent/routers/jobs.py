@@ -103,6 +103,21 @@ async def pause_job(job_id: str):
     return {"jobId": job.id, "status": "paused", "progress": job.progress, "total": job.total}
 
 
+@router.post("/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """Force-cancel a running send job — clears the stuck 'running' flag
+    so a new send can be started, even if the underlying Playwright call is wedged.
+    """
+    if not _job_manager:
+        raise HTTPException(503, "Agent not initialized")
+
+    try:
+        result = await _job_manager.cancel_send_job(job_id)
+        return {"jobId": job_id, **result}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.post("/send-invoices")
 async def create_send_job(req: SendRequest):
     """Start a new background job to send invoices through QBO."""
