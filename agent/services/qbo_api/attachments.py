@@ -118,7 +118,7 @@ class QBOAttachmentsMixin:
                     return None
 
                 url = f"{self._base_url}/v3/company/{self._realm_id}/download/{attachable_id}"
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     resp = await client.get(
                         url,
                         headers={"Authorization": f"Bearer {token}"},
@@ -207,7 +207,7 @@ class QBOAttachmentsMixin:
 
             body.write(f"--{boundary}--\r\n".encode())
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     url,
                     headers={
@@ -225,7 +225,7 @@ class QBOAttachmentsMixin:
                 token = await self._token_manager.get_access_token()
                 if not token:
                     return None
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     resp = await client.post(
                         url,
                         headers={

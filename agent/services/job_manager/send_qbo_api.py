@@ -279,7 +279,7 @@ class SendQBOApiMixin:
                     token = await api._token_manager.get_access_token()
                     realm = api._token_manager.realm_id or api._realm_id
                     url = f"{api._base_url}/v3/company/{realm}/download/{att_id}"
-                    async with httpx.AsyncClient() as client:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
                         resp = await client.get(
                             url,
                             headers={"Authorization": f"Bearer {token}"},

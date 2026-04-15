@@ -45,7 +45,7 @@ class QBOInvoicesMixin:
         realm = self._token_manager.realm_id or self._realm_id
         url = f"{self._base_url}/v3/company/{realm}/invoice/{invoice_id}?include=invoiceLink"
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.get(
                     url,
                     headers={
@@ -196,7 +196,7 @@ class QBOInvoicesMixin:
             return None
 
         url = f"{self._base_url}/v3/company/{self._realm_id}/invoice/{invoice_id}/pdf"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(
                 url,
                 headers={

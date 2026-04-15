@@ -56,7 +56,7 @@ class QBOApiClient(QBOInvoicesMixin, QBOAttachmentsMixin):
         realm = self._token_manager.realm_id or self._realm_id
         url = f"{self._base_url}/v3/company/{realm}/query"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(
                 url,
                 params={"query": query},
@@ -73,7 +73,7 @@ class QBOApiClient(QBOInvoicesMixin, QBOAttachmentsMixin):
             token = await self._token_manager.get_access_token()
             if not token:
                 return None
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.get(
                     url,
                     params={"query": query},
@@ -106,7 +106,7 @@ class QBOApiClient(QBOInvoicesMixin, QBOAttachmentsMixin):
             "Accept": "application/json",
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             if payload:
                 headers["Content-Type"] = "application/json"
                 resp = await client.post(url, json=payload, headers=headers,
@@ -122,7 +122,7 @@ class QBOApiClient(QBOInvoicesMixin, QBOAttachmentsMixin):
             if not token:
                 return None
             headers["Authorization"] = f"Bearer {token}"
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 if payload:
                     resp = await client.post(url, json=payload, headers=headers,
                                               params=params, timeout=30)

@@ -115,7 +115,7 @@ class QBOTokenManager:
             logger.error("OAuth state mismatch — possible CSRF attack")
             return False
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 TOKEN_URL,
                 data={
@@ -176,16 +176,20 @@ class QBOTokenManager:
             logger.error("No refresh token available — re-authorization required")
             return False
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                TOKEN_URL,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": refresh_token,
-                },
-                auth=(self._client_id, self._client_secret),
-                headers={"Accept": "application/json"},
-            )
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    TOKEN_URL,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": refresh_token,
+                    },
+                    auth=(self._client_id, self._client_secret),
+                    headers={"Accept": "application/json"},
+                )
+        except httpx.HTTPError as e:
+            logger.error("Token refresh request failed (network/timeout): %s", e)
+            return False
 
         if resp.status_code != 200:
             logger.error("Token refresh failed: %d — %s", resp.status_code, resp.text)
@@ -214,7 +218,7 @@ class QBOTokenManager:
         token = self._tokens.get("refresh_token") or self._tokens.get("access_token")
         if token:
             try:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     await client.post(
                         REVOKE_URL,
                         json={"token": token},
