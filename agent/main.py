@@ -38,6 +38,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ngl.main")
 
+# Bundle version — baked in at build time, visible via /health for diagnosing stale bundles.
+AGENT_VERSION = "2.25.0"
+
 
 # ── Global exception handler — prevents silent crashes ──────────────
 def _handle_unhandled_exception(loop, context):
@@ -466,6 +469,7 @@ async def health():
     return {
         "status": "ok",
         "service": "ngl-agent",
+        "version": AGENT_VERSION,
         "qbo_api": "connected" if qbo_api.is_connected else "not_connected",
         "tms_browser": "initialized" if tms_browser.is_initialized else "lazy_pending",
         "classifier": "ready" if classifier else "no_api_key",

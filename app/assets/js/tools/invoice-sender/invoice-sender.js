@@ -899,6 +899,16 @@ const _sendEventHandlers = {
     invShowSendResults(event);
     if (sendState.jobId) fetchJobResultsForHistory(sendState.jobId, 'send', event);
   },
+  send_job_aborted(event) {
+    sendState.isRunning = false;
+    invAddLog('error', '═══ SEND JOB ABORTED ═══');
+    invAddLog('error', '  ' + (event.message || 'Unknown error'));
+    if (event.error) invAddLog('error', '  Details: ' + event.error);
+    alert('Send job aborted:\n\n' + (event.message || '') + (event.error ? '\n\nDetails: ' + event.error : ''));
+    // Hide the progress panel since no invoices will process
+    const panel = document.getElementById('invSendProgressPanel');
+    if (panel) panel.style.display = 'none';
+  },
   connection_warning(event) {
     invAddLog('warning', event.message);
     invShowConnectionWarning(event.message);

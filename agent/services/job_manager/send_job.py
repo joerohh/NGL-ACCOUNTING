@@ -150,9 +150,27 @@ class SendJobMixin:
 
     async def _run_send_job(self, job) -> None:
         """Process all invoices in a send job — dispatches to method-specific handlers."""
+        try:
+            await self._run_send_job_inner(job)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.exception("Send job %s crashed with unhandled exception", job.id)
+            job.status = "failed"
+            try:
+                await self._emit_send(job, "send_job_aborted", {
+                    "error": f"{type(e).__name__}: {e}",
+                    "message": "Send job crashed — check agent log for details.",
+                })
+            except Exception:
+                pass
+
+    async def _run_send_job_inner(self, job) -> None:
+        """Actual send-job body — wrapped by _run_send_job for error reporting."""
         from services.job_manager import SendResult
 
         job.status = "running"
+        logger.info("Send job %s starting (%d invoices)", job.id, job.total)
         await self._emit_send(job, "send_job_started", {"total": job.total})
 
         # Clear old debug files
@@ -163,7 +181,17 @@ class SendJobMixin:
                 pass
 
         # Load customer profiles once at job start
-        customers = self._load_customers()
+        try:
+            customers = self._load_customers()
+            logger.info("Loaded %d customer profiles", len(customers))
+        except Exception as e:
+            logger.exception("Failed to load customers at job start")
+            job.status = "failed"
+            await self._emit_send(job, "send_job_aborted", {
+                "error": f"Failed to load customers: {type(e).__name__}: {e}",
+                "message": "Could not load customer list — check network / Supabase connection.",
+            })
+            return
 
         # Verify QBO API connection before starting
         if not self._qbo_api or not self._qbo_api.is_connected:
@@ -173,13 +201,35 @@ class SendJobMixin:
             })
             return
 
-        token = await self._qbo_api.token_manager.get_access_token()
+        try:
+            token = await self._qbo_api.token_manager.get_access_token()
+        except Exception as e:
+            logger.exception("Failed to get QBO access token at job start")
+            job.status = "failed"
+            await self._emit_send(job, "send_job_aborted", {
+                "error": f"QBO token check failed: {type(e).__name__}: {e}",
+                "message": "Could not refresh QBO token — check network / Intuit status.",
+            })
+            return
+
         if not token:
             job.status = "paused"
             await self._emit_send(job, "login_required", {
                 "message": "QBO API token expired. Please re-authorize via Settings.",
             })
             return
+
+        # Verify Gmail sender is configured — required for every invoice send
+        if not self._email_sender:
+            logger.error("Send job aborted — Gmail sender is not configured")
+            job.status = "failed"
+            await self._emit_send(job, "send_job_aborted", {
+                "error": "Gmail sender not configured",
+                "message": "Gmail SMTP is not set up on this install. Open Settings → Gmail and enter your address + app password.",
+            })
+            return
+
+        logger.info("Send job %s entering invoice loop", job.id)
 
         for i, invoice in enumerate(job.invoices):
             # Check pause

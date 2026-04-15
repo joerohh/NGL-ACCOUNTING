@@ -106,7 +106,10 @@ class JobManagerUtilMixin:
                     "event": event["type"],
                     "data": json.dumps(event),
                 }
-                if event["type"] in ("job_complete", "send_job_complete", "login_required", "job_paused"):
+                if event["type"] in (
+                    "job_complete", "send_job_complete", "send_job_cancelled",
+                    "send_job_aborted", "login_required", "job_paused",
+                ):
                     break
             except asyncio.TimeoutError:
                 # Send keepalive
