@@ -93,6 +93,10 @@ class SendResult:
         self.timestamp: str = ""
         self.do_sender_email: str = ""
         self.do_sender_source: str = ""  # "CSV", "TMS", or ""
+        # OEC two-stage flow (D/O email first, then invoice email).
+        # pod_status tracks the D/O email leg: "sent", "failed", or "skipped".
+        # status is the final outcome after both legs run.
+        self.pod_status: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -110,6 +114,7 @@ class SendResult:
             "timestamp": self.timestamp,
             "doSenderEmail": self.do_sender_email,
             "doSenderSource": self.do_sender_source,
+            "podStatus": self.pod_status,
         }
 
 

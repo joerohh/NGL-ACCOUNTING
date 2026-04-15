@@ -8,7 +8,7 @@ from pathlib import Path
 
 from config import RESEND_NOTICE, TMS_FETCH_TIMEOUT_S
 from services.email_template import build_invoice_email_html
-from services.job_manager.util import normalize_email_list
+from services.job_manager.util import normalize_email_list, validate_and_append_email
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -146,7 +146,12 @@ class SendQBOApiMixin:
             })
 
         # Step 3: Check attachments
-        required_docs = customer.get("requiredDocs", [])
+        # OEC flow: the D/O email (already sent before this step) carries the POD.
+        # The QBO invoice email attaches invoice PDF only, so we don't enforce
+        # requiredDocs here — no need to fail the invoice send because POD isn't
+        # on the QBO record yet.
+        is_oec = customer.get("sendMethod") == "qbo_invoice_only_then_pod_email"
+        required_docs = [] if is_oec else customer.get("requiredDocs", [])
         await self._emit_send(job, "checking_attachments", {
             "invoiceNumber": invoice.invoice_number,
         })
@@ -166,7 +171,9 @@ class SendQBOApiMixin:
         for a in all_attachments:
             logger.info("  -> '%s' classified as '%s'", a.get("fileName"), a.get("docType"))
 
-        if pod_missing and self._tms:
+        # OEC: POD email already ran first and handled TMS lookup — skip the
+        # inline TMS-fetch-and-upload here (would duplicate work / TMS round-trips).
+        if pod_missing and self._tms and not is_oec:
             temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
             try:
                 uploaded_ok = await asyncio.wait_for(
@@ -195,7 +202,9 @@ class SendQBOApiMixin:
                     "error": str(e),
                 })
 
-        if not all_attachments:
+        # OEC's invoice email attaches ONLY the invoice PDF (no QBO attachments),
+        # so an empty attachment list on QBO is fine for OEC — don't abort.
+        if not all_attachments and not is_oec:
             result.status = "skipped_no_attachments"
             result.error = "No attachments found on invoice"
             await self._emit_send(job, "invoice_skipped", {
@@ -223,6 +232,18 @@ class SendQBOApiMixin:
         to_emails = customer_emails
         cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
         bcc_emails = normalize_email_list(customer.get("bccEmails", []))
+
+        # OEC: also CC the D/O sender (resolved in the preceding POD email step)
+        if is_oec:
+            added = validate_and_append_email(
+                cc_emails, invoice.do_sender_email, label="D/O SENDER (invoice email)"
+            )
+            await self._emit_send(job, "oec_invoice_cc_built", {
+                "invoiceNumber": invoice.invoice_number,
+                "ccEmails": cc_emails,
+                "doSenderEmail": invoice.do_sender_email or "",
+                "doSenderIncluded": added,
+            })
 
         result.to_emails = to_emails
         result.cc_emails = cc_emails
@@ -264,8 +285,9 @@ class SendQBOApiMixin:
         # POD/DO go out in the separate POD email.
         import httpx
 
-        oec_invoice_only = customer.get("sendMethod") == "qbo_invoice_only_then_pod_email"
-        attachments_to_email = [] if oec_invoice_only else all_attachments
+        # HARD RULE: OEC invoice email carries the invoice PDF ONLY.
+        # POD/D-O doc goes out separately in the preceding D/O email.
+        attachments_to_email = [] if is_oec else all_attachments
 
         for att in attachments_to_email:
             fname = att.get("fileName", "attachment.pdf")
@@ -362,6 +384,17 @@ class SendQBOApiMixin:
             resend_notice=RESEND_NOTICE,
         )
 
+        # HARD RULE for OEC: invoice email carries ONLY the invoice PDF.
+        # Guard against regressions that might sneak extra attachments back in.
+        if is_oec and len(email_attachments) != 1:
+            logger.error(
+                "[OEC_INVOICE] Attachment rule violation for %s: expected 1 (invoice PDF), got %d — %s",
+                invoice.invoice_number, len(email_attachments),
+                [a.get("filename") for a in email_attachments],
+            )
+            email_attachments = [a for a in email_attachments
+                                 if a.get("filename") == f"{invoice.invoice_number}.pdf"]
+
         send_result = await self._email_sender.send_invoice_email(
             to=to_emails,
             cc=cc_emails,
@@ -372,7 +405,14 @@ class SendQBOApiMixin:
         )
 
         if send_result.get("sent"):
-            result.status = "sent"
+            # For OEC, reconcile final status with the preceding POD email result.
+            if is_oec and result.pod_status == "failed":
+                result.status = "sent_no_pod"
+            elif is_oec and result.pod_status == "skipped":
+                result.status = "sent_no_pod"
+            else:
+                result.status = "sent"
+                result.error = None
             await self._emit_send(job, "invoice_sent", {
                 "invoiceNumber": invoice.invoice_number,
                 "containerNumber": container,
@@ -380,6 +420,7 @@ class SendQBOApiMixin:
                 "subject": subject,
                 "method": "gmail",
                 "attachmentCount": len(email_attachments),
+                "podStatus": result.pod_status if is_oec else "",
             })
         else:
             result.status = "error"

@@ -295,11 +295,15 @@ class SendJobMixin:
                 async def _dispatch_send():
                     if method in ("portal_upload", "portal"):
                         await self._send_portal_upload(job, invoice, customer, result, i)
+                    elif method == "qbo_invoice_only_then_pod_email":
+                        # OEC: D/O email FIRST (populates invoice.do_sender_email
+                        # for the invoice email CC), then QBO invoice email.
+                        # Invoice email runs regardless of POD outcome so the
+                        # customer always gets the invoice.
+                        await self._send_oec_pod_email(job, invoice, customer, result, i)
+                        await self._send_qbo_api(job, invoice, customer, result, i)
                     else:
                         await self._send_qbo_api(job, invoice, customer, result, i)
-                        # OEC: send separate POD email after invoice
-                        if method == "qbo_invoice_only_then_pod_email" and result.status == "sent":
-                            await self._send_oec_pod_email(job, invoice, customer, result, i)
 
                 await asyncio.wait_for(_dispatch_send(), timeout=SEND_TIMEOUT_S)
 

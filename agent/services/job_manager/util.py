@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -10,6 +11,8 @@ from config import DO_SENDER_CACHE_FILE
 import services.database as db
 
 logger = logging.getLogger("ngl.job_manager")
+
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
 
 
 def normalize_email_list(emails: list) -> list[str]:
@@ -24,6 +27,26 @@ def normalize_email_list(emails: list) -> list[str]:
         elif isinstance(entry, str) and entry.strip():
             result.append(entry.strip())
     return result
+
+
+def validate_and_append_email(cc_list: list[str], email: Optional[str],
+                               label: str = "email") -> bool:
+    """Append an email to cc_list if it's valid and not already present.
+
+    Returns True if appended, False otherwise. Logs the decision either way.
+    """
+    if not email:
+        return False
+    addr = email.strip()
+    if not addr or not _EMAIL_RE.match(addr):
+        logger.warning("[CC] SKIPPED %s '%s' — failed email validation", label, addr)
+        return False
+    if addr.lower() in {e.lower() for e in cc_list}:
+        logger.info("[CC] %s '%s' already in CC list — not duplicating", label, addr)
+        return False
+    cc_list.append(addr)
+    logger.info("[CC] added %s '%s'", label, addr)
+    return True
 
 
 class JobManagerUtilMixin:

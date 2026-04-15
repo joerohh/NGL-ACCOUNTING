@@ -1,14 +1,18 @@
-"""OEC POD email mixin — sends separate POD email after standard invoice send."""
+"""OEC POD email mixin — sends POD/D-O email BEFORE the QBO invoice email.
+
+As of the OEC flow reorder, this runs FIRST. It sets ``result.pod_status``
+(``sent``/``failed``/``skipped``) but does NOT set ``result.status`` —
+that's owned by the invoice-email step that runs afterwards.
+"""
 
 import asyncio
 import logging
-import re
 import shutil
 import tempfile
 from pathlib import Path
 
 from config import TMS_FETCH_TIMEOUT_S
-from services.job_manager.util import normalize_email_list
+from services.job_manager.util import normalize_email_list, validate_and_append_email
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -18,10 +22,11 @@ class SendOECFlowMixin:
 
     async def _send_oec_pod_email(self, job, invoice, customer: dict,
                                    result, index: int) -> None:
-        """Send a separate POD email for OEC after the invoice was already sent.
+        """Send the POD/D-O email FIRST in the OEC flow.
 
-        Called AFTER _send_qbo_api succeeds. The invoice email is already done —
-        this only handles the POD delivery to separate recipients.
+        Runs BEFORE _send_qbo_api. Populates invoice.do_sender_email (via TMS)
+        so the invoice email can CC it. Sets result.pod_status to
+        "sent"/"failed"/"skipped". Does NOT set result.status.
         """
         api = self._qbo_api
 
@@ -30,6 +35,7 @@ class SendOECFlowMixin:
         if not invoice_data:
             logger.warning("[OEC_POD] Invoice %s not found in QBO — skipping POD email",
                            invoice.invoice_number)
+            result.pod_status = "skipped"
             return
 
         invoice_id = invoice_data["Id"]
@@ -146,11 +152,11 @@ class SendOECFlowMixin:
         result.do_sender_email = invoice.do_sender_email or ""
         result.do_sender_source = do_sender_source
 
-        # No POD found anywhere — invoice was sent but POD email can't go out
+        # No POD found anywhere — POD email can't go out, but invoice email will still run
         if not pod_path:
             source = "QBO or TMS" if self._tms else "QBO"
-            result.status = "sent_no_pod"
-            result.error = f"Invoice sent but no POD found ({source}) — send POD manually"
+            result.pod_status = "skipped"
+            result.error = f"No POD found ({source}) — D/O email skipped, invoice will still send"
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": f"No POD found in {source} — send POD manually",
@@ -165,20 +171,7 @@ class SendOECFlowMixin:
         logger.info("[POD_EMAIL]   Customer podEmailCc: %s", customer.get("podEmailCc", []))
         logger.info("[POD_EMAIL]   DO SENDER email on invoice: '%s'", invoice.do_sender_email or "")
 
-        # Validate DO SENDER email before adding to CC
-        _email_re = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
-
-        if invoice.do_sender_email:
-            do_email = invoice.do_sender_email.strip()
-            if do_email and _email_re.match(do_email):
-                pod_cc.append(do_email)
-                logger.info("[POD_EMAIL] CC field: added DO SENDER '%s' — valid email", do_email)
-            else:
-                logger.warning("[POD_EMAIL] CC field: SKIPPED DO SENDER '%s' — "
-                               "failed email validation (blank=%s, has_at=%s)",
-                               do_email, not do_email, '@' in do_email if do_email else False)
-        else:
-            logger.info("[POD_EMAIL] CC field: no DO SENDER email available for this invoice")
+        validate_and_append_email(pod_cc, invoice.do_sender_email, label="D/O SENDER")
 
         logger.info("[POD_EMAIL] Final recipients for %s:", invoice.invoice_number)
         logger.info("[POD_EMAIL]   TO: %s", pod_to)
@@ -200,9 +193,9 @@ class SendOECFlowMixin:
 
         # ── Pre-send verification ──
         if not pod_to:
-            result.status = "error"
-            result.error = "No podEmailTo recipients configured — cannot send POD email"
-            logger.error("[POD_EMAIL] ABORT: no TO recipients for %s", invoice.invoice_number)
+            result.pod_status = "skipped"
+            result.error = "No podEmailTo recipients configured — D/O email skipped"
+            logger.error("[POD_EMAIL] SKIP: no TO recipients for %s", invoice.invoice_number)
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": result.error,
@@ -210,9 +203,9 @@ class SendOECFlowMixin:
             return
 
         if not pod_path or not pod_path.exists():
-            result.status = "error"
+            result.pod_status = "skipped"
             result.error = f"POD file missing or deleted: {pod_path}"
-            logger.error("[POD_EMAIL] ABORT: POD file not on disk for %s", invoice.invoice_number)
+            logger.error("[POD_EMAIL] SKIP: POD file not on disk for %s", invoice.invoice_number)
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": result.error,
@@ -255,7 +248,7 @@ class SendOECFlowMixin:
             try:
                 await asyncio.wait_for(job._approval_event.wait(), timeout=300)
             except asyncio.TimeoutError:
-                result.status = "skipped"
+                result.pod_status = "skipped"
                 result.error = "POD email approval timed out (5 minutes)"
                 await self._emit_send(job, "invoice_skipped", {
                     "invoiceNumber": invoice.invoice_number,
@@ -269,8 +262,8 @@ class SendOECFlowMixin:
             job._approval_decision = None
             job._cc_override = None
             if not approved:
-                result.status = "sent_no_pod"
-                result.error = "Invoice sent but POD email skipped by user"
+                result.pod_status = "skipped"
+                result.error = "POD email skipped by user"
                 await self._emit_send(job, "invoice_skipped", {
                     "invoiceNumber": invoice.invoice_number,
                     "reason": "user_skipped_pod_email",
@@ -285,7 +278,10 @@ class SendOECFlowMixin:
                 result.cc_emails = pod_cc
 
         # ── Send POD email ──
-        logger.info("[POD_EMAIL] Sending POD email for %s...", invoice.invoice_number)
+        # HARD RULE: D/O email carries the POD PDF ONLY — no invoice PDF, no extras.
+        # send_pod_email takes a single pod_path — enforced by signature.
+        logger.info("[POD_EMAIL] Sending POD email for %s (POD-only attachment: %s)...",
+                    invoice.invoice_number, pod_path.name)
         await self._emit_send(job, "oec_sending_pod_email", {
             "invoiceNumber": invoice.invoice_number,
             "to": pod_to,
@@ -301,7 +297,7 @@ class SendOECFlowMixin:
         )
 
         if email_result.get("sent"):
-            result.status = "sent"
+            result.pod_status = "sent"
             logger.info("[POD_EMAIL] SUCCESS: POD email sent for %s", invoice.invoice_number)
             logger.info("[POD_EMAIL]   TO: %s", pod_to)
             logger.info("[POD_EMAIL]   CC: %s (DO SENDER included: %s)",
@@ -314,8 +310,8 @@ class SendOECFlowMixin:
                 "doSenderIncluded": bool(invoice.do_sender_email),
             })
         else:
-            result.status = "error"
-            result.error = f"Invoice sent but POD email failed: {email_result.get('error', 'Unknown')}"
+            result.pod_status = "failed"
+            result.error = f"POD email failed: {email_result.get('error', 'Unknown')}"
             logger.error("[POD_EMAIL] FAILED: %s — %s", invoice.invoice_number, result.error)
             await self._emit_send(job, "oec_pod_email_failed", {
                 "invoiceNumber": invoice.invoice_number,
