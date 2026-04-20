@@ -237,6 +237,7 @@ class ChassisResult:
         self.invoice_number = invoice_number
         self.container_number = container_number
         self.chassis_number: Optional[str] = None
+        self.cnee: Optional[str] = None
         self.error: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -244,6 +245,7 @@ class ChassisResult:
             "invoiceNumber": self.invoice_number,
             "containerNumber": self.container_number,
             "chassisNumber": self.chassis_number,
+            "cnee": self.cnee,
             "error": self.error,
         }
 

@@ -132,6 +132,12 @@ class ChassisJobMixin:
             return
 
         chassis = api._extract_chassis(invoice_data)
+        cnee = api._extract_cnee(invoice_data)
+
+        if cnee:
+            result.cnee = cnee
+            logger.info("CNEE found: %s → %s", req.invoice_number, cnee)
+
         if chassis:
             result.chassis_number = chassis
             logger.info("Chassis found: %s → %s", req.invoice_number, chassis)
@@ -139,6 +145,7 @@ class ChassisJobMixin:
                 "invoiceNumber": req.invoice_number,
                 "containerNumber": req.container_number,
                 "chassisNumber": chassis,
+                "cnee": cnee or "",
             })
         else:
             logger.info("No chassis in QBO for %s", req.invoice_number)
@@ -146,4 +153,5 @@ class ChassisJobMixin:
                 "invoiceNumber": req.invoice_number,
                 "containerNumber": req.container_number,
                 "reason": "no_chassis_field",
+                "cnee": cnee or "",
             })

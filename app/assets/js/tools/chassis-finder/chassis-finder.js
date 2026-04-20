@@ -120,7 +120,7 @@ function renderChassisTable() {
       <td style="font-size:0.8rem;">${escHtml(r.ref)}</td>
       <td style="font-family:monospace; text-align:right;">${amtStr}</td>
       <td style="font-family:monospace; font-size:0.8rem; font-weight:600;">${escHtml(r.invNo)}</td>
-      <td>${escHtml(r.cnee)}</td>
+      <td id="chCnee${i}">${escHtml(r.cnee)}</td>
     </tr>`;
   }).join('');
 
@@ -234,15 +234,17 @@ function handleChassisEvent(event) {
     const idx = chassisState.rows.findIndex(r => r.invNo === event.invoiceNumber);
     if (idx >= 0) {
       chassisState.rows[idx].chassis = event.chassisNumber;
+      if (event.cnee) chassisState.rows[idx].cnee = event.cnee;
       chassisState.rows[idx].status = 'found';
       updateChassisRow(idx);
     }
-    chLog('success', `${event.invoiceNumber} → ${event.chassisNumber}`);
+    chLog('success', `${event.invoiceNumber} → chassis: ${event.chassisNumber}${event.cnee ? ', cnee: ' + event.cnee : ''}`);
   }
 
   else if (type === 'chassis_not_found') {
     const idx = chassisState.rows.findIndex(r => r.invNo === event.invoiceNumber);
     if (idx >= 0) {
+      if (event.cnee) chassisState.rows[idx].cnee = event.cnee;
       chassisState.rows[idx].status = 'not_found';
       updateChassisRow(idx);
     }
@@ -273,12 +275,21 @@ function handleChassisEvent(event) {
 }
 
 function updateChassisRow(idx) {
-  const cell = document.getElementById(`chChassis${idx}`);
-  if (!cell) return;
   const r = chassisState.rows[idx];
-  cell.innerHTML = r.chassis
-    ? `<span style="color:#16a34a; font-weight:600;">${escHtml(r.chassis)}</span>`
-    : getStatusBadge(r.status);
+
+  // Update chassis cell
+  const chassisCell = document.getElementById(`chChassis${idx}`);
+  if (chassisCell) {
+    chassisCell.innerHTML = r.chassis
+      ? `<span style="color:#16a34a; font-weight:600;">${escHtml(r.chassis)}</span>`
+      : getStatusBadge(r.status);
+  }
+
+  // Update CNEE cell if we got it from QBO
+  const cneeCell = document.getElementById(`chCnee${idx}`);
+  if (cneeCell && r.cnee) {
+    cneeCell.textContent = r.cnee;
+  }
 
   // Update summary
   const summary = document.getElementById('chassisSummary');

@@ -189,6 +189,25 @@ class QBOInvoicesMixin:
 
         return None
 
+    def _extract_cnee(self, invoice: dict) -> Optional[str]:
+        """Extract CNEE (consignee) code from CustomerMemo 'Note to customer'.
+
+        The memo contains an arrow-chain routing like:
+            'Pickup and Delivery Return\\nWBCTWE02 --> NGLRIV01 --> WBCTWE02'
+        The second code in the arrow chain is the CNEE.
+        """
+        memo = invoice.get("CustomerMemo", {})
+        memo_val = memo.get("value", "") if isinstance(memo, dict) else str(memo)
+        if not memo_val:
+            return None
+
+        for line in memo_val.splitlines():
+            if "-->" in line:
+                codes = [c.strip() for c in line.split("-->")]
+                if len(codes) >= 2 and codes[1]:
+                    return codes[1]
+        return None
+
     async def send_invoice_email(self, invoice_id: str, sync_token: str,
                                   to_emails: list[str],
                                   cc_emails: list[str] = None,
