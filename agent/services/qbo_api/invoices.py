@@ -143,6 +143,52 @@ class QBOInvoicesMixin:
 
         return None
 
+    def _extract_chassis(self, invoice: dict) -> Optional[str]:
+        """Extract chassis number from invoice data.
+
+        The QBO 'CNTR# / CHASSIS#' custom field stores values like
+        'TGBU6571759/NGLT201438'.  This returns the part after the slash.
+        Falls back to Line descriptions, PrivateNote, CustomerMemo.
+        """
+        def _parse_chassis(text: str) -> Optional[str]:
+            """Return chassis portion if text contains 'CONTAINER/CHASSIS'."""
+            if "/" not in text:
+                return None
+            parts = text.split("/")
+            # The chassis is after the slash; container is before
+            chassis = parts[-1].strip()
+            if chassis and CONTAINER_PATTERN.search(parts[0].upper()):
+                return chassis
+            return None
+
+        # 1. Custom fields (primary — "CNTR# / CHASSIS#" field)
+        for field in invoice.get("CustomField", []):
+            val = field.get("StringValue", "")
+            chassis = _parse_chassis(val)
+            if chassis:
+                return chassis
+
+        # 2. Line item descriptions
+        for line in invoice.get("Line", []):
+            desc = line.get("Description", "")
+            chassis = _parse_chassis(desc)
+            if chassis:
+                return chassis
+
+        # 3. Private note
+        chassis = _parse_chassis(invoice.get("PrivateNote", ""))
+        if chassis:
+            return chassis
+
+        # 4. Customer memo
+        memo = invoice.get("CustomerMemo", {})
+        memo_val = memo.get("value", "") if isinstance(memo, dict) else str(memo)
+        chassis = _parse_chassis(memo_val)
+        if chassis:
+            return chassis
+
+        return None
+
     async def send_invoice_email(self, invoice_id: str, sync_token: str,
                                   to_emails: list[str],
                                   cc_emails: list[str] = None,

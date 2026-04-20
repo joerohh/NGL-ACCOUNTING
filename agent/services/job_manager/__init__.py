@@ -19,6 +19,7 @@ from services.job_manager.send_job import SendJobMixin
 from services.job_manager.send_qbo_api import SendQBOApiMixin
 from services.job_manager.send_oec import SendOECFlowMixin
 from services.job_manager.send_portal import SendPortalUploadMixin
+from services.job_manager.chassis_job import ChassisJobMixin
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -218,6 +219,61 @@ class SendJob:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Chassis lookup data classes
+# ──────────────────────────────────────────────────────────────────────
+
+class ChassisRequest:
+    """A single chassis lookup request."""
+
+    def __init__(self, invoice_number: str, container_number: str) -> None:
+        self.invoice_number = invoice_number
+        self.container_number = container_number
+
+
+class ChassisResult:
+    """Result for a single chassis lookup."""
+
+    def __init__(self, invoice_number: str, container_number: str) -> None:
+        self.invoice_number = invoice_number
+        self.container_number = container_number
+        self.chassis_number: Optional[str] = None
+        self.error: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "invoiceNumber": self.invoice_number,
+            "containerNumber": self.container_number,
+            "chassisNumber": self.chassis_number,
+            "error": self.error,
+        }
+
+
+class ChassisJob:
+    """Represents a background chassis lookup job."""
+
+    def __init__(self, job_id: str, requests: list[ChassisRequest]) -> None:
+        self.id = job_id
+        self.requests = requests
+        self.status = "pending"
+        self.progress = 0
+        self.total = len(requests)
+        self.results: list[ChassisResult] = []
+        self.events: asyncio.Queue = asyncio.Queue()
+        self._task: Optional[asyncio.Task] = None
+        self.created_at = time.time()
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "type": "chassis",
+            "status": self.status,
+            "progress": self.progress,
+            "total": self.total,
+            "results": [r.to_dict() for r in self.results],
+        }
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Facade class — combines all mixins
 # ──────────────────────────────────────────────────────────────────────
 
@@ -228,6 +284,7 @@ class JobManager(
     SendQBOApiMixin,
     SendOECFlowMixin,
     SendPortalUploadMixin,
+    ChassisJobMixin,
 ):
     """Manages background fetch & send jobs — coordinates QBO API + Claude classifier."""
 

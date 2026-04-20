@@ -153,6 +153,7 @@ class JobManagerUtilMixin:
                 if event["type"] in (
                     "job_complete", "send_job_complete", "send_job_cancelled",
                     "send_job_aborted", "login_required", "job_paused",
+                    "chassis_complete",
                 ):
                     break
             except asyncio.TimeoutError:

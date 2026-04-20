@@ -21,7 +21,7 @@ from config import (
     TMS_SELECTORS_FILE,
     WEB_UPDATE_URL, WEBAPP_CACHE_DIR,
 )
-from routers import auth, jobs, files, qbo, customers, audit, tms, settings
+from routers import auth, jobs, files, qbo, customers, audit, tms, settings, chassis
 from services.shared_browser import SharedBrowser
 from services.qbo_api import QBOApiClient
 from services.tms_browser import TMSBrowser
@@ -296,6 +296,7 @@ async def lifespan(app: FastAPI):
     tms.set_tms_browser(tms_browser)
     settings.set_tms_browser(tms_browser)
     settings.set_job_manager(job_manager)
+    chassis.set_job_manager(job_manager)
 
     # Log QBO API status
     if qbo_api.is_connected:
@@ -377,7 +378,7 @@ class AuthTokenMiddleware:
     """Raw ASGI auth middleware — validates JWT on API routes.
     Uses pure ASGI instead of BaseHTTPMiddleware to avoid event loop deadlocks.
     """
-    _API_PREFIXES = ("/jobs", "/files", "/qbo", "/tms", "/customers", "/audit", "/settings", "/auth/")
+    _API_PREFIXES = ("/jobs", "/files", "/qbo", "/tms", "/customers", "/audit", "/settings", "/auth/", "/chassis")
 
     def __init__(self, app):
         self.app = app
@@ -450,6 +451,7 @@ app.include_router(customers.router)
 app.include_router(audit.router)
 app.include_router(tms.router)
 app.include_router(settings.router)
+app.include_router(chassis.router)
 
 
 @app.get("/health")

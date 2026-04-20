@@ -167,7 +167,7 @@ export const agentBridge = {
       currentSource = source;
 
       // Terminal events that should close the stream permanently
-      const terminalEvents = ['login_required', 'job_paused', 'job_complete', 'send_job_complete'];
+      const terminalEvents = ['login_required', 'job_paused', 'job_complete', 'send_job_complete', 'chassis_complete'];
 
       source.onmessage = (e) => {
         retries = 0; // Reset retry counter on any successful message
@@ -205,6 +205,8 @@ export const agentBridge = {
         'tms_fetching_doc_direct', 'tms_doc_not_found',
         'uploading_doc_to_qbo', 'doc_uploaded_to_qbo', 'doc_upload_failed',
         'oec_invoice_cc_built',
+        // Chassis finder events
+        'chassis_progress', 'chassis_found', 'chassis_not_found', 'chassis_error',
       ];
 
       namedEvents.forEach(name => {

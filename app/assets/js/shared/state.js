@@ -52,6 +52,15 @@ export const sendState = {
   eventSource: null,     // SSE EventSource for send job progress
 };
 
+// ── Chassis finder state ──
+export const chassisState = {
+  rows: [],              // [{date, woNo, billTo, contNo, chassis, mbl, ref, amount, invNo, cnee, status}]
+  pdfs: [],              // uploaded PDFs for merge
+  originalFilename: '',  // raw TMS filename for output naming
+  isProcessing: false,
+  jobId: null,
+};
+
 // ── Customer manager state ──
 export const custState = {
   editingCode: null,   // null = creating, string = editing

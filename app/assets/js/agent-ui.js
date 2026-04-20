@@ -186,9 +186,9 @@ function agentHeaderBtnClick() {
 }
 
 function updateHeaderAgentButtons(connected) {
-  const dots  = [document.getElementById('agentDotMerge'), document.getElementById('agentDotInvoice')];
-  const texts = [document.getElementById('agentTextMerge'), document.getElementById('agentTextInvoice')];
-  const btns  = [document.getElementById('agentBtnMerge'), document.getElementById('agentBtnInvoice')];
+  const dots  = [document.getElementById('agentDotMerge'), document.getElementById('agentDotInvoice'), document.getElementById('agentDotChassis')];
+  const texts = [document.getElementById('agentTextMerge'), document.getElementById('agentTextInvoice'), document.getElementById('agentTextChassis')];
+  const btns  = [document.getElementById('agentBtnMerge'), document.getElementById('agentBtnInvoice'), document.getElementById('agentBtnChassis')];
 
   dots.forEach(d => { if (d) d.className = 'agent-hdr-dot ' + (connected ? 'online' : 'offline'); });
   texts.forEach(t => {

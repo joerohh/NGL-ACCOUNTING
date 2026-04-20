@@ -13,6 +13,7 @@ import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
 import { renderSessionHistory } from './tools/session-history/session-history.js';
+import { chassisInitDropZones } from './tools/chassis-finder/chassis-finder.js';
 
 // Prevent browser from opening files dropped anywhere on the page
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -327,6 +328,7 @@ function switchTool(tool) {
   // Hide all views
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('mergeToolView').style.display = 'none';
+  document.getElementById('chassisFinderView').style.display = 'none';
   document.getElementById('invoiceSenderView').style.display = 'none';
   document.getElementById('customerView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'none';
@@ -338,6 +340,9 @@ function switchTool(tool) {
     refreshHomeMetrics();
   } else if (tool === 'merge') {
     document.getElementById('mergeToolView').style.display = '';
+  } else if (tool === 'chassis-finder') {
+    document.getElementById('chassisFinderView').style.display = '';
+    chassisInitDropZones();
   } else if (tool === 'invoice-sender') {
     document.getElementById('invoiceSenderView').style.display = '';
     invInitDropZones();
@@ -356,6 +361,7 @@ function switchTool(tool) {
   const subtitles = {
     'home': 'Accounting Suite',
     'merge': 'Merging Tool',
+    'chassis-finder': 'INI Chassis Finder',
     'invoice-sender': 'Invoice Sender',
     'customers': 'Customer Management',
     'session-history': 'Session History',
@@ -369,6 +375,7 @@ function switchTool(tool) {
 
   // Update sidebar nav active states
   document.getElementById('navMerge').classList.toggle('active', tool === 'merge');
+  document.getElementById('navChassisFinder').classList.toggle('active', tool === 'chassis-finder');
   document.getElementById('navInvoiceSender').classList.toggle('active', tool === 'invoice-sender');
   document.getElementById('navCustomers').classList.toggle('active', tool === 'customers');
   document.getElementById('navSessionHistory').classList.toggle('active', tool === 'session-history');

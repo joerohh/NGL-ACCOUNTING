@@ -562,6 +562,10 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   border-radius: 8px; font-size: 0.9rem; outline: none; color: #1e293b;
 }
 .cust-toolbar .search-input:focus { border-color: #f97316; }
+/* Chassis Finder table */
+#chassisTableBody td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+#chassisTableBody tr:hover { background: #fafafa; }
+
 .cust-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .cust-table thead { background: #f8fafc; }
 .cust-table th {
