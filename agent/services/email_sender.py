@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import smtplib
 from typing import Optional
 from email.mime.application import MIMEApplication
@@ -11,6 +12,18 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 logger = logging.getLogger("ngl.email_sender")
+
+
+def _maybe_redirect(to, cc=None, bcc=None):
+    """If EMAIL_TEST_REDIRECT env var is set, replace all recipients with it
+    (for safe testing). Original recipients are noted in the subject prefix
+    by callers via subject prepending — here we just rewrite the lists."""
+    redirect = os.getenv("EMAIL_TEST_REDIRECT", "").strip()
+    if not redirect:
+        return to, cc, bcc
+    logger.warning("[EMAIL_REDIRECT] All mail rerouted to %s (orig to=%s cc=%s bcc=%s)",
+                   redirect, to, cc, bcc)
+    return [redirect], [], []
 
 
 class EmailSender:
@@ -39,6 +52,7 @@ class EmailSender:
         if not pod_path.exists():
             return {"sent": False, "error": f"POD file not found: {pod_path}"}
 
+        to, cc, _ = _maybe_redirect(to, cc)
         try:
             result = await asyncio.to_thread(
                 self._send_sync, to, cc, subject, body, pod_path, reply_to
@@ -66,6 +80,7 @@ class EmailSender:
         if not to:
             return {"sent": False, "error": "No recipients specified"}
 
+        to, cc, bcc = _maybe_redirect(to, cc or [], bcc or [])
         try:
             result = await asyncio.to_thread(
                 self._send_invoice_sync, to, cc or [], bcc or [],

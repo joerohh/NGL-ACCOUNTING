@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from config import TMS_DEBUG_DIR
+from services.tms_api import TMSApiClient
 
 logger = logging.getLogger("ngl.tms_router")
 
@@ -14,6 +15,37 @@ router = APIRouter(prefix="/tms", tags=["tms"])
 
 # Injected by main.py on startup
 _tms_browser = None
+_tms_api = TMSApiClient()
+
+
+@router.get("/api-test/{wo_no}")
+async def tms_api_test(wo_no: str):
+    """Smoke-test the TMS REST API. Returns WO summary + POD download status."""
+    if not _tms_api.is_configured():
+        raise HTTPException(status_code=400,
+                            detail="TMS_CLIENT_ID/SECRET not set in .env")
+    wo = await _tms_api.get_work_order(wo_no)
+    if not wo:
+        raise HTTPException(status_code=404,
+                            detail=f"Work order {wo_no} not found or API error")
+    pod_url = TMSApiClient.extract_pod_url(wo)
+    do_sender = TMSApiClient.extract_do_sender(wo)
+    pod_bytes = 0
+    if pod_url:
+        data = await _tms_api.download_document(pod_url)
+        pod_bytes = len(data) if data else 0
+    return {
+        "woNo": wo.get("wo_no"),
+        "category": wo.get("category"),
+        "containerNo": wo.get("container_no"),
+        "doSender": do_sender,
+        "podUrl": pod_url,
+        "podBytes": pod_bytes,
+        "documents": [
+            {"type": d.get("type_"), "hasUrl": bool(d.get("file_url"))}
+            for d in (wo.get("documents") or [])
+        ],
+    }
 
 
 def set_tms_browser(tms):

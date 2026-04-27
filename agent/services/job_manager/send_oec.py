@@ -358,6 +358,48 @@ class SendOECFlowMixin:
         new_pod_path = None
         tms_do_sender = None
 
+        # ── REST API path (preferred — bypasses Playwright entirely) ──
+        if wo_no and self._tms_api.is_configured():
+            await self._emit_send(job, "tms_api_attempt", {
+                "invoiceNumber": invoice.invoice_number,
+                "woNo": wo_no,
+            })
+            wo = await self._tms_api.get_work_order(wo_no)
+            if wo:
+                api_do_sender = self._tms_api.extract_do_sender(wo)
+                api_pod_url = self._tms_api.extract_pod_url(wo)
+                api_pod_path = None
+                if not pod_path and api_pod_url:
+                    pod_bytes = await self._tms_api.download_document(api_pod_url)
+                    if pod_bytes:
+                        api_pod_path = temp_dir / f"{invoice.invoice_number}_TMS_POD.pdf"
+                        api_pod_path.write_bytes(pod_bytes)
+                        new_pod_path = api_pod_path
+                        await self._emit_send(job, "tms_pod_downloaded", {
+                            "invoiceNumber": invoice.invoice_number,
+                            "fileName": api_pod_path.name,
+                            "strategy": "api",
+                        })
+                if api_do_sender and not invoice.do_sender_email:
+                    invoice.do_sender_email = api_do_sender
+                # Considered successful if we have what we needed
+                got_pod = bool(pod_path) or bool(new_pod_path)
+                got_do_sender = bool(invoice.do_sender_email)
+                if got_pod and got_do_sender:
+                    await self._emit_send(job, "tms_api_success", {
+                        "invoiceNumber": invoice.invoice_number,
+                        "woNo": wo_no,
+                        "doSender": api_do_sender or "",
+                        "podBytes": api_pod_path.stat().st_size if api_pod_path else 0,
+                    })
+                    logger.info("[OEC_TMS] API path satisfied lookup for %s — skipping browser",
+                                invoice.invoice_number)
+                    return new_pod_path, "", True
+                logger.info("[OEC_TMS] API partial (pod=%s, do_sender=%s) — falling back to browser",
+                            got_pod, got_do_sender)
+            else:
+                logger.info("[OEC_TMS] API returned no WO for %s — falling back to browser", wo_no)
+
         # Login guard
         if not self._tms.is_logged_in():
             await self._emit_send(job, "tms_login_required", {

@@ -94,6 +94,11 @@ QBO_TOKENS_FILE = APPDATA_DIR / ".qbo_tokens.json"
 TMS_EMAIL = os.getenv("TMS_EMAIL", "")
 TMS_PASSWORD = os.getenv("TMS_PASSWORD", "")
 
+# TMS REST API (NGL in-house — replaces browser automation)
+TMS_API_BASE_URL = "https://api.flow.ngltrans.net"
+TMS_API_CLIENT_ID = os.getenv("TMS_CLIENT_ID", "")
+TMS_API_CLIENT_SECRET = os.getenv("TMS_CLIENT_SECRET", "")
+
 # TMS portal (POD fetching for OEC flow)
 TMS_URL = "https://tms.ngltrans.net"
 TMS_LOGIN_URL = "https://tms.ngltrans.net/sign-in"
