@@ -88,6 +88,8 @@ class SendOECFlowMixin:
         csv_do_sender = invoice.do_sender_email or ""
         tms_failure_reason = ""
         tms_attempted = False
+        pod_via_api = False
+        do_sender_via_api = False
 
         if not self._tms:
             tms_failure_reason = "TMS browser not initialized"
@@ -98,14 +100,14 @@ class SendOECFlowMixin:
             })
         else:
             try:
-                pod_path_new, tms_failure_new, tms_attempted_new = await asyncio.wait_for(
+                pod_path_new, tms_failure_new, tms_attempted_new, pod_via_api, do_sender_via_api = await asyncio.wait_for(
                     self._oec_tms_lookup(job, invoice, pod_path, temp_dir,
                                           wo_no=wo_no, detail_type=detail_type),
                     timeout=TMS_FETCH_TIMEOUT_S,
                 )
                 if pod_path_new:
                     pod_path = pod_path_new
-                    pod_source = pod_source or "TMS"
+                    pod_source = pod_source or ("TMS API" if pod_via_api else "TMS")
                 if tms_failure_new:
                     tms_failure_reason = tms_failure_new
                 tms_attempted = tms_attempted_new
@@ -150,6 +152,8 @@ class SendOECFlowMixin:
                 do_sender_source = "CSV"
             elif self._get_cached_do_sender(invoice.container_number) == invoice.do_sender_email and not tms_attempted:
                 do_sender_source = "Cache"
+            elif do_sender_via_api:
+                do_sender_source = "TMS API"
             else:
                 do_sender_source = "TMS"
             await self._emit_send(job, "oec_do_sender_resolved", {
@@ -345,9 +349,12 @@ class SendOECFlowMixin:
                                 wo_no=None, detail_type=None):
         """TMS lookup for OEC flow. Runs inside a timeout wrapper.
 
-        Returns (pod_path_or_None, failure_reason_or_empty, tms_attempted: bool).
+        Returns (pod_path_or_None, failure_reason_or_empty, tms_attempted: bool,
+                 pod_via_api: bool, do_sender_via_api: bool).
         pod_path_or_None: a new POD Path if one was downloaded from TMS, else None.
         Mutates invoice.do_sender_email in place when TMS finds a D/O sender.
+        pod_via_api / do_sender_via_api flag whether the REST API (not browser)
+        delivered each piece — used by the caller to label the source.
 
         When wo_no + detail_type are provided, tries direct-URL navigation first
         (bypasses the TMS main grid and its race condition). Falls back to
@@ -357,6 +364,8 @@ class SendOECFlowMixin:
         tms_attempted = False
         new_pod_path = None
         tms_do_sender = None
+        pod_via_api = False
+        do_sender_via_api = False
 
         # ── REST API path (preferred — bypasses Playwright entirely) ──
         if wo_no and self._tms_api.is_configured():
@@ -375,6 +384,7 @@ class SendOECFlowMixin:
                         api_pod_path = temp_dir / f"{invoice.invoice_number}_TMS_POD.pdf"
                         api_pod_path.write_bytes(pod_bytes)
                         new_pod_path = api_pod_path
+                        pod_via_api = True
                         await self._emit_send(job, "tms_pod_downloaded", {
                             "invoiceNumber": invoice.invoice_number,
                             "fileName": api_pod_path.name,
@@ -382,6 +392,7 @@ class SendOECFlowMixin:
                         })
                 if api_do_sender and not invoice.do_sender_email:
                     invoice.do_sender_email = api_do_sender
+                    do_sender_via_api = True
                 # Considered successful if we have what we needed
                 got_pod = bool(pod_path) or bool(new_pod_path)
                 got_do_sender = bool(invoice.do_sender_email)
@@ -394,7 +405,7 @@ class SendOECFlowMixin:
                     })
                     logger.info("[OEC_TMS] API path satisfied lookup for %s — skipping browser",
                                 invoice.invoice_number)
-                    return new_pod_path, "", True
+                    return new_pod_path, "", True, pod_via_api, do_sender_via_api
                 logger.info("[OEC_TMS] API partial (pod=%s, do_sender=%s) — falling back to browser",
                             got_pod, got_do_sender)
             else:
@@ -418,10 +429,10 @@ class SendOECFlowMixin:
                     "invoiceNumber": invoice.invoice_number,
                     "message": "TMS login timed out (2 min) — skipping TMS lookup",
                 })
-                return None, tms_failure_reason, False
+                return None, tms_failure_reason, False, pod_via_api, do_sender_via_api
 
         if not self._tms.is_logged_in():
-            return None, "TMS not logged in", False
+            return None, "TMS not logged in", False, pod_via_api, do_sender_via_api
 
         tms_attempted = True
         logger.info("[OEC_TMS] TMS logged in — fetching for %s (pod_path=%s, csv_do_sender='%s', wo_no=%s, type=%s)",
@@ -545,4 +556,4 @@ class SendOECFlowMixin:
 
         logger.info("[OEC_TMS] After TMS: invoice.do_sender_email = '%s'",
                     invoice.do_sender_email or "")
-        return new_pod_path, tms_failure_reason, tms_attempted
+        return new_pod_path, tms_failure_reason, tms_attempted, pod_via_api, do_sender_via_api

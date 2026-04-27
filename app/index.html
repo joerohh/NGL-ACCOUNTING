@@ -978,16 +978,20 @@
 
         <div class="agent-body" id="agentBody">
           <!-- Status Summary — compact row -->
-          <div style="display:flex; gap:10px; margin-bottom:12px; font-size:0.78rem;">
-            <div style="flex:1; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; gap:10px; margin-bottom:12px; font-size:0.78rem; flex-wrap:wrap;">
+            <div style="flex:1 1 110px; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
               <span style="color:#64748b;">QBO</span>
               <span id="qboStatus" style="font-weight:600; color:#94a3b8;">--</span>
             </div>
-            <div style="flex:1; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+            <div style="flex:1 1 110px; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;" title="TMS REST API — primary path for POD + D/O sender">
+              <span style="color:#64748b;">TMS API</span>
+              <span id="tmsApiStatus" style="font-weight:600; color:#94a3b8;">--</span>
+            </div>
+            <div style="flex:1 1 110px; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;" title="TMS Browser — fallback when API can't resolve a WO">
               <span style="color:#64748b;">TMS</span>
               <span id="tmsStatus" style="font-weight:600; color:#94a3b8;">--</span>
             </div>
-            <div style="flex:1; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
+            <div style="flex:1 1 110px; background:#f8fafc; border-radius:8px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between;">
               <span style="color:#64748b;">Classifier</span>
               <span id="classifierStatus" style="font-weight:600; color:#94a3b8;">--</span>
             </div>

@@ -105,7 +105,7 @@ export async function agentHealthCheck() {
         qboEl.style.color = '#d97706';
       }
 
-      // Passive TMS status
+      // Passive TMS status (browser fallback)
       const tmsEl = document.getElementById('tmsStatus');
       const tmsLoginSection = document.getElementById('tmsLoginSection');
       if (tmsEl) {
@@ -118,6 +118,25 @@ export async function agentHealthCheck() {
           tmsEl.textContent = 'Not logged in';
           tmsEl.style.color = '#d97706';
           if (tmsLoginSection) tmsLoginSection.style.display = '';
+        }
+      }
+
+      // TMS REST API status (primary path)
+      const tmsApiEl = document.getElementById('tmsApiStatus');
+      if (tmsApiEl) {
+        const apiData = await agentBridge.checkTMSApiStatus();
+        if (apiData.tokenOk) {
+          tmsApiEl.textContent = 'Connected';
+          tmsApiEl.style.color = '#16a34a';
+          tmsApiEl.title = 'TMS REST API token OK — ' + (apiData.baseUrl || '');
+        } else if (apiData.status === 'not_configured') {
+          tmsApiEl.textContent = 'Not configured';
+          tmsApiEl.style.color = '#94a3b8';
+          tmsApiEl.title = apiData.message || '';
+        } else {
+          tmsApiEl.textContent = 'Error';
+          tmsApiEl.style.color = '#dc2626';
+          tmsApiEl.title = apiData.error || 'Could not reach TMS API';
         }
       }
     }
@@ -136,6 +155,8 @@ export async function agentHealthCheck() {
     qboEl.style.color = '#94a3b8';
     const tmsElOff = document.getElementById('tmsStatus');
     if (tmsElOff) { tmsElOff.textContent = '--'; tmsElOff.style.color = '#94a3b8'; }
+    const tmsApiElOff = document.getElementById('tmsApiStatus');
+    if (tmsApiElOff) { tmsApiElOff.textContent = '--'; tmsApiElOff.style.color = '#94a3b8'; }
     const tmsLoginOff = document.getElementById('tmsLoginSection');
     if (tmsLoginOff) tmsLoginOff.style.display = 'none';
 

@@ -135,6 +135,13 @@ export const agentBridge = {
     } catch { return { status: 'error', loggedIn: false }; }
   },
 
+  async checkTMSApiStatus() {
+    try {
+      const res = await this._authFetch(this.baseUrl + '/tms/api-status');
+      return await res.json();
+    } catch (e) { return { status: 'error', tokenOk: false, error: String(e) }; }
+  },
+
   async openTMSLogin() {
     try {
       const res = await this._authFetch(this.baseUrl + '/tms/open-login', { method: 'POST' });
@@ -203,6 +210,8 @@ export const agentBridge = {
         // Direct-URL (WO# from QBO) TMS events — v2.29+
         'tms_fetching_pod_direct', 'tms_fetching_do_sender_direct',
         'tms_fetching_doc_direct', 'tms_doc_not_found',
+        // TMS REST API events — v2.33+
+        'tms_api_attempt', 'tms_api_success',
         'uploading_doc_to_qbo', 'doc_uploaded_to_qbo', 'doc_upload_failed',
         'oec_invoice_cc_built',
         // Chassis finder events

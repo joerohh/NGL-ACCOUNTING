@@ -18,6 +18,38 @@ _tms_browser = None
 _tms_api = TMSApiClient()
 
 
+@router.get("/api-status")
+async def tms_api_status():
+    """Lightweight check that the TMS REST API is reachable.
+
+    Probes OAuth token endpoint without exposing credentials. Used by the
+    web UI to show whether the API path is wired up — independent of any
+    browser fallback state.
+    """
+    if not _tms_api.is_configured():
+        return {
+            "status": "not_configured",
+            "configured": False,
+            "tokenOk": False,
+            "message": "TMS_CLIENT_ID/SECRET not set in .env",
+        }
+    try:
+        token = await _tms_api._get_token()
+        return {
+            "status": "connected" if token else "error",
+            "configured": True,
+            "tokenOk": bool(token),
+            "baseUrl": _tms_api._base_url,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "configured": True,
+            "tokenOk": False,
+            "error": str(e),
+        }
+
+
 @router.get("/api-test/{wo_no}")
 async def tms_api_test(wo_no: str):
     """Smoke-test the TMS REST API. Returns WO summary + POD download status."""

@@ -1040,11 +1040,19 @@ const _sendEventHandlers = {
   },
 
   // ── TMS flow events ──
+  tms_api_attempt(event) {
+    invAddLog('info', '  [TMS API] Calling REST API for WO# ' + (event.woNo || '') + '...');
+  },
+  tms_api_success(event) {
+    invAddLog('success', '  [TMS API] ✓ Success — POD + D/O sender retrieved (browser bypassed)' +
+      (event.podBytes ? ' — ' + Math.round(event.podBytes / 1024) + ' KB' : ''));
+  },
   tms_fetching_pod(event) {
     invAddLog('info', '  [TMS] ' + (event.message || 'Searching TMS for POD...') + (event.containerNumber ? ' (container: ' + event.containerNumber + ')' : ''));
   },
   tms_pod_downloaded(event) {
-    invAddLog('success', '  [TMS] POD downloaded from TMS: ' + (event.fileName || ''));
+    const tag = event.strategy === 'api' ? '[TMS API]' : '[TMS]';
+    invAddLog('success', '  ' + tag + ' POD downloaded: ' + (event.fileName || ''));
   },
   tms_pod_not_found(event) {
     invAddLog('warning', '  [TMS] POD not found in TMS for container ' + (event.containerNumber || ''));
@@ -1287,6 +1295,27 @@ function invShowConnectionLost(message) {
   `;
 }
 
+// Render a small colored "From X" / "Found in X" badge based on source label.
+// QBO -> blue checkbox, TMS API -> purple lightning, TMS -> green check,
+// Cache/CSV -> gray.
+function invSourceBadge(source, prefix) {
+  if (!source) return '';
+  const s = String(source);
+  let bg, color, border, icon;
+  if (s === 'QBO') {
+    bg = '#dbeafe'; color = '#1e40af'; border = '#93c5fd'; icon = '&#9745;';
+  } else if (s === 'TMS API') {
+    bg = '#ede9fe'; color = '#5b21b6'; border = '#c4b5fd'; icon = '&#9889;';
+  } else if (s === 'TMS') {
+    bg = '#d1fae5'; color = '#065f46'; border = '#6ee7b7'; icon = '&#10003;';
+  } else {
+    bg = '#f1f5f9'; color = '#475569'; border = '#cbd5e1'; icon = '&#10003;';
+  }
+  return '<span style="display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 7px; border-radius:4px; font-size:0.7rem; font-weight:600; background:' +
+    bg + '; color:' + color + '; border:1px solid ' + border + ';">' +
+    icon + ' ' + (prefix ? prefix + ' ' : '') + escHtml(s) + '</span>';
+}
+
 function invShowInlineApproval(event) {
   const panel = document.getElementById('invSendProgressPanel');
   if (!panel) return;
@@ -1359,10 +1388,10 @@ function invShowInlineApproval(event) {
           (event.tmsFailureReason ? ' — ' + escHtml(event.tmsFailureReason) : ' — missing from TMS and CSV') +
           '<br><span style="font-size:0.72rem;">You can manually type the D/O sender email in the CC field above before sending.</span>' +
           '</div>'
-        : '<div style="margin-top:4px;"><strong>D/O Sender:</strong> ' + escHtml(event.doSenderEmail || '') + ' <span style="display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 7px; border-radius:4px; font-size:0.7rem; font-weight:600; background:#d1fae5; color:#065f46; border:1px solid #6ee7b7;">&#10003; From ' + escHtml(event.doSenderSource || '') + '</span></div>'
+        : '<div style="margin-top:4px;"><strong>D/O Sender:</strong> ' + escHtml(event.doSenderEmail || '') + ' ' + invSourceBadge(event.doSenderSource, 'From') + '</div>'
       ) : ''}
       <div><strong>Subject:</strong> ${escHtml(event.subject)}</div>
-      <div><strong>Attachments:</strong> ${(event.attachmentsFound || []).length ? escHtml(event.attachmentsFound.join(', ')) : '<span style="color:#d97706;">None detected</span>'}${event.podSource ? ' <span style="display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 7px; border-radius:4px; font-size:0.7rem; font-weight:600; background:' + (event.podSource === 'QBO' ? '#dbeafe; color:#1e40af; border:1px solid #93c5fd' : '#d1fae5; color:#065f46; border:1px solid #6ee7b7') + ';">' + (event.podSource === 'QBO' ? '&#9745;' : '&#9745;') + ' Found in ' + escHtml(event.podSource) + '</span>' : ''}</div>
+      <div><strong>Attachments:</strong> ${(event.attachmentsFound || []).length ? escHtml(event.attachmentsFound.join(', ')) : '<span style="color:#d97706;">None detected</span>'}${event.podSource ? ' ' + invSourceBadge(event.podSource, 'Found in') : ''}</div>
       ${event.emailBody ? '<div style="margin-top:10px; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;"><strong style="display:block; margin-bottom:6px;">Email Body Preview:</strong><pre style="white-space:pre-wrap; word-wrap:break-word; font-family:inherit; font-size:0.78rem; color:#334155; margin:0;">' + escHtml(event.emailBody) + '</pre></div>' : ''}
     </div>
     <div style="font-size:0.75rem; color:#64748b; margin-bottom:12px; background:${hintBg}; border:1px solid ${hintBorder}; border-radius:6px; padding:8px 10px;">
