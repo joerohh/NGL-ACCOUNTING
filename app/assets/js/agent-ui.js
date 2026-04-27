@@ -105,19 +105,21 @@ export async function agentHealthCheck() {
         qboEl.style.color = '#d97706';
       }
 
-      // Passive TMS status (browser fallback)
+      // Passive TMS browser status (fallback path — rare since v2.34)
+      // Persistent login prompt is hidden by default; the in-flow prompt
+      // (tms_login_required SSE event) still fires when a job actually
+      // needs the browser.
       const tmsEl = document.getElementById('tmsStatus');
       const tmsLoginSection = document.getElementById('tmsLoginSection');
+      if (tmsLoginSection) tmsLoginSection.style.display = 'none';
       if (tmsEl) {
         const tmsData = await agentBridge.checkTMSStatus();
         if (tmsData.loggedIn) {
           tmsEl.textContent = 'Logged in';
           tmsEl.style.color = '#16a34a';
-          if (tmsLoginSection) tmsLoginSection.style.display = 'none';
         } else {
-          tmsEl.textContent = 'Not logged in';
-          tmsEl.style.color = '#d97706';
-          if (tmsLoginSection) tmsLoginSection.style.display = '';
+          tmsEl.textContent = 'Idle';
+          tmsEl.style.color = '#94a3b8';
         }
       }
 
@@ -192,10 +194,10 @@ function _updateHomeConnections() {
   const qboConnected = qboText && qboText.textContent === 'Connected';
   setPill('homeQbo', qboConnected ? 'Connected' : 'Not connected', qboConnected, false);
 
-  // TMS
+  // TMS browser (fallback path — login prompt only fires in-flow when needed)
   const tmsText = document.getElementById('tmsStatus');
   const tmsLoggedIn = tmsText && tmsText.textContent === 'Logged in';
-  setPill('homeTms', tmsLoggedIn ? 'Logged in' : 'Not logged in', tmsLoggedIn, true);
+  setPill('homeTms', tmsLoggedIn ? 'Logged in' : 'Idle', tmsLoggedIn, false);
 }
 
 function agentHeaderBtnClick() {
