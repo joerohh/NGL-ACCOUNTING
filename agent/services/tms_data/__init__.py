@@ -33,6 +33,32 @@ class TMSDataLayer:
         self._tms_browser = tms_browser
         self._failed = FailedRowsTracker()
         self._retry_ctx: dict[str, dict] = {}  # row_id -> {operation, invoice_data, doc_type, dest_dir}
+        # Per-job WO cache: (job_id, wo_no) -> wo_record. Avoids redundant TMS API
+        # calls when the same job needs both enrich and document-fetch on one WO.
+        self._wo_cache: dict[tuple[str, str], dict] = {}
+
+    class _CachedTmsApi:
+        """Adapter that proxies tms_api but memoizes get_work_order per (job_id, wo_no)."""
+
+        def __init__(self, real_api, cache: dict, job_id: str) -> None:
+            self._real = real_api
+            self._cache = cache
+            self._job_id = job_id
+
+        async def get_work_order(self, wo_no):
+            key = (self._job_id, wo_no)
+            if key in self._cache:
+                return self._cache[key]
+            wo = await self._real.get_work_order(wo_no)
+            if wo is not None:
+                self._cache[key] = wo
+            return wo
+
+        async def download_document(self, url):
+            return await self._real.download_document(url)
+
+        def is_configured(self):
+            return self._real.is_configured()
 
     # ── Per-row data access ────────────────────────────────────────
 
@@ -58,7 +84,8 @@ class TMSDataLayer:
             enriched, err = await run_enrich_browser(invoice_data, self._tms_browser)
             failed_at = "tms_browser"
         else:
-            enriched, err = await run_enrich(invoice_data, self._tms_api, force=force)
+            cached = self._CachedTmsApi(self._tms_api, self._wo_cache, job_id)
+            enriched, err = await run_enrich(invoice_data, cached, force=force)
             failed_at = "tms_api"
 
         if err:
@@ -95,8 +122,9 @@ class TMSDataLayer:
             )
             failed_at = "tms_browser"
         else:
+            cached = self._CachedTmsApi(self._tms_api, self._wo_cache, job_id)
             path, err = await run_document(
-                invoice_data, doc_type, dest_dir, self._tms_api,
+                invoice_data, doc_type, dest_dir, cached,
             )
             failed_at = "tms_api"
 
@@ -194,3 +222,7 @@ class TMSDataLayer:
         for r in rows:
             self._retry_ctx.pop(r.row_id, None)
         self._failed.reset(job_id)
+        # Clear cached WO records for this job.
+        for key in list(self._wo_cache.keys()):
+            if key[0] == job_id:
+                del self._wo_cache[key]
