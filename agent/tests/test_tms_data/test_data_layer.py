@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -219,3 +219,12 @@ async def test_enrich_invoice_force_kwarg_forwarded():
     enriched = await dl.enrich_invoice("job-1", invoice, force=True)
     assert tms_api.get_work_order.await_count == 1
     assert enriched.do_sender_email == "x@y.com"
+
+
+@pytest.mark.asyncio
+async def test_enrich_invoice_force_with_browser_source_raises():
+    """force=True + source='browser' is meaningless and must fail loudly."""
+    qbo, tms_api, browser = MagicMock(), AsyncMock(), AsyncMock()
+    layer = TMSDataLayer(qbo, tms_api, browser)
+    with pytest.raises(ValueError, match="force=True is only supported"):
+        await layer.enrich_invoice("job", {"DocNumber": "X"}, source="browser", force=True)

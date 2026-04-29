@@ -49,6 +49,11 @@ class TMSDataLayer:
         Failures during the cascade are recorded in the failed-rows tracker
         but the partially-filled EnrichedInvoice is still returned.
         """
+        if force and source == "browser":
+            raise ValueError(
+                "force=True is only supported for source='api'; "
+                "the browser path has no QBO-complete short-circuit to bypass."
+            )
         if source == "browser":
             enriched, err = await run_enrich_browser(invoice_data, self._tms_browser)
             failed_at = "tms_browser"
