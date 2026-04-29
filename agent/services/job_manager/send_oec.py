@@ -13,7 +13,6 @@ from pathlib import Path
 
 from config import TMS_FETCH_TIMEOUT_S
 from services.job_manager.util import (
-    extract_wo_from_invoice,
     normalize_email_list,
     validate_and_append_email,
 )
@@ -28,13 +27,13 @@ class SendOECFlowMixin:
                                    result, index: int) -> None:
         """Send the POD/D-O email FIRST in the OEC flow.
 
-        Runs BEFORE _send_qbo_api. Populates invoice.do_sender_email (via TMS)
-        so the invoice email can CC it. Sets result.pod_status to
-        "sent"/"failed"/"skipped". Does NOT set result.status.
+        Runs BEFORE _send_qbo_api. Uses TMSDataLayer for both the POD download
+        and the D/O sender lookup. Falls back to the local cache when the layer
+        can't find a D/O sender (hard invariant #11). Sets result.pod_status
+        only — does NOT set result.status (owned by the invoice email step).
         """
         api = self._qbo_api
 
-        # Look up invoice in QBO to get attachments
         invoice_data = await api.search_invoice(invoice.invoice_number)
         if not invoice_data:
             logger.warning("[OEC_POD] Invoice %s not found in QBO — skipping POD email",
@@ -43,30 +42,15 @@ class SendOECFlowMixin:
             return
 
         invoice_id = invoice_data["Id"]
-
-        # Extract WO# from QBO invoice's NGL REF# custom field (for direct-URL TMS nav).
-        # Value format is "WO#/CUSTOMER_REF" — see util.extract_wo_from_invoice.
-        wo_no = extract_wo_from_invoice(invoice_data)
-        detail_type = (self._tms.bc_detail_type_segment(invoice.invoice_number)
-                       if self._tms else None)
-        if wo_no and detail_type:
-            logger.info("[WO_EXTRACT] invoice=%s wo_no=%s type=%s (direct-URL eligible)",
-                        invoice.invoice_number, wo_no, detail_type)
-        else:
-            logger.info("[WO_EXTRACT] invoice=%s wo_no=%s type=%s (will fall back to grid)",
-                        invoice.invoice_number, wo_no, detail_type)
-
-        # Get container number from verification or CSV
         verification = await api.verify_invoice_details(
             invoice_data, invoice.container_number, invoice.amount or None
         )
         container = (verification.get("found_container")
                      or invoice.container_number or "")
 
-        # Check QBO attachments for POD
+        # Look for POD already attached to QBO before going to TMS.
         att_check = await api.check_attachments(invoice_id, ["invoice", "pod"])
         all_attachments = att_check.get("attachments", [])
-
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
         pod_path = None
         pod_source = None
@@ -84,48 +68,65 @@ class SendOECFlowMixin:
                     logger.info("POD downloaded from QBO API: %s", pod_path.name)
                 break
 
-        # ── TMS lookup for POD and D/O sender ──
+        # ── TMS Data Layer: D/O sender + POD (if not already from QBO) ──
         csv_do_sender = invoice.do_sender_email or ""
+        layer_do_sender_source = ""
         tms_failure_reason = ""
-        tms_attempted = False
-        pod_via_api = False
-        do_sender_via_api = False
 
-        if not self._tms:
-            tms_failure_reason = "TMS browser not initialized"
-            logger.warning("[OEC_TMS] TMS browser is None — skipping TMS lookup")
-            await self._emit_send(job, "tms_not_available", {
-                "invoiceNumber": invoice.invoice_number,
-                "message": "TMS browser not initialized — D/O sender lookup skipped",
-            })
-        else:
+        if self._tms_data:
             try:
-                pod_path_new, tms_failure_new, tms_attempted_new, pod_via_api, do_sender_via_api = await asyncio.wait_for(
-                    self._oec_tms_lookup(job, invoice, pod_path, temp_dir,
-                                          wo_no=wo_no, detail_type=detail_type),
+                enriched = await asyncio.wait_for(
+                    self._tms_data.enrich_invoice(
+                        job.id, invoice_data, source="api", force=True,
+                    ),
                     timeout=TMS_FETCH_TIMEOUT_S,
                 )
-                if pod_path_new:
-                    pod_path = pod_path_new
-                    pod_source = pod_source or ("TMS API" if pod_via_api else "TMS")
-                if tms_failure_new:
-                    tms_failure_reason = tms_failure_new
-                tms_attempted = tms_attempted_new
+                if enriched.do_sender_email and not invoice.do_sender_email:
+                    invoice.do_sender_email = enriched.do_sender_email
+                    layer_do_sender_source = "TMS API"
+                    logger.info("[OEC_POD] D/O sender from TMS API: %s",
+                                enriched.do_sender_email)
+
+                if not pod_path:
+                    tms_pod = await asyncio.wait_for(
+                        self._tms_data.get_document(
+                            job.id, invoice_data, "POD", temp_dir, source="api",
+                        ),
+                        timeout=TMS_FETCH_TIMEOUT_S,
+                    )
+                    if tms_pod and tms_pod.exists():
+                        pod_path = tms_pod
+                        pod_source = "TMS API"
+                        await self._emit_send(job, "tms_pod_downloaded", {
+                            "invoiceNumber": invoice.invoice_number,
+                            "fileName": pod_path.name,
+                            "strategy": "api",
+                        })
+
+                await self._emit_failed_rows_changed(job, "added")
             except asyncio.TimeoutError:
                 tms_failure_reason = f"TMS lookup timed out after {TMS_FETCH_TIMEOUT_S}s"
-                logger.warning("[OEC_TMS] TMS lookup timed out for %s",
+                logger.warning("[OEC_POD] TMS Data Layer timed out for %s",
                                invoice.invoice_number)
                 await self._emit_send(job, "tms_fetch_timeout", {
                     "invoiceNumber": invoice.invoice_number,
                     "message": tms_failure_reason,
                 })
+        else:
+            tms_failure_reason = "TMSDataLayer not configured"
+            logger.warning("[OEC_POD] %s — skipping TMS lookup", tms_failure_reason)
+            await self._emit_send(job, "tms_not_available", {
+                "invoiceNumber": invoice.invoice_number,
+                "message": tms_failure_reason,
+            })
 
-        # ── Cache fallback: if TMS failed, check local cache ──
+        # ── Local D/O sender cache fallback (hard invariant #11) ──
         if not invoice.do_sender_email and not csv_do_sender:
             cached = self._get_cached_do_sender(invoice.container_number)
             if cached:
                 invoice.do_sender_email = cached
-                logger.info("[OEC_TMS] D/O sender from CACHE: %s for %s",
+                layer_do_sender_source = "Cache"
+                logger.info("[OEC_POD] D/O sender from CACHE: %s for %s",
                             cached, invoice.container_number)
                 await self._emit_send(job, "do_sender_from_cache", {
                     "invoiceNumber": invoice.invoice_number,
@@ -134,28 +135,20 @@ class SendOECFlowMixin:
                     "message": f"D/O sender found in cache: {cached}",
                 })
 
-        # ── Cache successful TMS lookups for future fallback ──
-        if invoice.do_sender_email and not csv_do_sender:
-            if tms_attempted:
-                strategy = getattr(self._tms, '_last_do_sender_strategy', '') if self._tms else ''
-                self._save_do_sender_cache(
-                    invoice.container_number,
-                    invoice.do_sender_email,
-                    source="TMS",
-                    strategy=strategy,
-                )
+        # ── Save TMS-derived D/O senders to cache for future fallback ──
+        if invoice.do_sender_email and layer_do_sender_source == "TMS API":
+            self._save_do_sender_cache(
+                invoice.container_number, invoice.do_sender_email,
+                source="TMS API", strategy="data_layer",
+            )
 
-        # ── Determine D/O sender source and emit status event ──
+        # ── Determine D/O sender source label ──
         do_sender_source = ""
         if invoice.do_sender_email:
             if csv_do_sender:
                 do_sender_source = "CSV"
-            elif self._get_cached_do_sender(invoice.container_number) == invoice.do_sender_email and not tms_attempted:
-                do_sender_source = "Cache"
-            elif do_sender_via_api:
-                do_sender_source = "TMS API"
             else:
-                do_sender_source = "TMS"
+                do_sender_source = layer_do_sender_source or "TMS"
             await self._emit_send(job, "oec_do_sender_resolved", {
                 "invoiceNumber": invoice.invoice_number,
                 "doSenderEmail": invoice.do_sender_email,
@@ -165,17 +158,16 @@ class SendOECFlowMixin:
             await self._emit_send(job, "oec_do_sender_missing", {
                 "invoiceNumber": invoice.invoice_number,
                 "containerNumber": invoice.container_number,
-                "message": f"D/O Sender email not found — {tms_failure_reason or 'missing from TMS and CSV'}",
+                "message": f"D/O Sender email not found — {tms_failure_reason or 'missing from TMS, cache, and CSV'}",
                 "failureReason": tms_failure_reason,
             })
 
-        # Record D/O sender in result for audit log
         result.do_sender_email = invoice.do_sender_email or ""
         result.do_sender_source = do_sender_source
 
-        # No POD found anywhere — POD email can't go out, but invoice email will still run
+        # No POD found anywhere — POD email skipped, invoice email continues.
         if not pod_path:
-            source = "QBO or TMS" if self._tms else "QBO"
+            source = "QBO or TMS"
             result.pod_status = "skipped"
             result.error = f"No POD found ({source}) — D/O email skipped, invoice will still send"
             await self._emit_send(job, "oec_pod_email_failed", {
@@ -199,9 +191,9 @@ class SendOECFlowMixin:
         logger.info("[POD_EMAIL]   CC: %s", pod_cc)
 
         pod_subject = customer.get("podEmailSubject", "") or f"POD — {invoice.container_number}"
-        pod_body = customer.get("podEmailBody", "") or f"Please find attached the Proof of Delivery for container {invoice.container_number}."
+        pod_body = customer.get("podEmailBody", "") or \
+            f"Please find attached the Proof of Delivery for container {invoice.container_number}."
 
-        # Template token replacement
         token_map = {
             "{invoice_number}": invoice.invoice_number,
             "{container_number}": invoice.container_number,
@@ -298,7 +290,7 @@ class SendOECFlowMixin:
                 pod_cc = cc_override
                 result.cc_emails = pod_cc
 
-        # ── Send POD email ──
+        # ── Send POD email — POD-only attachment (hard invariant #2) ──
         # HARD RULE: D/O email carries the POD PDF ONLY — no invoice PDF, no extras.
         # send_pod_email takes a single pod_path — enforced by signature.
         logger.info("[POD_EMAIL] Sending POD email for %s (POD-only attachment: %s)...",
@@ -344,216 +336,3 @@ class SendOECFlowMixin:
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass
-
-    async def _oec_tms_lookup(self, job, invoice, pod_path, temp_dir,
-                                wo_no=None, detail_type=None):
-        """TMS lookup for OEC flow. Runs inside a timeout wrapper.
-
-        Returns (pod_path_or_None, failure_reason_or_empty, tms_attempted: bool,
-                 pod_via_api: bool, do_sender_via_api: bool).
-        pod_path_or_None: a new POD Path if one was downloaded from TMS, else None.
-        Mutates invoice.do_sender_email in place when TMS finds a D/O sender.
-        pod_via_api / do_sender_via_api flag whether the REST API (not browser)
-        delivered each piece — used by the caller to label the source.
-
-        When wo_no + detail_type are provided, tries direct-URL navigation first
-        (bypasses the TMS main grid and its race condition). Falls back to
-        grid-based fetch_pod_and_do_sender / fetch_do_sender_email on miss.
-        """
-        tms_failure_reason = ""
-        tms_attempted = False
-        new_pod_path = None
-        tms_do_sender = None
-        pod_via_api = False
-        do_sender_via_api = False
-
-        # ── REST API path (preferred — bypasses Playwright entirely) ──
-        if wo_no and self._tms_api.is_configured():
-            await self._emit_send(job, "tms_api_attempt", {
-                "invoiceNumber": invoice.invoice_number,
-                "woNo": wo_no,
-            })
-            wo = await self._tms_api.get_work_order(wo_no)
-            if wo:
-                api_do_sender = self._tms_api.extract_do_sender(wo)
-                api_pod_url = self._tms_api.extract_pod_url(wo)
-                api_pod_path = None
-                if not pod_path and api_pod_url:
-                    pod_bytes = await self._tms_api.download_document(api_pod_url)
-                    if pod_bytes:
-                        api_pod_path = temp_dir / f"{invoice.invoice_number}_TMS_POD.pdf"
-                        api_pod_path.write_bytes(pod_bytes)
-                        new_pod_path = api_pod_path
-                        pod_via_api = True
-                        await self._emit_send(job, "tms_pod_downloaded", {
-                            "invoiceNumber": invoice.invoice_number,
-                            "fileName": api_pod_path.name,
-                            "strategy": "api",
-                        })
-                if api_do_sender and not invoice.do_sender_email:
-                    invoice.do_sender_email = api_do_sender
-                    do_sender_via_api = True
-                # Considered successful if we have what we needed
-                got_pod = bool(pod_path) or bool(new_pod_path)
-                got_do_sender = bool(invoice.do_sender_email)
-                if got_pod and got_do_sender:
-                    await self._emit_send(job, "tms_api_success", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "woNo": wo_no,
-                        "doSender": api_do_sender or "",
-                        "podBytes": api_pod_path.stat().st_size if api_pod_path else 0,
-                    })
-                    logger.info("[OEC_TMS] API path satisfied lookup for %s — skipping browser",
-                                invoice.invoice_number)
-                    return new_pod_path, "", True, pod_via_api, do_sender_via_api
-                logger.info("[OEC_TMS] API partial (pod=%s, do_sender=%s) — falling back to browser",
-                            got_pod, got_do_sender)
-            else:
-                logger.info("[OEC_TMS] API returned no WO for %s — falling back to browser", wo_no)
-
-        # Login guard
-        if not self._tms.is_logged_in():
-            await self._emit_send(job, "tms_login_required", {
-                "invoiceNumber": invoice.invoice_number,
-                "message": "TMS login required to fetch POD/DO SENDER — please log in now",
-            })
-            await self._tms.open_login_page()
-            logged_in = await self._tms.wait_for_login(timeout_s=120)
-            if logged_in:
-                await self._emit_send(job, "tms_logged_in", {
-                    "message": "TMS login successful — continuing",
-                })
-            else:
-                tms_failure_reason = "TMS login timed out (2 min)"
-                await self._emit_send(job, "tms_login_timeout", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "message": "TMS login timed out (2 min) — skipping TMS lookup",
-                })
-                return None, tms_failure_reason, False, pod_via_api, do_sender_via_api
-
-        if not self._tms.is_logged_in():
-            return None, "TMS not logged in", False, pod_via_api, do_sender_via_api
-
-        tms_attempted = True
-        logger.info("[OEC_TMS] TMS logged in — fetching for %s (pod_path=%s, csv_do_sender='%s', wo_no=%s, type=%s)",
-                    invoice.container_number, "exists" if pod_path else "NONE",
-                    invoice.do_sender_email or "", wo_no, detail_type)
-
-        # ── Direct-URL path (when WO# + import/export type available) ──
-        direct_url_tried = False
-        if wo_no and detail_type:
-            direct_url_tried = True
-
-            # POD fetch via direct URL if we don't already have POD from QBO
-            if not pod_path:
-                await self._emit_send(job, "tms_fetching_pod_direct", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "containerNumber": invoice.container_number,
-                    "woNo": wo_no,
-                })
-                try:
-                    tms_pod = await self._tms.fetch_pod_by_wo(
-                        wo_no, detail_type, invoice.container_number,
-                        invoice.invoice_number, temp_dir,
-                    )
-                except Exception as e:
-                    logger.warning("[OEC_TMS] fetch_pod_by_wo raised: %s", e)
-                    tms_pod = None
-                if tms_pod:
-                    new_pod_path = tms_pod
-                    await self._emit_send(job, "tms_pod_downloaded", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "fileName": tms_pod.name,
-                        "strategy": "direct_url",
-                    })
-
-            # D/O sender via direct URL
-            await self._emit_send(job, "tms_fetching_do_sender_direct", {
-                "invoiceNumber": invoice.invoice_number,
-                "containerNumber": invoice.container_number,
-                "woNo": wo_no,
-            })
-            try:
-                tms_do_sender = await self._tms.fetch_do_sender_by_wo(
-                    wo_no, detail_type, invoice.container_number,
-                    invoice.invoice_number,
-                )
-            except Exception as e:
-                logger.warning("[OEC_TMS] fetch_do_sender_by_wo raised: %s", e)
-                tms_do_sender = None
-            logger.info("[OEC_TMS] fetch_do_sender_by_wo returned: '%s'",
-                        tms_do_sender or "")
-
-        # ── Grid fallback (only if direct-URL didn't satisfy the request) ──
-        need_pod = (not pod_path) and (not new_pod_path)
-        need_do_sender = not tms_do_sender
-        if need_pod or need_do_sender:
-            if direct_url_tried:
-                logger.info("[OEC_TMS] Direct-URL incomplete (need_pod=%s, need_do_sender=%s) — falling back to grid",
-                            need_pod, need_do_sender)
-
-            if need_pod:
-                # Need both POD and DO SENDER — single grid trip
-                await self._emit_send(job, "tms_fetching_pod", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "containerNumber": invoice.container_number,
-                })
-                tms_pod, grid_do_sender = await self._tms.fetch_pod_and_do_sender(
-                    invoice.container_number, temp_dir,
-                    invoice_number=invoice.invoice_number,
-                )
-                logger.info("[OEC_TMS] fetch_pod_and_do_sender (grid) returned: pod=%s, do_sender='%s'",
-                            tms_pod.name if tms_pod else None,
-                            grid_do_sender or "")
-                if tms_pod:
-                    new_pod_path = tms_pod
-                    await self._emit_send(job, "tms_pod_downloaded", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "fileName": tms_pod.name,
-                        "strategy": "grid",
-                    })
-                else:
-                    await self._emit_send(job, "tms_pod_not_found", {
-                        "invoiceNumber": invoice.invoice_number,
-                        "containerNumber": invoice.container_number,
-                    })
-                if grid_do_sender and not tms_do_sender:
-                    tms_do_sender = grid_do_sender
-            elif need_do_sender:
-                # POD already present (from QBO or direct-URL fetch) — just grid-fetch D/O sender
-                logger.info("[OEC_TMS] POD present — fetching DO SENDER only via grid for %s",
-                            invoice.container_number)
-                await self._emit_send(job, "tms_fetching_do_sender", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "containerNumber": invoice.container_number,
-                })
-                grid_do_sender = await self._tms.fetch_do_sender_email(
-                    invoice.container_number,
-                    invoice_number=invoice.invoice_number,
-                )
-                logger.info("[OEC_TMS] fetch_do_sender_email (grid) returned: '%s'",
-                            grid_do_sender or "")
-                if grid_do_sender:
-                    tms_do_sender = grid_do_sender
-
-        # Common DO-sender assignment
-        if tms_do_sender and not invoice.do_sender_email:
-            invoice.do_sender_email = tms_do_sender
-            logger.info("[OEC_TMS] DO SENDER from TMS assigned: %s → invoice.do_sender_email",
-                        tms_do_sender)
-        elif tms_do_sender and invoice.do_sender_email:
-            logger.info("[OEC_TMS] DO SENDER from TMS '%s' ignored — CSV already has '%s'",
-                        tms_do_sender, invoice.do_sender_email)
-        elif not tms_do_sender:
-            tms_failure_reason = "TMS extraction returned no D/O sender (search or field extraction failed)"
-            logger.warning("[OEC_TMS] TMS returned no DO SENDER for %s",
-                           invoice.container_number)
-            await self._emit_send(job, "tms_do_sender_extraction_failed", {
-                "invoiceNumber": invoice.invoice_number,
-                "containerNumber": invoice.container_number,
-                "message": tms_failure_reason,
-            })
-
-        logger.info("[OEC_TMS] After TMS: invoice.do_sender_email = '%s'",
-                    invoice.do_sender_email or "")
-        return new_pod_path, tms_failure_reason, tms_attempted, pod_via_api, do_sender_via_api
