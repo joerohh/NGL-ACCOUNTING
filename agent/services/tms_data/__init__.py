@@ -226,17 +226,35 @@ class TMSDataLayer:
                 job_id, ctx["invoice_data"],
                 source=source, force=ctx.get("force", False),
             )
-        elif ctx["operation"] == "get_document":
-            await self.get_document(
+            rows_after = len(self._failed.get_rows(job_id))
+            return rows_after == rows_before
+
+        if ctx["operation"] == "get_document":
+            path = await self.get_document(
                 job_id, ctx["invoice_data"], ctx["doc_type"],
                 ctx["dest_dir"], source=source,
             )
-        else:
+            rows_after = len(self._failed.get_rows(job_id))
+
+            if path is not None:
+                return True
+            if rows_after > rows_before:
+                # get_document already recorded a new failure (network error, etc.).
+                return False
+            # No path returned and no new failure recorded — WO genuinely has no such doc.
+            new_row_id = self._failed.record_failure(
+                job_id=job_id,
+                invoice_number=_invoice_label(ctx["invoice_data"]),
+                container_number=None,
+                operation="get_document",
+                doc_type=ctx["doc_type"],
+                error_message=f"Document {ctx['doc_type']} not present on WO",
+                source="tms_api" if source == "api" else "tms_browser",
+            )
+            self._retry_ctx[new_row_id] = ctx
             return False
 
-        rows_after = len(self._failed.get_rows(job_id))
-        # Success = the just-run op did not record a new failure row for this job.
-        return rows_after == rows_before
+        return False
 
     async def retry_all_failed(self, job_id: str, source: Source) -> dict:
         """Retry every row currently in the failed-rows list. Returns counts."""

@@ -288,3 +288,32 @@ def test_invoice_label_whitespace_docnumber_falls_back_to_id():
 def test_invoice_label_no_id_returns_unknown():
     from services.tms_data import _invoice_label
     assert _invoice_label({"DocNumber": "", "Id": None}) == "<unknown>"
+
+
+@pytest.mark.asyncio
+async def test_retry_get_document_records_when_doc_absent_on_wo(tmp_path):
+    """If the WO exists but has no doc of the requested type, record it as still-failed."""
+    qbo, tms_api, browser = MagicMock(), AsyncMock(), AsyncMock()
+    # First call: error (creates failed row)
+    tms_api.get_work_order.side_effect = RuntimeError("fail")
+    layer = TMSDataLayer(qbo, tms_api, browser)
+    invoice_data = {
+        "DocNumber": "INV-Z",
+        "Id": "9",
+        "CustomField": [{"Name": "NGL REF#", "StringValue": "WO99/X"}],
+    }
+    await layer.get_document("j", invoice_data, "POD", tmp_path)
+    rows_before = layer.get_failed_rows("j")
+    assert len(rows_before) == 1
+    row_id = rows_before[0].row_id
+
+    # Retry: WO exists but has no POD on it. run_document returns (None, None) — not an error.
+    tms_api.get_work_order.side_effect = None
+    tms_api.get_work_order.return_value = {"documents": []}
+
+    ok = await layer.retry_failed_row("j", row_id, source="api")
+    assert ok is False, "POD genuinely absent on WO — retry must report failure"
+    rows_after = layer.get_failed_rows("j")
+    assert len(rows_after) == 1
+    assert "not present" in rows_after[0].error_message.lower() \
+        or "no doc" in rows_after[0].error_message.lower()
