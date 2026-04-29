@@ -804,6 +804,7 @@ async function invSendViaQBO() {
 
   // Reset send state
   sendState.jobId = null;
+  invRenderFailedRows([]);
   sendState.isRunning = true;
   sendState.testMode = testMode;
   sendState.results = [];
@@ -1040,37 +1041,14 @@ const _sendEventHandlers = {
   },
 
   // ── TMS flow events ──
-  tms_api_attempt(event) {
-    invAddLog('info', '  [TMS API] Calling REST API for WO# ' + (event.woNo || '') + '...');
-  },
-  tms_api_success(event) {
-    invAddLog('success', '  [TMS API] ✓ Success — POD + D/O sender retrieved (browser bypassed)' +
-      (event.podBytes ? ' — ' + Math.round(event.podBytes / 1024) + ' KB' : ''));
-  },
-  tms_fetching_pod(event) {
-    invAddLog('info', '  [TMS] ' + (event.message || 'Searching TMS for POD...') + (event.containerNumber ? ' (container: ' + event.containerNumber + ')' : ''));
+  tms_fetching_docs(event) {
+    const types = (event.docTypes || []).join(', ').toUpperCase() || 'docs';
+    invAddLog('info', '  [TMS API] Fetching ' + types + ' for ' + (event.invoiceNumber || '') +
+      (event.containerNumber ? ' (container: ' + event.containerNumber + ')' : '') + '...');
   },
   tms_pod_downloaded(event) {
     const tag = event.strategy === 'api' ? '[TMS API]' : '[TMS]';
     invAddLog('success', '  ' + tag + ' POD downloaded: ' + (event.fileName || ''));
-  },
-  tms_pod_not_found(event) {
-    invAddLog('warning', '  [TMS] POD not found in TMS for container ' + (event.containerNumber || ''));
-  },
-  tms_login_required(event) {
-    invAddLog('warning', '  [TMS] ' + (event.message || 'TMS login required — please log in now'));
-    invSetStepText('Waiting for TMS login...');
-    invShowTmsLoginPrompt();
-  },
-  tms_logged_in(event) {
-    invAddLog('success', '  [TMS] ' + (event.message || 'TMS login successful'));
-    invSetStepText('TMS connected — fetching POD...');
-    invDismissTmsLoginPrompt();
-  },
-  tms_login_timeout(event) {
-    invAddLog('warning', '  [TMS] ' + (event.message || 'TMS login timed out — continuing without POD'));
-    invSetStepText('Continuing without TMS...');
-    invDismissTmsLoginPrompt();
   },
   tms_not_available(event) {
     invAddLog('warning', '  [TMS] ' + (event.message || 'TMS browser not available — D/O sender lookup skipped'));
@@ -1078,11 +1056,8 @@ const _sendEventHandlers = {
   tms_not_logged_in(event) {
     invAddLog('warning', '  [TMS] ' + (event.message || 'TMS not logged in — D/O sender lookup skipped'));
   },
-  tms_fetching_do_sender(event) {
-    invAddLog('info', '  [TMS] Fetching D/O sender from TMS for ' + (event.containerNumber || ''));
-  },
-  tms_do_sender_extraction_failed(event) {
-    invAddLog('error', '  [TMS] D/O sender extraction failed: ' + (event.message || 'unknown reason'));
+  failed_rows_changed(event) {
+    invScheduleFailedRowsRefetch();
   },
 
   // ── Portal flow events ──
@@ -1575,6 +1550,127 @@ async function invLoadAuditLog() {
   panel.innerHTML = html;
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Failed Rows box — populated by SSE failed_rows_changed events.
+// ────────────────────────────────────────────────────────────────────
+
+let _invFailedRowsRefetchTimer = null;
+
+async function invFetchFailedRows(jobId) {
+  if (!jobId) return [];
+  try {
+    const r = await fetch('http://localhost:8787/jobs/' + encodeURIComponent(jobId) + '/failed-rows');
+    if (!r.ok) return [];
+    const body = await r.json();
+    return body.rows || [];
+  } catch (e) {
+    console.warn('Failed to fetch failed rows:', e);
+    return [];
+  }
+}
+
+function invRenderFailedRows(rows) {
+  const box = document.getElementById('invFailedRowsBox');
+  const list = document.getElementById('invFailedRowsList');
+  const count = document.getElementById('invFailedRowsCount');
+  if (!box || !list || !count) return;
+
+  if (!rows || rows.length === 0) {
+    box.style.display = 'none';
+    list.innerHTML = '';
+    count.textContent = '0';
+    return;
+  }
+
+  box.style.display = 'block';
+  count.textContent = String(rows.length);
+
+  list.innerHTML = rows.map(function(row) {
+    const browserDisabled = row.operation === 'enrich_invoice';
+    const opLabel = row.operation === 'get_document'
+      ? (row.doc_type || 'doc').toUpperCase()
+      : 'ENRICH';
+    const containerCell = row.container_number
+      ? '<span class="failed-row__container">' + escHtml(row.container_number) + '</span>'
+      : '';
+    const rowIdAttr = escHtml(row.row_id);
+    const browserBtnAttrs = browserDisabled
+      ? ' disabled title="Browser retry not yet supported for enrichment"'
+      : '';
+
+    return (
+      '<div class="failed-row" data-row-id="' + rowIdAttr + '">' +
+        '<div class="failed-row__label">' +
+          '<div>' +
+            '<span class="failed-row__op">' + escHtml(opLabel) + '</span> ' +
+            '<span class="failed-row__invoice">' + escHtml(row.invoice_number || '(no #)') + '</span>' +
+            containerCell +
+          '</div>' +
+          '<div class="failed-row__error" title="' + escHtml(row.error_message || '') + '">' +
+            escHtml(row.error_message || '') +
+          '</div>' +
+        '</div>' +
+        '<div class="failed-row__buttons">' +
+          '<button class="failed-row__retry-btn" ' +
+            'onclick="invFailedRetryRow(\'' + rowIdAttr + '\', \'api\')">Retry (API)</button>' +
+          '<button class="failed-row__retry-btn failed-row__retry-btn--browser' +
+            (browserDisabled ? ' failed-row__retry-btn--disabled' : '') + '"' +
+            browserBtnAttrs + ' ' +
+            'onclick="invFailedRetryRow(\'' + rowIdAttr + '\', \'browser\')">Retry (Browser)</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function invScheduleFailedRowsRefetch() {
+  if (_invFailedRowsRefetchTimer) clearTimeout(_invFailedRowsRefetchTimer);
+  _invFailedRowsRefetchTimer = setTimeout(function() {
+    _invFailedRowsRefetchTimer = null;
+    invFetchFailedRows(sendState.jobId).then(invRenderFailedRows);
+  }, 100);
+}
+
+async function invFailedRetryRow(rowId, source) {
+  if (!sendState.jobId) return;
+  try {
+    const r = await fetch(
+      'http://localhost:8787/jobs/' + encodeURIComponent(sendState.jobId) +
+        '/failed-rows/' + encodeURIComponent(rowId) +
+        '/retry?source=' + encodeURIComponent(source),
+      { method: 'POST' }
+    );
+    const body = await r.json();
+    const rows = await invFetchFailedRows(sendState.jobId);
+    invRenderFailedRows(rows);
+    invAddLog(body.succeeded ? 'success' : 'warning',
+      '  [Retry ' + source + '] ' + (body.succeeded ? 'Succeeded for' : 'Still failing for') + ' row ' + rowId);
+  } catch (e) {
+    console.error('Retry failed:', e);
+    invAddLog('error', '  [Retry ' + source + '] Network error: ' + e);
+  }
+}
+
+async function invFailedRetryAll(source) {
+  if (!sendState.jobId) return;
+  try {
+    const r = await fetch(
+      'http://localhost:8787/jobs/' + encodeURIComponent(sendState.jobId) +
+        '/failed-rows/retry-all?source=' + encodeURIComponent(source),
+      { method: 'POST' }
+    );
+    const body = await r.json();
+    const rows = await invFetchFailedRows(sendState.jobId);
+    invRenderFailedRows(rows);
+    invAddLog('info',
+      '  [Retry all ' + source + '] ' + (body.succeeded || 0) + ' succeeded, ' +
+      (body.still_failed || 0) + ' still failed');
+  } catch (e) {
+    console.error('Retry all failed:', e);
+    invAddLog('error', '  [Retry all ' + source + '] Network error: ' + e);
+  }
+}
+
 // ── Window assignments for inline HTML handlers ──
 window.invHandleCsvDrop = invHandleCsvDrop;
 window.invHandleCsvInput = invHandleCsvInput;
@@ -1594,3 +1690,5 @@ window.invApprovalDecision = invApprovalDecision;
 window.invLoadAuditLog = invLoadAuditLog;
 window.invToggleTestLimitVisibility = invToggleTestLimitVisibility;
 window.invResendAll = invResendAll;
+window.invFailedRetryRow = invFailedRetryRow;
+window.invFailedRetryAll = invFailedRetryAll;
