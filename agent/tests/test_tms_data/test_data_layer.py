@@ -70,3 +70,72 @@ async def test_enrich_invoice_records_failure_in_failed_rows():
     assert rows[0].operation == "enrich_invoice"
     assert rows[0].failed_at_source == "tms_api"
     assert "DNS fail" in rows[0].error_message
+
+
+@pytest.mark.asyncio
+async def test_get_document_via_api(tmp_path):
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value={
+        "documents": [{"type_": "POD", "file_url": "https://cdn.example/pod.pdf"}],
+    })
+    tms_api.download_document = AsyncMock(return_value=b"pod data")
+    tms_browser = AsyncMock()
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    invoice = _qbo_invoice(wo="LM01")
+    invoice["DocNumber"] = "LM26040454F"
+
+    path = await dl.get_document("job-1", invoice, "POD", tmp_path)
+
+    assert path is not None
+    assert path.read_bytes() == b"pod data"
+    assert dl.get_failed_rows("job-1") == []
+
+
+@pytest.mark.asyncio
+async def test_get_document_records_failure_on_api_error(tmp_path):
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(side_effect=RuntimeError("network"))
+    tms_browser = AsyncMock()
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    invoice = _qbo_invoice(wo="LM01")
+    invoice["DocNumber"] = "LM26040454F"
+
+    path = await dl.get_document("job-1", invoice, "POD", tmp_path)
+
+    assert path is None
+    rows = dl.get_failed_rows("job-1")
+    assert len(rows) == 1
+    assert rows[0].operation == "get_document"
+    assert rows[0].doc_type == "POD"
+
+
+@pytest.mark.asyncio
+async def test_get_documents_returns_dict_of_found(tmp_path):
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value={
+        "documents": [
+            {"type_": "POD", "file_url": "https://cdn.example/pod.pdf"},
+            {"type_": "BL", "file_url": "https://cdn.example/bl.pdf"},
+        ],
+    })
+
+    async def _download(url):
+        return b"pod" if "pod" in url else b"bl"
+    tms_api.download_document = AsyncMock(side_effect=_download)
+    tms_browser = AsyncMock()
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    invoice = _qbo_invoice(wo="LM01")
+    invoice["DocNumber"] = "LM26040454F"
+
+    paths = await dl.get_documents("job-1", invoice, ["POD", "BL", "MISSING"], tmp_path)
+
+    assert "POD" in paths
+    assert "BL" in paths
+    assert "MISSING" not in paths
+    assert paths["POD"].read_bytes() == b"pod"

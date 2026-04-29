@@ -66,6 +66,55 @@ class TMSDataLayer:
 
         return enriched
 
+    async def get_document(
+        self,
+        job_id: str,
+        invoice_data: dict,
+        doc_type: str,
+        dest_dir: Path,
+        source: Source = "api",
+    ) -> Optional[Path]:
+        """Fetch a single doc to disk. None if not found anywhere."""
+        if source == "browser":
+            invoice_number = str(invoice_data.get("DocNumber") or "")
+            path, err = await run_document_browser(
+                invoice_data, doc_type, dest_dir, self._tms_browser, invoice_number,
+            )
+            failed_at = "tms_browser"
+        else:
+            path, err = await run_document(
+                invoice_data, doc_type, dest_dir, self._tms_api,
+            )
+            failed_at = "tms_api"
+
+        if err:
+            self._failed.record_failure(
+                job_id=job_id,
+                invoice_number=str(invoice_data.get("DocNumber") or ""),
+                container_number=None,
+                operation="get_document",
+                doc_type=doc_type,
+                error_message=err,
+                source=failed_at,
+            )
+        return path
+
+    async def get_documents(
+        self,
+        job_id: str,
+        invoice_data: dict,
+        doc_types: list[str],
+        dest_dir: Path,
+        source: Source = "api",
+    ) -> dict[str, Path]:
+        """Fetch multiple docs. Returns dict of doc_type → path (only found ones)."""
+        out: dict[str, Path] = {}
+        for dt in doc_types:
+            p = await self.get_document(job_id, invoice_data, dt, dest_dir, source)
+            if p is not None:
+                out[dt] = p
+        return out
+
     # ── Failed-rows queries (more methods added in Tasks 11-13) ────
 
     def get_failed_rows(self, job_id: str) -> list[FailedRow]:
