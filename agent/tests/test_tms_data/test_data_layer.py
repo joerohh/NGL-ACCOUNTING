@@ -255,3 +255,21 @@ async def test_retry_enrich_does_not_cross_contaminate_on_empty_docnumber():
 
     remaining = layer.get_failed_rows("j")
     assert len(remaining) == 1, "row_b's failure must not have been removed"
+
+
+@pytest.mark.asyncio
+async def test_failed_row_uses_id_when_docnumber_empty():
+    """Empty DocNumber should fall back to QBO Id so the UI shows something."""
+    qbo, tms_api, browser = MagicMock(), AsyncMock(), AsyncMock()
+    tms_api.get_work_order.side_effect = RuntimeError("boom")
+
+    layer = TMSDataLayer(qbo, tms_api, browser)
+    invoice_data = {
+        "DocNumber": "",
+        "Id": "QBO-42",
+        "CustomField": [{"Name": "NGL REF#", "StringValue": "WO/X"}],
+    }
+
+    await layer.enrich_invoice("j", invoice_data, force=True)
+    rows = layer.get_failed_rows("j")
+    assert rows[0].invoice_number == "QBO-42"

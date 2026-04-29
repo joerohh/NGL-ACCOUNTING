@@ -20,6 +20,17 @@ logger = logging.getLogger("ngl.tms_data")
 Source = Literal["api", "browser"]
 
 
+def _invoice_label(invoice_data: dict) -> str:
+    """Return DocNumber, falling back to Id, falling back to '<unknown>'."""
+    doc = invoice_data.get("DocNumber")
+    if isinstance(doc, str) and doc.strip():
+        return doc.strip()
+    inv_id = invoice_data.get("Id")
+    if inv_id:
+        return str(inv_id)
+    return "<unknown>"
+
+
 class TMSDataLayer:
     """Single gateway between tools and the QBO/TMS sources.
 
@@ -113,7 +124,7 @@ class TMSDataLayer:
         if err:
             row_id = self._failed.record_failure(
                 job_id=job_id,
-                invoice_number=str(invoice_data.get("DocNumber") or ""),
+                invoice_number=_invoice_label(invoice_data),
                 container_number=enriched.container_no,
                 operation="enrich_invoice",
                 doc_type=None,
@@ -153,7 +164,7 @@ class TMSDataLayer:
         if err:
             row_id = self._failed.record_failure(
                 job_id=job_id,
-                invoice_number=str(invoice_data.get("DocNumber") or ""),
+                invoice_number=_invoice_label(invoice_data),
                 container_number=None,
                 operation="get_document",
                 doc_type=doc_type,
