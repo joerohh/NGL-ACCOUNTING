@@ -2,10 +2,22 @@
 
 import asyncio
 import logging
+import socket
 import time
 import uuid
 
+import httpx
+
 from config import CONTAINER_TIMEOUT_S
+
+# Transient network errors worth retrying once (DNS blip, dropped connection, etc.)
+_TRANSIENT_NET_ERRORS = (
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.RemoteProtocolError,
+    httpx.ConnectTimeout,
+    socket.gaierror,
+)
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -121,7 +133,12 @@ class ChassisJobMixin:
         """Look up a single chassis number via QBO API."""
         api = self._qbo_api
 
-        invoice_data = await api.search_invoice(req.invoice_number)
+        try:
+            invoice_data = await api.search_invoice(req.invoice_number)
+        except _TRANSIENT_NET_ERRORS as e:
+            logger.warning("Transient network error for %s (%s) — retrying once", req.invoice_number, e)
+            await asyncio.sleep(1.0)
+            invoice_data = await api.search_invoice(req.invoice_number)
         if not invoice_data:
             result.error = f"Invoice {req.invoice_number} not found in QBO"
             await self._emit(job, "chassis_not_found", {
