@@ -273,3 +273,18 @@ async def test_failed_row_uses_id_when_docnumber_empty():
     await layer.enrich_invoice("j", invoice_data, force=True)
     rows = layer.get_failed_rows("j")
     assert rows[0].invoice_number == "QBO-42"
+
+
+def test_invoice_label_none_docnumber_falls_back_to_id():
+    from services.tms_data import _invoice_label
+    assert _invoice_label({"DocNumber": None, "Id": "99"}) == "99"
+
+
+def test_invoice_label_whitespace_docnumber_falls_back_to_id():
+    from services.tms_data import _invoice_label
+    assert _invoice_label({"DocNumber": "   ", "Id": "99"}) == "99"
+
+
+def test_invoice_label_no_id_returns_unknown():
+    from services.tms_data import _invoice_label
+    assert _invoice_label({"DocNumber": "", "Id": None}) == "<unknown>"
