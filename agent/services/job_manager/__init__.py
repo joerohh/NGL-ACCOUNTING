@@ -307,6 +307,10 @@ class JobManager(
         """Inject the shared TMSApiClient instance (called from main.py lifespan)."""
         self._tms_api = client
 
+    def set_tms_data(self, layer) -> None:
+        """Inject the shared TMSDataLayer instance (called from main.py lifespan)."""
+        self._tms_data = layer
+
     def set_email_sender(self, email_sender) -> None:
         """Swap the email sender at runtime (after Settings UI update)."""
         self._email_sender = email_sender

@@ -148,6 +148,13 @@ class SendJobMixin:
         event = {"type": event_type, "timestamp": time.time(), **data}
         await job.events.put(event)
 
+    async def _emit_failed_rows_changed(self, job, reason: str = "added") -> None:
+        """Push a 'failed_rows_changed' SSE event so the UI re-fetches the list."""
+        await self._emit_send(job, "failed_rows_changed", {
+            "jobId": job.id,
+            "reason": reason,  # "added" | "removed" | "cleared"
+        })
+
     async def _run_send_job(self, job) -> None:
         """Process all invoices in a send job — dispatches to method-specific handlers."""
         try:
@@ -170,6 +177,8 @@ class SendJobMixin:
         from services.job_manager import SendResult
 
         job.status = "running"
+        if self._tms_data:
+            self._tms_data.reset_for_new_job(job.id)
         logger.info("Send job %s starting (%d invoices)", job.id, job.total)
         await self._emit_send(job, "send_job_started", {"total": job.total})
 
