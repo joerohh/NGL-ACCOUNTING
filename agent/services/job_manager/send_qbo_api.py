@@ -55,12 +55,13 @@ class SendQBOApiMixin:
             "docTypes": types_to_fetch,
         })
 
+        rows_before = len(self._tms_data.get_failed_rows(job.id))
         fetched = await self._tms_data.get_documents(
             job.id, invoice_data, types_to_fetch, temp_dir, source="api",
         )
-
-        # Surface any failures the layer just recorded.
-        await self._emit_failed_rows_changed(job, "added")
+        # Surface only when the data layer actually recorded a new failure.
+        if len(self._tms_data.get_failed_rows(job.id)) > rows_before:
+            await self._emit_failed_rows_changed(job, "added")
 
         uploaded: list[str] = []
         for dt in types_to_fetch:

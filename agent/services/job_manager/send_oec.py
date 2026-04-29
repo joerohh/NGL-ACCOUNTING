@@ -74,6 +74,7 @@ class SendOECFlowMixin:
         tms_failure_reason = ""
 
         if self._tms_data:
+            rows_before = len(self._tms_data.get_failed_rows(job.id))
             try:
                 enriched = await asyncio.wait_for(
                     self._tms_data.enrich_invoice(
@@ -88,6 +89,8 @@ class SendOECFlowMixin:
                                 enriched.do_sender_email)
 
                 if not pod_path:
+                    # Each operation gets its own full TMS_FETCH_TIMEOUT_S budget;
+                    # combined worst-case is 2 * TMS_FETCH_TIMEOUT_S.
                     tms_pod = await asyncio.wait_for(
                         self._tms_data.get_document(
                             job.id, invoice_data, "POD", temp_dir, source="api",
@@ -102,8 +105,6 @@ class SendOECFlowMixin:
                             "fileName": pod_path.name,
                             "strategy": "api",
                         })
-
-                await self._emit_failed_rows_changed(job, "added")
             except asyncio.TimeoutError:
                 tms_failure_reason = f"TMS lookup timed out after {TMS_FETCH_TIMEOUT_S}s"
                 logger.warning("[OEC_POD] TMS Data Layer timed out for %s",
@@ -112,6 +113,10 @@ class SendOECFlowMixin:
                     "invoiceNumber": invoice.invoice_number,
                     "message": tms_failure_reason,
                 })
+
+            # Surface only when the data layer actually recorded a new failure.
+            if len(self._tms_data.get_failed_rows(job.id)) > rows_before:
+                await self._emit_failed_rows_changed(job, "added")
         else:
             tms_failure_reason = "TMSDataLayer not configured"
             logger.warning("[OEC_POD] %s — skipping TMS lookup", tms_failure_reason)
