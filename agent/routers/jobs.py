@@ -208,7 +208,7 @@ async def retry_failed_row(
 async def retry_all_failed(
     job_id: str,
     request: Request,
-    source: Literal["api", "browser"] = Query(...),
+    source: Literal["api", "browser"] = Query(..., description="api or browser"),
 ):
     """Retry every currently-failed row in the job. Returns counts."""
     layer = getattr(request.app.state, "tms_data", None)
