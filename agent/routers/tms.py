@@ -58,6 +58,8 @@ async def tms_api_status():
 @router.get("/api-test/{wo_no}")
 async def tms_api_test(wo_no: str):
     """Smoke-test the TMS REST API. Returns WO summary + POD download status."""
+    if _tms_api is None:
+        raise HTTPException(status_code=503, detail="TMS API client not initialized")
     if not _tms_api.is_configured():
         raise HTTPException(status_code=400,
                             detail="TMS_CLIENT_ID/SECRET not set in .env")
@@ -65,8 +67,8 @@ async def tms_api_test(wo_no: str):
     if not wo:
         raise HTTPException(status_code=404,
                             detail=f"Work order {wo_no} not found or API error")
-    pod_url = TMSApiClient.extract_pod_url(wo)
-    do_sender = TMSApiClient.extract_do_sender(wo)
+    pod_url = _tms_api.extract_pod_url(wo)
+    do_sender = _tms_api.extract_do_sender(wo)
     pod_bytes = 0
     if pod_url:
         data = await _tms_api.download_document(pod_url)
