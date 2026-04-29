@@ -24,7 +24,9 @@ from config import (
 from routers import auth, jobs, files, qbo, customers, audit, tms, settings, chassis
 from services.shared_browser import SharedBrowser
 from services.qbo_api import QBOApiClient
+from services.tms_api import TMSApiClient
 from services.tms_browser import TMSBrowser
+from services.tms_data import TMSDataLayer
 from services.claude_classifier import ClaudeClassifier
 from services.email_sender import EmailSender
 from services.portal_uploader import PortalUploader
@@ -55,7 +57,9 @@ def _handle_unhandled_exception(loop, context):
 # ── Shared instances ─────────────────────────────────────────────────
 shared_browser = SharedBrowser()
 qbo_api = QBOApiClient()
+tms_api = TMSApiClient()
 tms_browser = TMSBrowser()
+tms_data = TMSDataLayer(qbo_api, tms_api, tms_browser)
 classifier = None
 email_sender = None
 portal_uploader = None
@@ -297,6 +301,11 @@ async def lifespan(app: FastAPI):
     settings.set_tms_browser(tms_browser)
     settings.set_job_manager(job_manager)
     chassis.set_job_manager(job_manager)
+
+    # Attach the TMS Data Layer to app state so future routers can pick it up.
+    # Not wired into any router or job manager yet — that's milestone 2.
+    app.state.tms_data = tms_data
+    logger.info("TMS Data Layer ready (composed of QBO API + TMS API + TMS browser)")
 
     # Log QBO API status
     if qbo_api.is_connected:
