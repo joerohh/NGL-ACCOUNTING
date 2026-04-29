@@ -194,3 +194,28 @@ def test_reset_for_new_job_clears_rows():
     dl.reset_for_new_job("job-1")
 
     assert dl.get_failed_rows("job-1") == []
+
+
+# force=True tests ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_enrich_invoice_force_kwarg_forwarded():
+    """TMSDataLayer.enrich_invoice forwards force=True to run_enrich."""
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value={"do_sender": ["x@y.com"]})
+    tms_browser = AsyncMock()
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    # QBO already has chassis + cnee — force=True is needed to make TMS get called.
+    invoice = {
+        "DocNumber": "INV-100",
+        "CustomField": [
+            {"Name": "NGL REF#", "StringValue": "WO9/CUST-REF"},
+            {"Name": "CNTR# / CHASSIS#", "StringValue": "TGBU6571759/CHX1"},
+        ],
+        "CustomerMemo": {"value": "Pickup\nNGLPORT --> CNEE --> NGLPORT"},
+    }
+    enriched = await dl.enrich_invoice("job-1", invoice, force=True)
+    assert tms_api.get_work_order.await_count == 1
+    assert enriched.do_sender_email == "x@y.com"

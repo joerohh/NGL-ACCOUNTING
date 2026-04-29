@@ -23,11 +23,20 @@ from services.tms_data.extractors import (
 logger = logging.getLogger("ngl.tms_data.cascade")
 
 
-async def run_enrich(invoice_data: dict, tms_api) -> Tuple[EnrichedInvoice, Optional[str]]:
+async def run_enrich(
+    invoice_data: dict,
+    tms_api,
+    force: bool = False,
+) -> Tuple[EnrichedInvoice, Optional[str]]:
     """Build an EnrichedInvoice from QBO data, filling blanks via TMS API.
 
     Returns (enriched, error). error is non-None only when the TMS API call
     raised (DNS, network, 5xx). 404 is treated as no-data, not an error.
+
+    When force=True, TMS is queried even if QBO already has chassis+CNEE.
+    Used by the OEC flow to guarantee do_sender_email is populated, since
+    that field lives only in TMS but the QBO-complete short-circuit would
+    otherwise skip the call.
     """
     # Step 1: read what QBO already gave us
     wo_no = extract_wo_from_qbo(invoice_data)
@@ -44,13 +53,10 @@ async def run_enrich(invoice_data: dict, tms_api) -> Tuple[EnrichedInvoice, Opti
         "do_sender_email": "missing",
     }
 
-    # Step 2: short-circuit if QBO already has the QBO-fillable fields
-    # (container_no / do_sender_email are TMS-only, so we don't gate on them —
-    # otherwise we'd always call TMS when wo_no is present).
-    needs_tms = (
-        wo_no  # can only call TMS if we know the WO#
-        and (not chassis or not cnee)
-    )
+    # Step 2: short-circuit if QBO already has chassis+CNEE AND caller didn't force.
+    # do_sender_email is TMS-only, so non-force callers accept it stays None.
+    # OEC callers pass force=True to guarantee do_sender_email is fetched.
+    needs_tms = bool(wo_no) and (force or not chassis or not cnee)
     if not needs_tms:
         return EnrichedInvoice(
             wo_no=wo_no, container_no=container_no, chassis=chassis,

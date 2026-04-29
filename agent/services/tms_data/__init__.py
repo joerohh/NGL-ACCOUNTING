@@ -41,9 +41,11 @@ class TMSDataLayer:
         job_id: str,
         invoice_data: dict,
         source: Source = "api",
+        force: bool = False,
     ) -> EnrichedInvoice:
         """Fill in missing chassis / CNEE / D/O sender from TMS.
 
+        force=True bypasses the QBO-complete short-circuit (used by OEC for do_sender_email).
         Failures during the cascade are recorded in the failed-rows tracker
         but the partially-filled EnrichedInvoice is still returned.
         """
@@ -51,7 +53,7 @@ class TMSDataLayer:
             enriched, err = await run_enrich_browser(invoice_data, self._tms_browser)
             failed_at = "tms_browser"
         else:
-            enriched, err = await run_enrich(invoice_data, self._tms_api)
+            enriched, err = await run_enrich(invoice_data, self._tms_api, force=force)
             failed_at = "tms_api"
 
         if err:

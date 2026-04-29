@@ -195,3 +195,36 @@ async def test_run_document_download_returns_none_is_error(tmp_path):
     assert path is None
     assert err is not None
     assert "download" in err.lower()
+
+
+# force=True tests ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_run_enrich_force_calls_tms_even_when_qbo_complete():
+    """force=True bypasses the QBO-complete short-circuit so do_sender is fetched."""
+    # QBO already has chassis + cnee — without force, TMS wouldn't be called.
+    invoice = _qbo_invoice(wo="LM2602170009", chassis="CHX9999", cnee="ACME")
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=_tms_wo(
+        container="TGBU6571759", do_sender="sender@example.com"
+    ))
+
+    enriched, err = await run_enrich(invoice, tms_api, force=True)
+
+    assert err is None
+    assert tms_api.get_work_order.await_count == 1, "force=True must hit TMS API"
+    assert enriched.do_sender_email == "sender@example.com"
+    assert enriched.sources["do_sender_email"] == "tms_api"
+
+
+@pytest.mark.asyncio
+async def test_run_enrich_default_skips_tms_when_qbo_complete():
+    """Without force, QBO chassis+cnee means no TMS call (optimization preserved)."""
+    invoice = _qbo_invoice(wo="LM2602170009", chassis="CHX9999", cnee="ACME")
+    tms_api = AsyncMock()
+
+    enriched, err = await run_enrich(invoice, tms_api)
+
+    assert err is None
+    assert tms_api.get_work_order.await_count == 0, "default path must skip TMS"
+    assert enriched.do_sender_email is None
