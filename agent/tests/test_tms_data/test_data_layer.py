@@ -228,3 +228,30 @@ async def test_enrich_invoice_force_with_browser_source_raises():
     layer = TMSDataLayer(qbo, tms_api, browser)
     with pytest.raises(ValueError, match="force=True is only supported"):
         await layer.enrich_invoice("job", {"DocNumber": "X"}, source="browser", force=True)
+
+
+@pytest.mark.asyncio
+async def test_retry_enrich_does_not_cross_contaminate_on_empty_docnumber():
+    """Two invoices with empty DocNumber must not collide on retry."""
+    qbo, tms_api, browser = MagicMock(), AsyncMock(), AsyncMock()
+    tms_api.get_work_order.side_effect = RuntimeError("network down")
+
+    layer = TMSDataLayer(qbo, tms_api, browser)
+    inv_a = {"DocNumber": "", "Id": "10", "CustomField": [{"Name": "NGL REF#", "StringValue": "WO-A/X"}]}
+    inv_b = {"DocNumber": "", "Id": "11", "CustomField": [{"Name": "NGL REF#", "StringValue": "WO-B/Y"}]}
+
+    await layer.enrich_invoice("j", inv_a, force=True)
+    await layer.enrich_invoice("j", inv_b, force=True)
+
+    rows = layer.get_failed_rows("j")
+    assert len(rows) == 2
+    row_a = rows[0]
+
+    # Retry only row_a; row_b's failure must remain.
+    tms_api.get_work_order.side_effect = None
+    tms_api.get_work_order.return_value = {"container_no": "X"}
+    ok = await layer.retry_failed_row("j", row_a.row_id, source="api")
+    assert ok is True
+
+    remaining = layer.get_failed_rows("j")
+    assert len(remaining) == 1, "row_b's failure must not have been removed"

@@ -33,7 +33,7 @@ class TMSDataLayer:
         self._tms_api = tms_api
         self._tms_browser = tms_browser
         self._failed = FailedRowsTracker()
-        self._retry_ctx: dict[str, dict] = {}  # row_id -> {operation, invoice_data, doc_type, dest_dir}
+        self._retry_ctx: dict[str, dict] = {}  # row_id -> {operation, invoice_data, force?, doc_type?, dest_dir?}
         # Per-job WO cache: (job_id, wo_no) -> wo_record. Avoids redundant TMS API
         # calls when the same job needs both enrich and document-fetch on one WO.
         self._wo_cache: dict[tuple[str, str], dict] = {}
@@ -111,7 +111,7 @@ class TMSDataLayer:
             failed_at = "tms_api"
 
         if err:
-            self._failed.record_failure(
+            row_id = self._failed.record_failure(
                 job_id=job_id,
                 invoice_number=str(invoice_data.get("DocNumber") or ""),
                 container_number=enriched.container_no,
@@ -120,10 +120,10 @@ class TMSDataLayer:
                 error_message=err,
                 source=failed_at,
             )
-            row_id_for_ctx = self._failed.get_rows(job_id)[-1].row_id
-            self._retry_ctx[row_id_for_ctx] = {
+            self._retry_ctx[row_id] = {
                 "operation": "enrich_invoice",
                 "invoice_data": invoice_data,
+                "force": force,  # remember for retry
             }
 
         return enriched
@@ -151,7 +151,7 @@ class TMSDataLayer:
             failed_at = "tms_api"
 
         if err:
-            self._failed.record_failure(
+            row_id = self._failed.record_failure(
                 job_id=job_id,
                 invoice_number=str(invoice_data.get("DocNumber") or ""),
                 container_number=None,
@@ -160,8 +160,7 @@ class TMSDataLayer:
                 error_message=err,
                 source=failed_at,
             )
-            row_id_for_ctx = self._failed.get_rows(job_id)[-1].row_id
-            self._retry_ctx[row_id_for_ctx] = {
+            self._retry_ctx[row_id] = {
                 "operation": "get_document",
                 "invoice_data": invoice_data,
                 "doc_type": doc_type,
@@ -206,24 +205,27 @@ class TMSDataLayer:
         if row is None or ctx is None:
             return False
 
-        # Remove the old failure entry first; new failures (if any) will be re-recorded.
         self._failed.remove_row(job_id, row_id)
         self._retry_ctx.pop(row_id, None)
 
+        rows_before = len(self._failed.get_rows(job_id))
+
         if ctx["operation"] == "enrich_invoice":
-            await self.enrich_invoice(job_id, ctx["invoice_data"], source=source)
-            # Success = no new failure for this invoice was just recorded.
-            return not any(
-                r.invoice_number == row.invoice_number and r.operation == "enrich_invoice"
-                for r in self._failed.get_rows(job_id)
+            await self.enrich_invoice(
+                job_id, ctx["invoice_data"],
+                source=source, force=ctx.get("force", False),
             )
         elif ctx["operation"] == "get_document":
-            path = await self.get_document(
+            await self.get_document(
                 job_id, ctx["invoice_data"], ctx["doc_type"],
                 ctx["dest_dir"], source=source,
             )
-            return path is not None
-        return False
+        else:
+            return False
+
+        rows_after = len(self._failed.get_rows(job_id))
+        # Success = the just-run op did not record a new failure row for this job.
+        return rows_after == rows_before
 
     async def retry_all_failed(self, job_id: str, source: Source) -> dict:
         """Retry every row currently in the failed-rows list. Returns counts."""
