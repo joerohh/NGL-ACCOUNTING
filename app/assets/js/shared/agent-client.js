@@ -201,17 +201,11 @@ export const agentBridge = {
         'portal_downloading', 'portal_merging', 'portal_uploading',
         'portal_upload_success', 'portal_upload_failed',
         // TMS flow events
-        'tms_fetching_pod', 'tms_pod_downloaded', 'tms_pod_not_found', 'tms_login_required',
-        'tms_logged_in', 'tms_login_timeout', 'tms_not_available',
+        'tms_fetching_docs', 'tms_pod_downloaded', 'tms_not_available',
         'tms_fetch_timeout', 'tms_fetch_error',
-        'tms_fetching_do_sender', 'tms_do_sender_extraction_failed',
         'oec_do_sender_resolved', 'oec_do_sender_missing', 'do_sender_from_cache',
-        'uploading_pod_to_qbo', 'pod_uploaded_to_qbo', 'pod_upload_failed',
-        // Direct-URL (WO# from QBO) TMS events — v2.29+
-        'tms_fetching_pod_direct', 'tms_fetching_do_sender_direct',
-        'tms_fetching_doc_direct', 'tms_doc_not_found',
-        // TMS REST API events — v2.33+
-        'tms_api_attempt', 'tms_api_success',
+        'tms_doc_not_found',
+        'failed_rows_changed',
         'uploading_doc_to_qbo', 'doc_uploaded_to_qbo', 'doc_upload_failed',
         'oec_invoice_cc_built',
         // Chassis finder events
