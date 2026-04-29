@@ -61,3 +61,17 @@ def test_get_failed_rows_returns_recorded_failures(client, app):
     assert body["rows"][0]["invoice_number"] == "INV-1"
     assert body["rows"][0]["doc_type"] == "POD"
     assert body["rows"][0]["failed_at_source"] == "tms_api"
+
+
+def test_get_failed_rows_503_when_tms_data_missing():
+    """If app.state.tms_data is missing, return 503 not 500."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import jobs as jobs_router
+
+    app = FastAPI()
+    app.include_router(jobs_router.router)
+    # NOTE: do NOT set app.state.tms_data
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.get("/jobs/anything/failed-rows")
+    assert r.status_code == 503

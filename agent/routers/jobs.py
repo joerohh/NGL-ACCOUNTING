@@ -182,6 +182,8 @@ async def skip_send(job_id: str):
 @router.get("/{job_id}/failed-rows")
 async def get_failed_rows(job_id: str, request: Request):
     """List failed rows for a job. UI polls this on SSE event or page load."""
-    layer = request.app.state.tms_data
+    layer = getattr(request.app.state, "tms_data", None)
+    if layer is None:
+        raise HTTPException(503, "TMS Data Layer not initialized")
     rows = layer.get_failed_rows(job_id)
     return {"rows": [asdict(r) for r in rows]}
