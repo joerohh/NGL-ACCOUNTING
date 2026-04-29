@@ -47,3 +47,55 @@ class TestRecordAndRetrieve:
         assert len(t.get_rows("job-B")) == 1
         assert t.get_rows("job-A")[0].invoice_number == "INV1"
         assert t.get_rows("job-B")[0].invoice_number == "INV2"
+
+
+class TestRemoveRow:
+    def test_remove_existing_row_returns_true(self):
+        t = FailedRowsTracker()
+        row_id = t.record_failure("job-1", "INV1", "C1", "get_document", "POD", "err", "tms_api")
+        assert t.remove_row("job-1", row_id) is True
+        assert t.get_rows("job-1") == []
+
+    def test_remove_unknown_row_returns_false(self):
+        t = FailedRowsTracker()
+        t.record_failure("job-1", "INV1", "C1", "get_document", "POD", "err", "tms_api")
+        assert t.remove_row("job-1", "row-nonexistent") is False
+        assert len(t.get_rows("job-1")) == 1
+
+    def test_remove_unknown_job_returns_false(self):
+        t = FailedRowsTracker()
+        assert t.remove_row("unknown-job", "row-X") is False
+
+
+class TestFindRow:
+    def test_finds_existing_row(self):
+        t = FailedRowsTracker()
+        row_id = t.record_failure("job-1", "INV1", "C1", "get_document", "POD", "err", "tms_api")
+        row = t.find_row("job-1", row_id)
+        assert row is not None
+        assert row.invoice_number == "INV1"
+
+    def test_returns_none_for_unknown_row(self):
+        t = FailedRowsTracker()
+        assert t.find_row("job-1", "row-X") is None
+
+
+class TestReset:
+    def test_reset_clears_job(self):
+        t = FailedRowsTracker()
+        t.record_failure("job-1", "INV1", "C1", "get_document", "POD", "err", "tms_api")
+        t.record_failure("job-1", "INV2", "C2", "get_document", "BL", "err", "tms_api")
+        t.reset("job-1")
+        assert t.get_rows("job-1") == []
+
+    def test_reset_unknown_job_is_safe(self):
+        t = FailedRowsTracker()
+        t.reset("unknown-job")  # must not raise
+
+    def test_reset_does_not_affect_other_jobs(self):
+        t = FailedRowsTracker()
+        t.record_failure("job-A", "INV1", "C1", "get_document", "POD", "err", "tms_api")
+        t.record_failure("job-B", "INV2", "C2", "get_document", "BL", "err", "tms_api")
+        t.reset("job-A")
+        assert t.get_rows("job-A") == []
+        assert len(t.get_rows("job-B")) == 1

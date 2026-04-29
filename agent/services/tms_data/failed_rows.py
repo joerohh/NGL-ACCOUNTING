@@ -45,3 +45,25 @@ class FailedRowsTracker:
     def get_rows(self, job_id: str) -> list[FailedRow]:
         """Return the current failed-rows list for a job (empty if unknown)."""
         return list(self._rows.get(job_id, []))
+
+    def find_row(self, job_id: str, row_id: str) -> Optional[FailedRow]:
+        """Look up a single failed row by job + row_id. None if not found."""
+        for r in self._rows.get(job_id, []):
+            if r.row_id == row_id:
+                return r
+        return None
+
+    def remove_row(self, job_id: str, row_id: str) -> bool:
+        """Remove a failed row (e.g., because retry succeeded). True if removed."""
+        rows = self._rows.get(job_id)
+        if not rows:
+            return False
+        for i, r in enumerate(rows):
+            if r.row_id == row_id:
+                rows.pop(i)
+                return True
+        return False
+
+    def reset(self, job_id: str) -> None:
+        """Clear all failed rows for a job (called when the job ends)."""
+        self._rows.pop(job_id, None)
