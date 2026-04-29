@@ -301,6 +301,8 @@ async def lifespan(app: FastAPI):
     settings.set_tms_browser(tms_browser)
     settings.set_job_manager(job_manager)
     chassis.set_job_manager(job_manager)
+    tms.set_tms_api(tms_api)
+    job_manager.set_tms_api(tms_api)
 
     # Attach the TMS Data Layer to app state so future routers can pick it up.
     # Not wired into any router or job manager yet — that's milestone 2.

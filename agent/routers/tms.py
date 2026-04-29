@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from config import TMS_DEBUG_DIR
-from services.tms_api import TMSApiClient
 
 logger = logging.getLogger("ngl.tms_router")
 
@@ -15,7 +14,13 @@ router = APIRouter(prefix="/tms", tags=["tms"])
 
 # Injected by main.py on startup
 _tms_browser = None
-_tms_api = TMSApiClient()
+_tms_api = None  # Set by main.py via set_tms_api(tms_api) at startup.
+
+
+def set_tms_api(client) -> None:
+    """Inject the shared TMSApiClient instance (called from main.py lifespan)."""
+    global _tms_api
+    _tms_api = client
 
 
 @router.get("/api-status")

@@ -9,7 +9,6 @@ from typing import Optional
 from config import DOWNLOADS_DIR, JOB_STATE_DIR
 from services.qbo_api import QBOApiClient
 from services.tms_browser import TMSBrowser
-from services.tms_api import TMSApiClient
 from services.claude_classifier import ClaudeClassifier
 from services.email_sender import EmailSender
 from services.portal_uploader import PortalUploader
@@ -300,8 +299,13 @@ class JobManager(
         self._email_sender = email_sender
         self._portal_uploader = portal_uploader
         self._tms = tms_browser
-        self._tms_api = TMSApiClient()
+        self._tms_api = None  # Set via set_tms_api() at startup.
+        self._tms_data = None  # Set via set_tms_data() at startup (Task 11).
         self._jobs: dict[str, Job] = {}
+
+    def set_tms_api(self, client) -> None:
+        """Inject the shared TMSApiClient instance (called from main.py lifespan)."""
+        self._tms_api = client
 
     def set_email_sender(self, email_sender) -> None:
         """Swap the email sender at runtime (after Settings UI update)."""
