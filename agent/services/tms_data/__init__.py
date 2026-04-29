@@ -5,6 +5,7 @@ QBO API (primary) → TMS API (fast fallback) → TMS browser (opt-in only).
 See docs/superpowers/specs/2026-04-28-tms-data-layer-design.md.
 """
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Literal, Optional
@@ -36,20 +37,43 @@ class TMSDataLayer:
         # Per-job WO cache: (job_id, wo_no) -> wo_record. Avoids redundant TMS API
         # calls when the same job needs both enrich and document-fetch on one WO.
         self._wo_cache: dict[tuple[str, str], dict] = {}
+        # In-flight tasks: (job_id, wo_no) -> asyncio.Task. Lets concurrent
+        # coroutines that request the same WO await a single in-progress fetch
+        # instead of each firing their own. Cleared on completion (success or
+        # failure) so failed calls don't poison the slot for future retries.
+        self._in_flight: dict[tuple[str, str], asyncio.Task] = {}
+
+    # ── Per-row data access ────────────────────────────────────────
 
     class _CachedTmsApi:
-        """Adapter that proxies tms_api but memoizes get_work_order per (job_id, wo_no)."""
+        """Adapter that proxies tms_api but memoizes get_work_order per (job_id, wo_no).
 
-        def __init__(self, real_api, cache: dict, job_id: str) -> None:
+        Both _wo_cache and _in_flight are shared across all _CachedTmsApi instances
+        created within the same job (they live on the outer TMSDataLayer), so
+        concurrent callers that request the same (job_id, wo_no) coalesce onto
+        one Task and only hit the real API once.
+        """
+
+        def __init__(self, real_api, cache: dict, in_flight: dict, job_id: str) -> None:
             self._real = real_api
             self._cache = cache
+            self._in_flight = in_flight
             self._job_id = job_id
 
         async def get_work_order(self, wo_no):
             key = (self._job_id, wo_no)
             if key in self._cache:
                 return self._cache[key]
-            wo = await self._real.get_work_order(wo_no)
+            if key not in self._in_flight:
+                self._in_flight[key] = asyncio.create_task(
+                    self._real.get_work_order(wo_no)
+                )
+            try:
+                wo = await self._in_flight[key]
+            finally:
+                # Drop the task reference once resolved (success or failure) so
+                # a failed call doesn't block subsequent retries.
+                self._in_flight.pop(key, None)
             if wo is not None:
                 self._cache[key] = wo
             return wo
@@ -59,8 +83,6 @@ class TMSDataLayer:
 
         def is_configured(self):
             return self._real.is_configured()
-
-    # ── Per-row data access ────────────────────────────────────────
 
     async def enrich_invoice(
         self,
@@ -84,7 +106,7 @@ class TMSDataLayer:
             enriched, err = await run_enrich_browser(invoice_data, self._tms_browser)
             failed_at = "tms_browser"
         else:
-            cached = self._CachedTmsApi(self._tms_api, self._wo_cache, job_id)
+            cached = self._CachedTmsApi(self._tms_api, self._wo_cache, self._in_flight, job_id)
             enriched, err = await run_enrich(invoice_data, cached, force=force)
             failed_at = "tms_api"
 
@@ -122,7 +144,7 @@ class TMSDataLayer:
             )
             failed_at = "tms_browser"
         else:
-            cached = self._CachedTmsApi(self._tms_api, self._wo_cache, job_id)
+            cached = self._CachedTmsApi(self._tms_api, self._wo_cache, self._in_flight, job_id)
             path, err = await run_document(
                 invoice_data, doc_type, dest_dir, cached,
             )
@@ -226,3 +248,9 @@ class TMSDataLayer:
         for key in list(self._wo_cache.keys()):
             if key[0] == job_id:
                 del self._wo_cache[key]
+        # Clear in-flight task references for this job. Any coroutines already
+        # awaiting these tasks will still receive their results — we just stop
+        # tracking them here so the next job starts with a clean slate.
+        for key in list(self._in_flight.keys()):
+            if key[0] == job_id:
+                del self._in_flight[key]
