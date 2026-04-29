@@ -683,3 +683,78 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .status-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
 .status-mismatch { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
 .status-missing_docs { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+
+/* ─── Failed Rows Box ─── */
+.failed-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fef9f5;
+  border: 1px solid #fde4cf;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.failed-row__label {
+  flex: 1;
+  min-width: 0;
+}
+
+.failed-row__invoice {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.failed-row__container {
+  color: #64748b;
+  font-size: 0.78rem;
+  margin-left: 8px;
+}
+
+.failed-row__error {
+  color: #991b1b;
+  font-size: 0.76rem;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.failed-row__op {
+  font-size: 0.74rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.failed-row__buttons {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.failed-row__retry-btn {
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+
+.failed-row__retry-btn:hover { background: #f1f5f9; }
+
+.failed-row__retry-btn--browser {
+  border-color: #f59e0b;
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.failed-row__retry-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
