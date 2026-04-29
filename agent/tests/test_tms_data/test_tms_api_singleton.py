@@ -81,3 +81,15 @@ def test_api_test_endpoint_503_when_client_not_injected():
     with TestClient(app, raise_server_exceptions=False) as client:
         r = client.get("/tms/api-test/SOMEWO")
     assert r.status_code == 503
+
+
+def test_api_status_endpoint_handles_uninjected_client(api_test_client):
+    """tms_api_status returns gracefully when _tms_api is None (pre-startup race)."""
+    from routers import tms as tms_router
+    tms_router.set_tms_api(None)
+
+    r = api_test_client.get("/tms/api-status")
+    assert r.status_code == 200
+    body = r.json()
+    # Whatever the "not configured" shape is, it should NOT be a 500.
+    assert "configured" in body or "status" in body

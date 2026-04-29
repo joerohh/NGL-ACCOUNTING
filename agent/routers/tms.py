@@ -31,6 +31,13 @@ async def tms_api_status():
     web UI to show whether the API path is wired up — independent of any
     browser fallback state.
     """
+    if _tms_api is None:
+        return {
+            "status": "not_configured",
+            "configured": False,
+            "tokenOk": False,
+            "message": "TMS API client not initialized",
+        }
     if not _tms_api.is_configured():
         return {
             "status": "not_configured",
