@@ -5,7 +5,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from config import (
     DEBUG_DIR, MAX_BATCH_SIZE, SEND_TIMEOUT_S,
@@ -148,11 +148,13 @@ class SendJobMixin:
         event = {"type": event_type, "timestamp": time.time(), **data}
         await job.events.put(event)
 
-    async def _emit_failed_rows_changed(self, job, reason: str = "added") -> None:
+    async def _emit_failed_rows_changed(
+        self, job, reason: Literal["added", "removed", "cleared"] = "added",
+    ) -> None:
         """Push a 'failed_rows_changed' SSE event so the UI re-fetches the list."""
         await self._emit_send(job, "failed_rows_changed", {
             "jobId": job.id,
-            "reason": reason,  # "added" | "removed" | "cleared"
+            "reason": reason,
         })
 
     async def _run_send_job(self, job) -> None:
