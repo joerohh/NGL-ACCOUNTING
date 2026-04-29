@@ -11,6 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from services.tms_data.cascade import run_enrich
 
 
+# Append new import for run_document tests below
+# (imported inline in test functions per plan pattern)
+
+
 # Helpers ────────────────────────────────────────────────────────────
 
 def _qbo_invoice(*, wo=None, chassis=None, cnee=None) -> dict:
@@ -113,3 +117,81 @@ async def test_tms_api_raises_returns_error():
     assert err is not None
     assert "DNS failed" in err
     assert enriched.chassis is None
+
+
+# run_document tests ────────────────────────────────────────────────────
+
+from services.tms_data.cascade import run_document
+
+
+@pytest.mark.asyncio
+async def test_run_document_downloads_pod(tmp_path):
+    invoice = _qbo_invoice(wo="LM2602170009")
+    wo = {
+        "documents": [{"type_": "POD", "file_url": "https://cdn.example/pod.pdf"}],
+    }
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+    tms_api.download_document = AsyncMock(return_value=b"%PDF-1.4 sample bytes")
+
+    path, err = await run_document(invoice, "POD", tmp_path, tms_api)
+
+    assert err is None
+    assert path is not None
+    assert path.exists()
+    assert path.read_bytes() == b"%PDF-1.4 sample bytes"
+    tms_api.download_document.assert_called_once_with("https://cdn.example/pod.pdf")
+
+
+@pytest.mark.asyncio
+async def test_run_document_no_wo_returns_none(tmp_path):
+    invoice = _qbo_invoice()  # no WO#
+    tms_api = AsyncMock()
+
+    path, err = await run_document(invoice, "POD", tmp_path, tms_api)
+
+    assert path is None
+    assert err is not None
+    assert "WO" in err  # mentions missing WO#
+
+
+@pytest.mark.asyncio
+async def test_run_document_doc_type_not_in_wo_returns_none(tmp_path):
+    invoice = _qbo_invoice(wo="LM2602170009")
+    wo = {"documents": [{"type_": "BL", "file_url": "https://cdn.example/bl.pdf"}]}
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+
+    path, err = await run_document(invoice, "POD", tmp_path, tms_api)
+
+    assert path is None
+    assert err is None  # no error — just no POD on this WO
+
+
+@pytest.mark.asyncio
+async def test_run_document_get_wo_raises_returns_error(tmp_path):
+    invoice = _qbo_invoice(wo="LM2602170009")
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(side_effect=RuntimeError("network down"))
+
+    path, err = await run_document(invoice, "POD", tmp_path, tms_api)
+
+    assert path is None
+    assert err is not None
+    assert "network down" in err
+
+
+@pytest.mark.asyncio
+async def test_run_document_download_returns_none_is_error(tmp_path):
+    """download_document returning None means CDN failed — that's an error."""
+    invoice = _qbo_invoice(wo="LM2602170009")
+    wo = {"documents": [{"type_": "POD", "file_url": "https://cdn.example/pod.pdf"}]}
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+    tms_api.download_document = AsyncMock(return_value=None)
+
+    path, err = await run_document(invoice, "POD", tmp_path, tms_api)
+
+    assert path is None
+    assert err is not None
+    assert "download" in err.lower()

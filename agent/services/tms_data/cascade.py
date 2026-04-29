@@ -103,3 +103,48 @@ async def run_enrich(invoice_data: dict, tms_api) -> Tuple[EnrichedInvoice, Opti
         wo_no=wo_no, container_no=container_no, chassis=chassis,
         cnee=cnee, do_sender_email=do_sender_email, sources=sources,
     ), None
+
+
+async def run_document(
+    invoice_data: dict,
+    doc_type: str,
+    dest_dir: Path,
+    tms_api,
+) -> Tuple[Optional[Path], Optional[str]]:
+    """Download one document via TMS API. Returns (path, error).
+
+    error is None when the doc isn't present on the WO (not a failure).
+    error is non-None when the TMS API call raised or download failed.
+    """
+    wo_no = extract_wo_from_qbo(invoice_data)
+    if not wo_no:
+        return None, "Cannot fetch from TMS API: no WO# on QBO invoice"
+
+    try:
+        wo = await tms_api.get_work_order(wo_no)
+    except Exception as e:
+        logger.warning("TMS API get_work_order failed for %s: %s", wo_no, e)
+        return None, str(e)
+
+    if not wo:
+        # 404 — WO doesn't exist or API doesn't have it.
+        return None, None
+
+    url = extract_document_url_from_tms_wo(wo, doc_type)
+    if not url:
+        # WO exists but doesn't have this doc type.
+        return None, None
+
+    try:
+        data = await tms_api.download_document(url)
+    except Exception as e:
+        logger.warning("TMS API download_document failed for %s: %s", url, e)
+        return None, str(e)
+
+    if not data:
+        return None, f"Document download returned no data for {doc_type}"
+
+    dest = dest_dir / f"{wo_no}_{doc_type}.pdf"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return dest, None
