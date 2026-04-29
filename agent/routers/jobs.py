@@ -1,5 +1,6 @@
 """Job endpoints — create fetch jobs and stream progress."""
 
+from dataclasses import asdict
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -176,3 +177,11 @@ async def skip_send(job_id: str):
         return {"status": "skipped", "jobId": job_id}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@router.get("/{job_id}/failed-rows")
+async def get_failed_rows(job_id: str, request: Request):
+    """List failed rows for a job. UI polls this on SSE event or page load."""
+    layer = request.app.state.tms_data
+    rows = layer.get_failed_rows(job_id)
+    return {"rows": [asdict(r) for r in rows]}
