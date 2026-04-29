@@ -32,6 +32,7 @@ class TMSDataLayer:
         self._tms_api = tms_api
         self._tms_browser = tms_browser
         self._failed = FailedRowsTracker()
+        self._retry_ctx: dict[str, dict] = {}  # row_id -> {operation, invoice_data, doc_type, dest_dir}
 
     # ── Per-row data access ────────────────────────────────────────
 
@@ -63,6 +64,11 @@ class TMSDataLayer:
                 error_message=err,
                 source=failed_at,
             )
+            row_id_for_ctx = self._failed.get_rows(job_id)[-1].row_id
+            self._retry_ctx[row_id_for_ctx] = {
+                "operation": "enrich_invoice",
+                "invoice_data": invoice_data,
+            }
 
         return enriched
 
@@ -97,6 +103,13 @@ class TMSDataLayer:
                 error_message=err,
                 source=failed_at,
             )
+            row_id_for_ctx = self._failed.get_rows(job_id)[-1].row_id
+            self._retry_ctx[row_id_for_ctx] = {
+                "operation": "get_document",
+                "invoice_data": invoice_data,
+                "doc_type": doc_type,
+                "dest_dir": dest_dir,
+            }
         return path
 
     async def get_documents(
@@ -119,3 +132,58 @@ class TMSDataLayer:
 
     def get_failed_rows(self, job_id: str) -> list[FailedRow]:
         return self._failed.get_rows(job_id)
+
+    async def retry_failed_row(
+        self,
+        job_id: str,
+        row_id: str,
+        source: Source,
+    ) -> bool:
+        """Re-run a failed row's original op using the chosen source.
+
+        Removes the row from the failed-rows list on success. Leaves it
+        (with updated error) on continued failure.
+        """
+        row = self._failed.find_row(job_id, row_id)
+        ctx = self._retry_ctx.get(row_id)
+        if row is None or ctx is None:
+            return False
+
+        # Remove the old failure entry first; new failures (if any) will be re-recorded.
+        self._failed.remove_row(job_id, row_id)
+        self._retry_ctx.pop(row_id, None)
+
+        if ctx["operation"] == "enrich_invoice":
+            await self.enrich_invoice(job_id, ctx["invoice_data"], source=source)
+            # Success = no new failure for this invoice was just recorded.
+            return not any(
+                r.invoice_number == row.invoice_number and r.operation == "enrich_invoice"
+                for r in self._failed.get_rows(job_id)
+            )
+        elif ctx["operation"] == "get_document":
+            path = await self.get_document(
+                job_id, ctx["invoice_data"], ctx["doc_type"],
+                ctx["dest_dir"], source=source,
+            )
+            return path is not None
+        return False
+
+    async def retry_all_failed(self, job_id: str, source: Source) -> dict:
+        """Retry every row currently in the failed-rows list. Returns counts."""
+        rows = self._failed.get_rows(job_id)
+        succeeded = 0
+        still_failed = 0
+        for r in rows:
+            ok = await self.retry_failed_row(job_id, r.row_id, source)
+            if ok:
+                succeeded += 1
+            else:
+                still_failed += 1
+        return {"succeeded": succeeded, "still_failed": still_failed}
+
+    def reset_for_new_job(self, job_id: str) -> None:
+        """Clear all failed rows + retry context for a job."""
+        rows = self._failed.get_rows(job_id)
+        for r in rows:
+            self._retry_ctx.pop(r.row_id, None)
+        self._failed.reset(job_id)

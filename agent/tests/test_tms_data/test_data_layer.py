@@ -139,3 +139,58 @@ async def test_get_documents_returns_dict_of_found(tmp_path):
     assert "BL" in paths
     assert "MISSING" not in paths
     assert paths["POD"].read_bytes() == b"pod"
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_row_with_browser_succeeds(tmp_path):
+    """A row that failed on TMS API can be retried via browser and the success removes it from the box."""
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(side_effect=RuntimeError("api down"))
+    tms_browser = AsyncMock()
+    tms_browser.fetch_doc_by_wo = AsyncMock(return_value=tmp_path / "POD_browser.pdf")
+    (tmp_path / "POD_browser.pdf").write_bytes(b"pod browser")
+    tms_browser.bc_detail_type_segment = lambda inv_no: "import"
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    invoice = _qbo_invoice(wo="LM01")
+    invoice["DocNumber"] = "LM26040454F"
+
+    # Original API attempt fails, row recorded
+    await dl.get_document("job-1", invoice, "POD", tmp_path)
+    assert len(dl.get_failed_rows("job-1")) == 1
+    row_id = dl.get_failed_rows("job-1")[0].row_id
+
+    # Note: real implementation needs to remember the original invoice + dest_dir
+    # for the retry. For this test we just verify the retry method exists and
+    # routes correctly via source="browser".
+    succeeded = await dl.retry_failed_row("job-1", row_id, source="browser")
+
+    assert succeeded is True
+    assert dl.get_failed_rows("job-1") == []
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_row_unknown_id_returns_false():
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_browser = AsyncMock()
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    succeeded = await dl.retry_failed_row("job-1", "row-nonexistent", source="api")
+
+    assert succeeded is False
+
+
+def test_reset_for_new_job_clears_rows():
+    qbo_api = AsyncMock()
+    tms_api = AsyncMock()
+    tms_browser = AsyncMock()
+
+    dl = TMSDataLayer(qbo_api, tms_api, tms_browser)
+    dl._failed.record_failure(
+        "job-1", "INV1", "C1", "get_document", "POD", "err", "tms_api",
+    )
+    dl.reset_for_new_job("job-1")
+
+    assert dl.get_failed_rows("job-1") == []
