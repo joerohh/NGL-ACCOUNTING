@@ -1366,6 +1366,28 @@
     </table>
   </div>
 
+  <!-- ── Failed Rows Box (TMS Data Layer failures) ── -->
+  <div id="invFailedRowsBox" class="panel-card" style="display:none; padding:14px 20px; margin-top:20px; border-left:3px solid #ea580c;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span class="section-label" style="margin-bottom:0;">Failed Rows</span>
+        <span id="invFailedRowsCount" style="background:#fee2e2; color:#991b1b; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px;">0</span>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button id="invFailedRetryAllApi" class="btn btn-secondary" style="padding:5px 11px; font-size:0.78rem;" onclick="invFailedRetryAll('api')">
+          Retry all (API)
+        </button>
+        <button id="invFailedRetryAllBrowser" class="btn btn-secondary" style="padding:5px 11px; font-size:0.78rem; border-color:#f59e0b; color:#92400e; background:#fffbeb;" onclick="invFailedRetryAll('browser')">
+          Retry all (Browser)
+        </button>
+      </div>
+    </div>
+    <div id="invFailedRowsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+  </div>
+
   <!-- ── Status Log (Collapsible) ── -->
   <div class="panel-card" style="padding:14px 20px; margin-top:20px;">
     <div class="log-toggle" onclick="invToggleLog()">
