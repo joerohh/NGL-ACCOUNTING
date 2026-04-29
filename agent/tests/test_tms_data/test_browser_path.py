@@ -86,3 +86,20 @@ async def test_browser_document_returns_none_when_browser_returns_none(tmp_path)
 
     assert path is None
     assert err is None  # browser said "no doc", not an error
+
+
+@pytest.mark.asyncio
+async def test_run_enrich_browser_propagates_not_implemented_error(monkeypatch):
+    """fetch_detail_info is stubbed — error must surface as a recordable failure."""
+    from services.tms_browser import TMSBrowser
+
+    real_browser = TMSBrowser()
+    invoice_data = {
+        "DocNumber": "INV-X",
+        "CustomField": [{"Name": "NGL REF#", "StringValue": "WO11/CUST"}],
+    }
+
+    enriched, err = await run_enrich_browser(invoice_data, real_browser)
+
+    assert err is not None
+    assert "not implemented" in err.lower()

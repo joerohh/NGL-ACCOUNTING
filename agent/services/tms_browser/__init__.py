@@ -64,6 +64,18 @@ class TMSBrowser(TMSLoginMixin, TMSSearchMixin, TMSDocumentsMixin, TMSDownloadMi
         self._grid_do_sender: Optional[str] = None  # DO SENDER from grid (before navigation)
         self._recovery_lock = asyncio.Lock()  # prevents concurrent browser recovery
 
+    async def fetch_detail_info(self, wo_no: str) -> dict:
+        """Scrape the Detail Info tab of a WO via Playwright. NOT YET IMPLEMENTED.
+
+        Used only by TMSDataLayer's "Retry (Browser)" path on enrich_invoice failures.
+        Until implemented, the UI hides the Retry (Browser) button for enrich
+        failures (see invoice-sender.js failed-rows renderer).
+        """
+        raise NotImplementedError(
+            "TMSBrowser.fetch_detail_info is not implemented yet — "
+            "use the TMS API path or implement Detail Info tab scraping."
+        )
+
     # ------------------------------------------------------------------
     # Debug
     # ------------------------------------------------------------------
