@@ -1,8 +1,8 @@
 """Job endpoints — create fetch jobs and stream progress."""
 
 from dataclasses import asdict
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Request
+from typing import Literal, Optional
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -187,3 +187,31 @@ async def get_failed_rows(job_id: str, request: Request):
         raise HTTPException(503, "TMS Data Layer not initialized")
     rows = layer.get_failed_rows(job_id)
     return {"rows": [asdict(r) for r in rows]}
+
+
+@router.post("/{job_id}/failed-rows/{row_id}/retry")
+async def retry_failed_row(
+    job_id: str,
+    row_id: str,
+    request: Request,
+    source: Literal["api", "browser"] = Query(..., description="api or browser"),
+):
+    """Retry one failed row using the chosen source."""
+    layer = getattr(request.app.state, "tms_data", None)
+    if layer is None:
+        raise HTTPException(503, "TMS Data Layer not initialized")
+    ok = await layer.retry_failed_row(job_id, row_id, source)
+    return {"succeeded": ok}
+
+
+@router.post("/{job_id}/failed-rows/retry-all")
+async def retry_all_failed(
+    job_id: str,
+    request: Request,
+    source: Literal["api", "browser"] = Query(...),
+):
+    """Retry every currently-failed row in the job. Returns counts."""
+    layer = getattr(request.app.state, "tms_data", None)
+    if layer is None:
+        raise HTTPException(503, "TMS Data Layer not initialized")
+    return await layer.retry_all_failed(job_id, source)

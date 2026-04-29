@@ -75,3 +75,30 @@ def test_get_failed_rows_503_when_tms_data_missing():
     with TestClient(app, raise_server_exceptions=False) as client:
         r = client.get("/jobs/anything/failed-rows")
     assert r.status_code == 503
+
+
+def test_retry_failed_row_invalid_source_rejected(client):
+    r = client.post("/jobs/j/failed-rows/row-1/retry?source=carrier-pigeon")
+    assert r.status_code == 422 or r.status_code == 400
+
+
+def test_retry_failed_row_unknown_returns_succeeded_false(client, app):
+    r = client.post("/jobs/no-such/failed-rows/row-x/retry?source=api")
+    assert r.status_code == 200
+    assert r.json()["succeeded"] is False
+
+
+def test_retry_all_failed_returns_counts(client, app):
+    from services.tms_data.enriched_invoice import FailedRow
+    layer = app.state.tms_data
+    layer._failed._rows["job-batch"] = [
+        FailedRow("r1", "INV-1", None, "enrich_invoice", None, "e", "tms_api", 1.0),
+        FailedRow("r2", "INV-2", None, "enrich_invoice", None, "e", "tms_api", 2.0),
+    ]
+    layer._retry_ctx["r1"] = {"operation": "enrich_invoice", "invoice_data": {}, "force": False}
+    layer._retry_ctx["r2"] = {"operation": "enrich_invoice", "invoice_data": {}, "force": False}
+
+    r = client.post("/jobs/job-batch/failed-rows/retry-all?source=api")
+    assert r.status_code == 200
+    body = r.json()
+    assert "succeeded" in body and "still_failed" in body
