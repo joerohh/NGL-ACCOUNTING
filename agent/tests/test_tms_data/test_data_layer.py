@@ -317,3 +317,48 @@ async def test_retry_get_document_records_when_doc_absent_on_wo(tmp_path):
     assert len(rows_after) == 1
     assert "not present" in rows_after[0].error_message.lower() \
         or "no doc" in rows_after[0].error_message.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_all_documents_returns_paths_and_records_per_doc_failures(tmp_path):
+    """All TMS docs are returned; per-doc download failures land in FailedRowsTracker."""
+    from services.tms_data import TMSDataLayer
+
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value={
+        "documents": [
+            {"type_": "POD", "file_url": "https://tms/pod.pdf"},
+            {"type_": "DO", "file_url": "https://tms/do.pdf"},
+        ],
+    })
+    tms_api.download_document = AsyncMock(side_effect=[b"PODBYTES", None])
+
+    layer = TMSDataLayer(qbo_api=MagicMock(), tms_api=tms_api, tms_browser=MagicMock())
+    invoice = {
+        "DocNumber": "LM26040724F",
+        "CustomField": [{"Name": "NGL REF#", "StringValue": "LM2604130046/CUST"}],
+    }
+
+    paths = await layer.get_all_documents("job-1", invoice, tmp_path)
+
+    assert set(paths.keys()) == {"pod"}
+    rows = layer.get_failed_rows("job-1")
+    assert len(rows) == 1
+    assert rows[0].operation == "get_document"
+    assert rows[0].doc_type == "do"
+
+
+@pytest.mark.asyncio
+async def test_get_all_documents_no_wo_returns_empty_no_failed_row(tmp_path):
+    """No WO# on QBO invoice → empty dict, no FailedRow recorded (logged only)."""
+    from services.tms_data import TMSDataLayer
+
+    tms_api = AsyncMock()
+    layer = TMSDataLayer(qbo_api=MagicMock(), tms_api=tms_api, tms_browser=MagicMock())
+
+    invoice = {"DocNumber": "INV-NOWO", "CustomField": []}
+    paths = await layer.get_all_documents("job-2", invoice, tmp_path)
+
+    assert paths == {}
+    assert layer.get_failed_rows("job-2") == []
+    tms_api.get_work_order.assert_not_called()

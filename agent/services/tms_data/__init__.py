@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from services.tms_data.browser_path import run_document_browser, run_enrich_browser
-from services.tms_data.cascade import run_document, run_enrich
+from services.tms_data.cascade import run_all_documents, run_document, run_enrich
 from services.tms_data.enriched_invoice import EnrichedInvoice, FailedRow
 from services.tms_data.failed_rows import FailedRowsTracker
 
@@ -194,6 +194,63 @@ class TMSDataLayer:
             if p is not None:
                 out[dt] = p
         return out
+
+    async def get_all_documents(
+        self,
+        job_id: str,
+        invoice_data: dict,
+        dest_dir: Path,
+        source: Source = "api",
+    ) -> dict[str, Path]:
+        """Fetch EVERY TMS document on the invoice's WO. Returns dict of doc_type → Path.
+
+        Used by the non-OEC send flow: TMS is treated as the source of truth for
+        supporting documents. Caller decides which to upload to QBO (e.g. dedupe
+        against existing attachments).
+
+        Per-doc download failures are recorded in FailedRowsTracker so the user
+        can retry per-doc from the Failed Rows box. Top-level WO failures (no WO#,
+        network error on get_work_order, 404) are logged but NOT recorded as
+        FailedRows — the user can re-trigger by rerunning the batch.
+
+        source='browser' is currently not supported for this method (raises). The
+        browser path remains opt-in via per-doc retry through get_document.
+        """
+        if source == "browser":
+            raise NotImplementedError(
+                "get_all_documents only supports source='api'. "
+                "Use get_document with source='browser' for explicit retries."
+            )
+
+        cached = self._CachedTmsApi(self._tms_api, self._wo_cache, self._in_flight, job_id)
+        paths, per_doc_errors, top_error = await run_all_documents(
+            invoice_data, dest_dir, cached,
+        )
+
+        if top_error:
+            logger.info(
+                "get_all_documents top-level skip for job=%s invoice=%s: %s",
+                job_id, _invoice_label(invoice_data), top_error,
+            )
+
+        for doc_type, err in per_doc_errors.items():
+            row_id = self._failed.record_failure(
+                job_id=job_id,
+                invoice_number=_invoice_label(invoice_data),
+                container_number=None,
+                operation="get_document",
+                doc_type=doc_type,
+                error_message=err,
+                source="tms_api",
+            )
+            self._retry_ctx[row_id] = {
+                "operation": "get_document",
+                "invoice_data": invoice_data,
+                "doc_type": doc_type,
+                "dest_dir": dest_dir,
+            }
+
+        return paths
 
     # ── Failed-rows queries (more methods added in Tasks 11-13) ────
 
