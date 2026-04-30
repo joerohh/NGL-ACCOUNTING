@@ -1,4 +1,4 @@
-"""Verify send_qbo_api uses TMSDataLayer.get_documents instead of browser calls."""
+"""Verify send_qbo_api uses TMSDataLayer.get_all_documents instead of browser calls."""
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -9,14 +9,14 @@ import pytest
 @pytest.fixture
 def mock_layer():
     layer = MagicMock()
-    layer.get_documents = AsyncMock(return_value={})
+    layer.get_all_documents = AsyncMock(return_value={})
     layer.get_failed_rows = MagicMock(return_value=[])
     return layer
 
 
 @pytest.mark.asyncio
-async def test_fetch_and_upload_uses_tms_data_get_documents(mock_layer, tmp_path):
-    """The send mixin calls TMSDataLayer.get_documents — never tms_browser.fetch_*."""
+async def test_fetch_and_upload_uses_tms_data_get_all_documents(mock_layer, tmp_path):
+    """The send mixin calls TMSDataLayer.get_all_documents — never tms_browser.fetch_*."""
     from services.job_manager import JobManager
     from services.qbo_api import QBOApiClient
 
@@ -35,8 +35,8 @@ async def test_fetch_and_upload_uses_tms_data_get_documents(mock_layer, tmp_path
                     "CustomField": [{"Name": "NGL REF#", "StringValue": "WO/X"}]}
     verification = {"found_container": "ABCU0000001"}
 
-    # Pretend the data layer returns 2 of the 3 missing docs.
-    mock_layer.get_documents.return_value = {
+    # Pretend the data layer returns 2 docs from TMS.
+    mock_layer.get_all_documents.return_value = {
         "pod": tmp_path / "pod.pdf",
         "bl": tmp_path / "bl.pdf",
     }
@@ -45,13 +45,13 @@ async def test_fetch_and_upload_uses_tms_data_get_documents(mock_layer, tmp_path
 
     uploaded = await jm._tms_fetch_and_upload_missing_docs(
         job, invoice, api, "1", verification, tmp_path,
-        ["pod", "bl", "do"], invoice_data=invoice_data,
+        invoice_data=invoice_data, existing_attachments=[],
     )
 
-    assert mock_layer.get_documents.await_count == 1
-    args, kwargs = mock_layer.get_documents.call_args
-    # The call passes (job_id, invoice_data, doc_types, dest_dir, source="api")
-    assert kwargs.get("doc_types") == ["pod", "bl", "do"] or args[2] == ["pod", "bl", "do"]
+    assert mock_layer.get_all_documents.await_count == 1
+    args, kwargs = mock_layer.get_all_documents.call_args
+    # The call passes (job_id, invoice_data, dest_dir, source="api")
+    assert kwargs.get("source") == "api" or "api" in args
     assert sorted(uploaded) == ["bl", "pod"]
     # Browser must not be touched on the API path.
     assert not jm._tms.fetch_doc_by_wo.called

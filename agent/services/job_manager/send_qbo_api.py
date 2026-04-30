@@ -27,47 +27,56 @@ class SendQBOApiMixin:
 
     async def _tms_fetch_and_upload_missing_docs(
         self, job, invoice, api, invoice_id, verification, temp_dir,
-        missing_docs, invoice_data: dict,
+        invoice_data: dict, existing_attachments: list[dict],
     ) -> list[str]:
-        """Fetch each missing required doc via the TMS Data Layer, upload to QBO.
+        """Fetch every TMS document for the WO; upload to QBO any not already attached.
 
-        Failures are accumulated in the data layer's per-job FailedRowsTracker; the
-        UI shows them in the Failed Rows box with explicit Retry buttons. We never
-        auto-fall-back to the browser — the user must opt in.
+        TMS is the source of truth for supporting documents. QBO holds only the
+        invoice PDF. We pull the full document list from TMS, skip the 'invoice'
+        type (QBO owns it), dedupe against existing QBO attachments by docType,
+        and upload the remainder.
+
+        Per-doc download failures land in the data layer's FailedRowsTracker;
+        the UI exposes them in the Failed Rows box with explicit Retry buttons.
+        We never auto-fall-back to the browser — the user must opt in.
         """
         if not self._tms_data:
             logger.warning("TMSDataLayer not configured — skipping doc fetch for %s",
                            invoice.invoice_number)
             return []
 
-        # Filter out non-fetchable types.
-        types_to_fetch = [
-            (m or "").lower() for m in missing_docs
-            if (m or "").lower() and (m or "").lower() != "invoice"
-        ]
-        if not types_to_fetch:
-            return []
-
         container = verification.get("found_container") or invoice.container_number or ""
-        await self._emit_send(job, "tms_fetching_docs", {
-            "invoiceNumber": invoice.invoice_number,
-            "containerNumber": container,
-            "docTypes": types_to_fetch,
-        })
 
         rows_before = len(self._tms_data.get_failed_rows(job.id))
-        fetched = await self._tms_data.get_documents(
-            job.id, invoice_data, types_to_fetch, temp_dir, source="api",
+        fetched = await self._tms_data.get_all_documents(
+            job.id, invoice_data, temp_dir, source="api",
         )
-        # Surface only when the data layer actually recorded a new failure.
         if len(self._tms_data.get_failed_rows(job.id)) > rows_before:
             await self._emit_failed_rows_changed(job, "added")
 
+        # QBO owns the invoice PDF — never upload a TMS-side 'invoice' back.
+        fetched = {dt: p for dt, p in fetched.items() if dt != "invoice"}
+        if not fetched:
+            return []
+
+        await self._emit_send(job, "tms_fetching_docs", {
+            "invoiceNumber": invoice.invoice_number,
+            "containerNumber": container,
+            "docTypes": list(fetched.keys()),
+        })
+
+        # Dedupe against existing QBO attachments by docType.
+        existing_types = {
+            (a.get("docType") or "").lower()
+            for a in (existing_attachments or [])
+        }
+
         uploaded: list[str] = []
-        for dt in types_to_fetch:
-            path = fetched.get(dt)
+        for dt, path in fetched.items():
             if not (path and path.exists()):
-                await self._emit_send(job, "tms_doc_not_found", {
+                continue
+            if dt in existing_types:
+                await self._emit_send(job, "tms_doc_already_on_qbo", {
                     "invoiceNumber": invoice.invoice_number,
                     "docType": dt,
                 })
