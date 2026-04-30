@@ -210,8 +210,9 @@ class TMSDataLayer:
 
         Per-doc download failures are recorded in FailedRowsTracker so the user
         can retry per-doc from the Failed Rows box. Top-level WO failures (no WO#,
-        network error on get_work_order, 404) are logged but NOT recorded as
-        FailedRows — the user can re-trigger by rerunning the batch.
+        network error on get_work_order) are logged but NOT recorded as FailedRows
+        — the user can re-trigger by rerunning the batch. 404 (WO not found) is
+        treated as no-data and returns {} silently.
 
         source='browser' is currently not supported for this method (raises). The
         browser path remains opt-in via per-doc retry through get_document.
