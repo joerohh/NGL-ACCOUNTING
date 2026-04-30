@@ -47,6 +47,12 @@ class SendQBOApiMixin:
 
         container = verification.get("found_container") or invoice.container_number or ""
 
+        await self._emit_send(job, "tms_fetching_docs", {
+            "invoiceNumber": invoice.invoice_number,
+            "containerNumber": container,
+            "docTypes": [],  # populated as docs come back via uploading_doc_to_qbo events
+        })
+
         rows_before = len(self._tms_data.get_failed_rows(job.id))
         fetched = await self._tms_data.get_all_documents(
             job.id, invoice_data, temp_dir, source="api",
@@ -58,12 +64,6 @@ class SendQBOApiMixin:
         fetched = {dt: p for dt, p in fetched.items() if dt != "invoice"}
         if not fetched:
             return []
-
-        await self._emit_send(job, "tms_fetching_docs", {
-            "invoiceNumber": invoice.invoice_number,
-            "containerNumber": container,
-            "docTypes": list(fetched.keys()),
-        })
 
         # Dedupe against existing QBO attachments by docType.
         existing_types = {

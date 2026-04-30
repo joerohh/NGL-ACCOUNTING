@@ -51,7 +51,7 @@ async def test_fetch_and_upload_uses_tms_data_get_all_documents(mock_layer, tmp_
     assert mock_layer.get_all_documents.await_count == 1
     args, kwargs = mock_layer.get_all_documents.call_args
     # The call passes (job_id, invoice_data, dest_dir, source="api")
-    assert kwargs.get("source") == "api" or "api" in args
+    assert kwargs.get("source") == "api"
     assert sorted(uploaded) == ["bl", "pod"]
     # Browser must not be touched on the API path.
     assert not jm._tms.fetch_doc_by_wo.called

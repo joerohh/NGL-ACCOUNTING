@@ -1046,6 +1046,10 @@ const _sendEventHandlers = {
     invAddLog('info', '  [TMS API] Fetching ' + types + ' for ' + (event.invoiceNumber || '') +
       (event.containerNumber ? ' (container: ' + event.containerNumber + ')' : '') + '...');
   },
+  tms_doc_already_on_qbo(event) {
+    invAddLog('info', '  [TMS API] ' + (event.docType || 'doc').toUpperCase() +
+      ' already on QBO for ' + (event.invoiceNumber || '') + ' — skipping upload');
+  },
   tms_pod_downloaded(event) {
     const tag = event.strategy === 'api' ? '[TMS API]' : '[TMS]';
     invAddLog('success', '  ' + tag + ' POD downloaded: ' + (event.fileName || ''));

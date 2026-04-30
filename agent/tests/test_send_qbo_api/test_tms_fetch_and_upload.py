@@ -124,3 +124,79 @@ async def test_skips_invoice_doc_type(tmp_path):
 
     assert uploaded == ["pod"]
     assert api.upload_attachment.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_existing_attachments_none_does_not_crash(tmp_path):
+    """existing_attachments=None is normalized to [] without raising."""
+    pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
+
+    tms_data = MagicMock()
+    tms_data.get_failed_rows = MagicMock(return_value=[])
+    tms_data.get_all_documents = AsyncMock(return_value={"pod": pod_path})
+
+    api = MagicMock()
+    api.upload_attachment = AsyncMock(return_value=True)
+
+    mixin = _make_mixin(tms_data)
+    uploaded = await mixin._tms_fetch_and_upload_missing_docs(
+        job=_make_job(), invoice=_make_invoice(), api=api, invoice_id="123",
+        verification={}, temp_dir=tmp_path,
+        invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=None,
+    )
+
+    assert uploaded == ["pod"]
+    assert api.upload_attachment.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_dedupe_handles_uppercase_qbo_doc_type(tmp_path):
+    """QBO docType comes back lowercase from classify_attachment, but defend against
+    upstream changes by lowercasing on our side too."""
+    pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
+
+    tms_data = MagicMock()
+    tms_data.get_failed_rows = MagicMock(return_value=[])
+    tms_data.get_all_documents = AsyncMock(return_value={"pod": pod_path})
+
+    api = MagicMock()
+    api.upload_attachment = AsyncMock(return_value=True)
+
+    # Upstream classifier could change; ensure dedupe still works if docType is uppercase.
+    existing = [{"docType": "POD", "fileName": "Existing POD.pdf"}]
+
+    mixin = _make_mixin(tms_data)
+    uploaded = await mixin._tms_fetch_and_upload_missing_docs(
+        job=_make_job(), invoice=_make_invoice(), api=api, invoice_id="123",
+        verification={}, temp_dir=tmp_path,
+        invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=existing,
+    )
+
+    assert uploaded == []
+    assert api.upload_attachment.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_skips_path_that_does_not_exist(tmp_path):
+    """If the data layer returns a Path that doesn't exist on disk, that doc is skipped."""
+    pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
+    missing_path = tmp_path / "LM2604130046_do.pdf"  # never created
+
+    tms_data = MagicMock()
+    tms_data.get_failed_rows = MagicMock(return_value=[])
+    tms_data.get_all_documents = AsyncMock(return_value={
+        "pod": pod_path, "do": missing_path,
+    })
+
+    api = MagicMock()
+    api.upload_attachment = AsyncMock(return_value=True)
+
+    mixin = _make_mixin(tms_data)
+    uploaded = await mixin._tms_fetch_and_upload_missing_docs(
+        job=_make_job(), invoice=_make_invoice(), api=api, invoice_id="123",
+        verification={}, temp_dir=tmp_path,
+        invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=[],
+    )
+
+    assert uploaded == ["pod"]
+    assert api.upload_attachment.await_count == 1

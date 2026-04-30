@@ -203,6 +203,7 @@ export const agentBridge = {
         // TMS flow events
         'tms_fetching_docs', 'tms_pod_downloaded', 'tms_not_available',
         'tms_fetch_timeout', 'tms_fetch_error',
+        'tms_doc_already_on_qbo',
         'oec_do_sender_resolved', 'oec_do_sender_missing', 'do_sender_from_cache',
         'tms_doc_not_found',
         'failed_rows_changed',
