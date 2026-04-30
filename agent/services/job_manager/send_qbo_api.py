@@ -5,6 +5,7 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 from config import RESEND_NOTICE, TMS_FETCH_TIMEOUT_S
 from services.email_template import build_invoice_email_html
@@ -32,20 +33,32 @@ class SendQBOApiMixin:
         """Fetch every TMS document for the WO; upload to QBO any not already attached.
 
         TMS is the source of truth for supporting documents. QBO holds only the
-        invoice PDF. We pull the full document list from TMS, skip the 'invoice'
-        type (QBO owns it), dedupe against existing QBO attachments by docType,
-        and upload the remainder.
+        invoice PDF. We compute the dedupe set up front (existing QBO docTypes +
+        the QBO-owned 'invoice' type) and pass it as `skip_types` to the cascade
+        so docs we'd skip aren't downloaded over the network. Remaining downloads
+        and the corresponding QBO uploads run in parallel via asyncio.gather.
 
         Per-doc download failures land in the data layer's FailedRowsTracker;
         the UI exposes them in the Failed Rows box with explicit Retry buttons.
         We never auto-fall-back to the browser — the user must opt in.
         """
+        import asyncio
+
         if not self._tms_data:
             logger.warning("TMSDataLayer not configured — skipping doc fetch for %s",
                            invoice.invoice_number)
             return []
 
         container = verification.get("found_container") or invoice.container_number or ""
+
+        # Compute skip_types up front: every QBO docType (lowercased) + the
+        # QBO-owned 'invoice' type. Cascade skips downloads for these.
+        skip_types = {
+            (a.get("docType") or "").lower()
+            for a in (existing_attachments or [])
+            if a.get("docType")
+        }
+        skip_types.add("invoice")
 
         await self._emit_send(job, "tms_fetching_docs", {
             "invoiceNumber": invoice.invoice_number,
@@ -55,53 +68,41 @@ class SendQBOApiMixin:
 
         rows_before = len(self._tms_data.get_failed_rows(job.id))
         fetched = await self._tms_data.get_all_documents(
-            job.id, invoice_data, temp_dir, source="api",
+            job.id, invoice_data, temp_dir, source="api", skip_types=skip_types,
         )
         if len(self._tms_data.get_failed_rows(job.id)) > rows_before:
             await self._emit_failed_rows_changed(job, "added")
 
-        # QBO owns the invoice PDF — never upload a TMS-side 'invoice' back.
-        fetched = {dt: p for dt, p in fetched.items() if dt != "invoice"}
         if not fetched:
             return []
 
-        # Dedupe against existing QBO attachments by docType.
-        existing_types = {
-            (a.get("docType") or "").lower()
-            for a in (existing_attachments or [])
-        }
+        # Filter out paths that don't exist on disk (defensive).
+        valid_uploads = [(dt, p) for dt, p in fetched.items() if p and p.exists()]
+        if not valid_uploads:
+            return []
 
-        uploaded: list[str] = []
-        for dt, path in fetched.items():
-            if not (path and path.exists()):
-                continue
-            if dt in existing_types:
-                await self._emit_send(job, "tms_doc_already_on_qbo", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "docType": dt,
-                })
-                continue
-
+        async def _upload_one(dt: str, path) -> Optional[str]:
             await self._emit_send(job, "uploading_doc_to_qbo", {
                 "invoiceNumber": invoice.invoice_number,
                 "docType": dt,
                 "fileName": path.name,
             })
             if await api.upload_attachment(invoice_id, path):
-                uploaded.append(dt)
                 await self._emit_send(job, "doc_uploaded_to_qbo", {
                     "invoiceNumber": invoice.invoice_number,
                     "docType": dt,
                     "fileName": path.name,
                 })
-            else:
-                await self._emit_send(job, "doc_upload_failed", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "docType": dt,
-                    "error": "QBO upload API returned no result",
-                })
+                return dt
+            await self._emit_send(job, "doc_upload_failed", {
+                "invoiceNumber": invoice.invoice_number,
+                "docType": dt,
+                "error": "QBO upload API returned no result",
+            })
+            return None
 
-        return uploaded
+        results = await asyncio.gather(*[_upload_one(dt, p) for dt, p in valid_uploads])
+        return [r for r in results if r is not None]
 
     async def _send_qbo_api(self, job, invoice, customer: dict,
                              result, index: int) -> None:

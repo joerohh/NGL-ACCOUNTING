@@ -71,15 +71,13 @@ async def test_uploads_all_tms_docs_when_qbo_has_none(tmp_path):
 
 @pytest.mark.asyncio
 async def test_dedupes_against_existing_qbo_attachments(tmp_path):
-    """If QBO already has POD, only the other TMS docs are uploaded."""
-    pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
+    """existing_attachments → skip_types passed to cascade; only missing docs returned/uploaded."""
     do_path = tmp_path / "LM2604130046_do.pdf"; do_path.write_bytes(b"DO")
 
     tms_data = MagicMock()
     tms_data.get_failed_rows = MagicMock(return_value=[])
-    tms_data.get_all_documents = AsyncMock(return_value={
-        "pod": pod_path, "do": do_path,
-    })
+    # Cascade already filtered POD via skip_types, returns only DO
+    tms_data.get_all_documents = AsyncMock(return_value={"do": do_path})
 
     api = MagicMock()
     api.upload_attachment = AsyncMock(return_value=True)
@@ -93,24 +91,23 @@ async def test_dedupes_against_existing_qbo_attachments(tmp_path):
         invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=existing,
     )
 
+    # Verify skip_types forwarded correctly (POD existing + invoice type)
+    assert tms_data.get_all_documents.await_count == 1
+    kwargs = tms_data.get_all_documents.await_args.kwargs
+    assert kwargs.get("skip_types") == {"pod", "invoice"}
+
     assert uploaded == ["do"]
     assert api.upload_attachment.await_count == 1
-    # The path actually uploaded was the DO, not the POD
-    args, _ = api.upload_attachment.call_args
-    assert args[1] == do_path
 
 
 @pytest.mark.asyncio
-async def test_skips_invoice_doc_type(tmp_path):
-    """Even if TMS returns an 'invoice' type, it is NEVER uploaded back to QBO."""
-    inv_path = tmp_path / "LM2604130046_invoice.pdf"; inv_path.write_bytes(b"INV")
+async def test_invoice_type_added_to_skip_types(tmp_path):
+    """Invoice doc type is always added to skip_types — QBO owns the invoice PDF."""
     pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
 
     tms_data = MagicMock()
     tms_data.get_failed_rows = MagicMock(return_value=[])
-    tms_data.get_all_documents = AsyncMock(return_value={
-        "invoice": inv_path, "pod": pod_path,
-    })
+    tms_data.get_all_documents = AsyncMock(return_value={"pod": pod_path})
 
     api = MagicMock()
     api.upload_attachment = AsyncMock(return_value=True)
@@ -122,8 +119,10 @@ async def test_skips_invoice_doc_type(tmp_path):
         invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=[],
     )
 
+    kwargs = tms_data.get_all_documents.await_args.kwargs
+    assert "invoice" in kwargs.get("skip_types", set())
+
     assert uploaded == ["pod"]
-    assert api.upload_attachment.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -150,30 +149,27 @@ async def test_existing_attachments_none_does_not_crash(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_dedupe_handles_uppercase_qbo_doc_type(tmp_path):
-    """QBO docType comes back lowercase from classify_attachment, but defend against
-    upstream changes by lowercasing on our side too."""
-    pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
-
+async def test_uppercase_qbo_doc_type_lowercased_in_skip_types(tmp_path):
+    """QBO docType uppercase is lowercased before being added to skip_types."""
     tms_data = MagicMock()
     tms_data.get_failed_rows = MagicMock(return_value=[])
-    tms_data.get_all_documents = AsyncMock(return_value={"pod": pod_path})
+    tms_data.get_all_documents = AsyncMock(return_value={})
 
     api = MagicMock()
     api.upload_attachment = AsyncMock(return_value=True)
 
-    # Upstream classifier could change; ensure dedupe still works if docType is uppercase.
     existing = [{"docType": "POD", "fileName": "Existing POD.pdf"}]
 
     mixin = _make_mixin(tms_data)
-    uploaded = await mixin._tms_fetch_and_upload_missing_docs(
+    await mixin._tms_fetch_and_upload_missing_docs(
         job=_make_job(), invoice=_make_invoice(), api=api, invoice_id="123",
         verification={}, temp_dir=tmp_path,
         invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=existing,
     )
 
-    assert uploaded == []
-    assert api.upload_attachment.await_count == 0
+    kwargs = tms_data.get_all_documents.await_args.kwargs
+    assert "pod" in kwargs.get("skip_types", set())
+    assert "invoice" in kwargs.get("skip_types", set())
 
 
 @pytest.mark.asyncio
@@ -200,3 +196,43 @@ async def test_skips_path_that_does_not_exist(tmp_path):
 
     assert uploaded == ["pod"]
     assert api.upload_attachment.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_uploads_run_in_parallel(tmp_path):
+    """Multiple uploads use asyncio.gather, not serial await."""
+    import asyncio
+
+    pod_path = tmp_path / "LM2604130046_pod.pdf"; pod_path.write_bytes(b"POD")
+    do_path = tmp_path / "LM2604130046_do.pdf"; do_path.write_bytes(b"DO")
+    it_path = tmp_path / "LM2604130046_it.pdf"; it_path.write_bytes(b"IT")
+
+    tms_data = MagicMock()
+    tms_data.get_failed_rows = MagicMock(return_value=[])
+    tms_data.get_all_documents = AsyncMock(return_value={
+        "pod": pod_path, "do": do_path, "it": it_path,
+    })
+
+    concurrent = 0
+    max_concurrent = 0
+
+    async def slow_upload(invoice_id, path):
+        nonlocal concurrent, max_concurrent
+        concurrent += 1
+        max_concurrent = max(max_concurrent, concurrent)
+        await asyncio.sleep(0.05)
+        concurrent -= 1
+        return True
+
+    api = MagicMock()
+    api.upload_attachment = slow_upload
+
+    mixin = _make_mixin(tms_data)
+    uploaded = await mixin._tms_fetch_and_upload_missing_docs(
+        job=_make_job(), invoice=_make_invoice(), api=api, invoice_id="123",
+        verification={}, temp_dir=tmp_path,
+        invoice_data={"DocNumber": "LM26040724F"}, existing_attachments=[],
+    )
+
+    assert sorted(uploaded) == ["do", "it", "pod"]
+    assert max_concurrent >= 2, f"Expected concurrent uploads, got max={max_concurrent}"
