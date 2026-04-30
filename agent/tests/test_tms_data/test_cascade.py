@@ -228,3 +228,71 @@ async def test_run_enrich_default_skips_tms_when_qbo_complete():
     assert err is None
     assert tms_api.get_work_order.await_count == 0, "default path must skip TMS"
     assert enriched.do_sender_email is None
+
+
+from services.tms_data.cascade import run_all_documents
+
+
+@pytest.mark.asyncio
+async def test_run_all_documents_downloads_every_file_url(tmp_path):
+    """All docs with a file_url are downloaded; the dict is keyed by lowercased type_."""
+    invoice = _qbo_invoice(wo="LM2604130046")
+    wo = {
+        "documents": [
+            {"type_": "POD", "file_url": "https://tms/pod.pdf"},
+            {"type_": "DO", "file_url": "https://tms/do.pdf"},
+            {"type_": "IT", "file_url": "https://tms/it.pdf"},
+            {"type_": "ITE", "file_url": "https://tms/ite.pdf"},
+            {"type_": "MEMO", "file_url": ""},  # no file_url — must be skipped
+        ],
+    }
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+    tms_api.download_document = AsyncMock(side_effect=[b"PODBYTES", b"DOBYTES", b"ITBYTES", b"ITEBYTES"])
+
+    paths, per_doc_errors, top_error = await run_all_documents(invoice, tmp_path, tms_api)
+
+    assert top_error is None
+    assert per_doc_errors == {}
+    assert set(paths.keys()) == {"pod", "do", "it", "ite"}
+    assert paths["pod"].read_bytes() == b"PODBYTES"
+    assert paths["pod"].name.endswith("_pod.pdf")
+    tms_api.get_work_order.assert_awaited_once_with("LM2604130046")
+    assert tms_api.download_document.await_count == 4
+
+
+@pytest.mark.asyncio
+async def test_run_all_documents_no_wo_returns_top_error(tmp_path):
+    """If the QBO invoice has no WO#, no API calls happen and top_error is set."""
+    invoice = _qbo_invoice()  # no WO
+    tms_api = AsyncMock()
+
+    paths, per_doc_errors, top_error = await run_all_documents(invoice, tmp_path, tms_api)
+
+    assert paths == {}
+    assert per_doc_errors == {}
+    assert top_error is not None
+    assert "WO" in top_error
+    tms_api.get_work_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_all_documents_partial_download_failure_records_per_doc(tmp_path):
+    """One doc downloads fine, another fails — each tracked separately."""
+    invoice = _qbo_invoice(wo="LM2604130046")
+    wo = {
+        "documents": [
+            {"type_": "POD", "file_url": "https://tms/pod.pdf"},
+            {"type_": "DO", "file_url": "https://tms/do.pdf"},
+        ],
+    }
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+    tms_api.download_document = AsyncMock(side_effect=[b"PODBYTES", None])
+
+    paths, per_doc_errors, top_error = await run_all_documents(invoice, tmp_path, tms_api)
+
+    assert top_error is None
+    assert set(paths.keys()) == {"pod"}
+    assert "do" in per_doc_errors
+    assert "no data" in per_doc_errors["do"].lower()

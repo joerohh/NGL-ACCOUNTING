@@ -154,3 +154,65 @@ async def run_document(
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(data)
     return dest, None
+
+
+async def run_all_documents(
+    invoice_data: dict,
+    dest_dir: Path,
+    tms_api,
+) -> Tuple[dict[str, Path], dict[str, str], Optional[str]]:
+    """Download every documents[].file_url on the WO. One get_work_order call.
+
+    Returns (paths, per_doc_errors, top_error):
+      - paths: dict of lowercased doc_type → saved Path (only successful downloads)
+      - per_doc_errors: dict of lowercased doc_type → error message for failed downloads
+      - top_error: non-None when get_work_order itself raised. None when:
+                   * WO record was returned (per-doc errors recorded separately)
+                   * WO returned 404 (treated as no-data, paths == {})
+                   * No WO# extractable from QBO (returns "no WO#" top_error so the
+                     data layer can record one summary failure if it wants to)
+    """
+    wo_no = extract_wo_from_qbo(invoice_data)
+    if not wo_no:
+        return {}, {}, "Cannot fetch from TMS API: no WO# on QBO invoice"
+
+    try:
+        wo = await tms_api.get_work_order(wo_no)
+    except Exception as e:
+        logger.warning("TMS API get_work_order failed for %s: %s", wo_no, e)
+        return {}, {}, str(e)
+
+    if not wo:
+        # 404 or API not configured — not a hard failure.
+        return {}, {}, None
+
+    paths: dict[str, Path] = {}
+    per_doc_errors: dict[str, str] = {}
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    for doc in wo.get("documents") or []:
+        if not isinstance(doc, dict):
+            continue
+        type_raw = doc.get("type_") or ""
+        url = doc.get("file_url") or ""
+        if not type_raw or not url:
+            continue
+        doc_type = type_raw.lower()
+
+        try:
+            data = await tms_api.download_document(url)
+        except Exception as e:
+            logger.warning("TMS API download_document(%s) raised: %s", url, e)
+            per_doc_errors[doc_type] = str(e)
+            continue
+
+        if not data:
+            per_doc_errors[doc_type] = f"Document download returned no data for {doc_type}"
+            continue
+
+        path = dest_dir / f"{wo_no}_{doc_type}.pdf"
+        path.write_bytes(data)
+        paths[doc_type] = path
+
+    return paths, per_doc_errors, None
