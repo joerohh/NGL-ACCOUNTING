@@ -176,11 +176,9 @@ class SendQBOApiMixin:
         result.attachments_missing = att_check.get("missing", [])
         all_attachments = att_check.get("attachments", [])
 
-        # Step 3b: Auto-fetch missing docs from TMS and upload to QBO.
-        # Missing docs come from customer.requiredDocs vs what's attached to the
-        # QBO invoice. For OEC customers the D/O email step already handled TMS
-        # lookup + POD — so we skip the fetch-and-upload here.
-        missing_docs = [m for m in (result.attachments_missing or []) if (m or "").lower() != "invoice"]
+        # Step 3b: TMS cascade — TMS is source of truth for supporting docs.
+        # Run unconditionally for non-OEC (OEC does its own POD pull in send_oec.py).
+        # `requiredDocs` is enforced AFTER this block as a pure block gate.
         temp_dir = None
 
         logger.info("Attachment check for %s: found=%s, missing=%s, tms_available=%s",
@@ -189,13 +187,13 @@ class SendQBOApiMixin:
         for a in all_attachments:
             logger.info("  -> '%s' classified as '%s'", a.get("fileName"), a.get("docType"))
 
-        if missing_docs and self._tms_data and not is_oec:
+        if self._tms_data and not is_oec:
             temp_dir = Path(tempfile.mkdtemp(prefix="ngl_docs_"))
             try:
                 uploaded = await asyncio.wait_for(
                     self._tms_fetch_and_upload_missing_docs(
                         job, invoice, api, invoice_id, verification, temp_dir,
-                        missing_docs, invoice_data=invoice_data,
+                        invoice_data=invoice_data, existing_attachments=all_attachments,
                     ),
                     timeout=TMS_FETCH_TIMEOUT_S,
                 )
