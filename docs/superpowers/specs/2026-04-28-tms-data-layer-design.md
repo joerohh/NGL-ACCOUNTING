@@ -341,3 +341,38 @@ These are explicitly **not** decided in this design. Flagging them here so we do
 After this design is approved, the next step is the **implementation plan** (via `superpowers:writing-plans`). That plan will break each of the five milestones into ordered steps with file paths, test commands, and review checkpoints. Each milestone results in: code committed → version bumped → installer built → GitHub release published → auto-update reaches all co-workers.
 
 The standing rules from `CLAUDE.md` apply throughout: every rebuild bumps the version, commits, pushes, and publishes a GitHub release with the installer + `latest.yml`. No half-finished implementations between milestones.
+
+---
+
+## 2026-04-30 Correction (shipped as v2.37.1)
+
+**Bug:** The non-OEC cascade in `send_qbo_api.py` was gated on
+`customer.requiredDocs` being non-empty. Customers configured "Send all
+attachments" (saved as `requiredDocs: []`) had the cascade silently skipped.
+Real-world miss: invoice `LM26040724F` (customer `APEXMA01`, WO
+`LM2604130046`) was emailed without a POD though TMS had POD + DO + IT + ITE
+ready.
+
+**Architectural correction:** TMS is the source of truth for supporting
+documents. QBO holds only the invoice PDF. The non-OEC send flow now:
+
+1. Pulls invoice metadata + invoice PDF from QBO (unchanged).
+2. Calls `TMSDataLayer.get_all_documents(...)` to download every
+   `documents[].file_url` on the WO.
+3. Skips the `invoice` doc type (QBO owns the invoice PDF).
+4. Dedupes the rest against existing QBO attachments by `docType`.
+5. Uploads any not yet on QBO so the QBO record is complete.
+6. Emails the QBO invoice PDF + every QBO attachment (now including the
+   newly-uploaded TMS docs).
+
+**`requiredDocs` is enforcement only.** It blocks the send at the existing
+post-cascade `att_check.allPresent` gate when a required doc is still missing
+after TMS pull. It no longer gates *whether* the cascade runs.
+
+**OEC path unchanged.** OEC already pulled POD from TMS unconditionally via
+`send_oec.py`; this correction only makes non-OEC consistent.
+
+**New public API:** `TMSDataLayer.get_all_documents(job_id, invoice_data,
+dest_dir, source="api") -> dict[str, Path]`. Backed by `cascade.run_all_documents`.
+Per-doc download failures are recorded in `FailedRowsTracker` so the existing
+per-doc Retry buttons work without further changes.
