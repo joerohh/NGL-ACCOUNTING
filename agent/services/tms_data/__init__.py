@@ -201,12 +201,18 @@ class TMSDataLayer:
         invoice_data: dict,
         dest_dir: Path,
         source: Source = "api",
+        *,
+        skip_types: Optional[set[str]] = None,
     ) -> dict[str, Path]:
         """Fetch EVERY TMS document on the invoice's WO. Returns dict of doc_type → Path.
 
         Used by the non-OEC send flow: TMS is treated as the source of truth for
         supporting documents. Caller decides which to upload to QBO (e.g. dedupe
         against existing attachments).
+
+        `skip_types` (lowercased) is forwarded to the cascade so docs the caller
+        already has are skipped BEFORE the network download — significant perf
+        win for repeat invoices.
 
         Per-doc download failures are recorded in FailedRowsTracker so the user
         can retry per-doc from the Failed Rows box. Top-level WO failures (no WO#,
@@ -225,7 +231,7 @@ class TMSDataLayer:
 
         cached = self._CachedTmsApi(self._tms_api, self._wo_cache, self._in_flight, job_id)
         paths, per_doc_errors, top_error = await run_all_documents(
-            invoice_data, dest_dir, cached,
+            invoice_data, dest_dir, cached, skip_types=skip_types,
         )
 
         if top_error:

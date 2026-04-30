@@ -362,3 +362,32 @@ async def test_get_all_documents_no_wo_returns_empty_no_failed_row(tmp_path):
     assert paths == {}
     assert layer.get_failed_rows("job-2") == []
     tms_api.get_work_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_all_documents_forwards_skip_types(tmp_path):
+    """skip_types passed to get_all_documents must reach run_all_documents intact."""
+    from services.tms_data import TMSDataLayer
+
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value={
+        "documents": [
+            {"type_": "POD", "file_url": "https://tms/pod.pdf"},
+            {"type_": "DO", "file_url": "https://tms/do.pdf"},
+        ],
+    })
+    tms_api.download_document = AsyncMock(return_value=b"BYTES")
+
+    layer = TMSDataLayer(qbo_api=MagicMock(), tms_api=tms_api, tms_browser=MagicMock())
+    invoice = {
+        "DocNumber": "LM26040724F",
+        "CustomField": [{"Name": "NGL REF#", "StringValue": "LM2604130046/CUST"}],
+    }
+
+    paths = await layer.get_all_documents(
+        "job-skip", invoice, tmp_path, skip_types={"pod"},
+    )
+
+    # Only DO downloaded (POD skipped before download)
+    assert set(paths.keys()) == {"do"}
+    assert tms_api.download_document.await_count == 1
