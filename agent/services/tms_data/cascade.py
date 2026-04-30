@@ -160,8 +160,14 @@ async def run_all_documents(
     invoice_data: dict,
     dest_dir: Path,
     tms_api,
+    *,
+    skip_types: Optional[set[str]] = None,
 ) -> Tuple[dict[str, Path], dict[str, str], Optional[str]]:
     """Download every documents[].file_url on the WO. One get_work_order call.
+
+    `skip_types` (lowercased doc types) bypasses both download and write for
+    types the caller already has — used by send_qbo_api to skip QBO-present
+    types and the QBO-owned 'invoice' type without paying the network cost.
 
     Returns (paths, per_doc_errors, top_error):
       - paths: dict of lowercased doc_type → saved Path (only successful downloads)
@@ -172,6 +178,8 @@ async def run_all_documents(
                    * No WO# extractable from QBO (returns "no WO#" top_error so the
                      data layer can record one summary failure if it wants to)
     """
+    import asyncio
+
     wo_no = extract_wo_from_qbo(invoice_data)
     if not wo_no:
         return {}, {}, "Cannot fetch from TMS API: no WO# on QBO invoice"
@@ -183,14 +191,14 @@ async def run_all_documents(
         return {}, {}, str(e)
 
     if not wo:
-        # 404 or API not configured — not a hard failure.
         return {}, {}, None
 
     paths: dict[str, Path] = {}
     per_doc_errors: dict[str, str] = {}
 
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
+    # Build the download work list, applying skip_types up-front.
+    work: list[Tuple[str, str]] = []  # (doc_type, url)
+    skip = skip_types or set()
     for doc in wo.get("documents") or []:
         if not isinstance(doc, dict):
             continue
@@ -199,20 +207,32 @@ async def run_all_documents(
         if not type_raw or not url:
             continue
         doc_type = type_raw.lower()
+        if doc_type in skip:
+            continue
+        work.append((doc_type, url))
 
+    if not work:
+        return paths, per_doc_errors, None
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    async def _download_one(doc_type: str, url: str) -> Tuple[str, Optional[Path], Optional[str]]:
         try:
             data = await tms_api.download_document(url)
         except Exception as e:
             logger.warning("TMS API download_document(%s) raised: %s", url, e)
-            per_doc_errors[doc_type] = str(e)
-            continue
-
+            return doc_type, None, str(e)
         if not data:
-            per_doc_errors[doc_type] = f"Document download returned no data for {doc_type}"
-            continue
-
+            return doc_type, None, f"Document download returned no data for {doc_type}"
         path = dest_dir / f"{wo_no}_{doc_type}.pdf"
         path.write_bytes(data)
-        paths[doc_type] = path
+        return doc_type, path, None
+
+    results = await asyncio.gather(*[_download_one(dt, u) for dt, u in work])
+    for doc_type, path, err in results:
+        if err:
+            per_doc_errors[doc_type] = err
+        elif path:
+            paths[doc_type] = path
 
     return paths, per_doc_errors, None

@@ -296,3 +296,69 @@ async def test_run_all_documents_partial_download_failure_records_per_doc(tmp_pa
     assert set(paths.keys()) == {"pod"}
     assert "do" in per_doc_errors
     assert "no data" in per_doc_errors["do"].lower()
+
+
+@pytest.mark.asyncio
+async def test_run_all_documents_skip_types_filters_before_download(tmp_path):
+    """skip_types in the cascade prevents downloading those types entirely."""
+    invoice = _qbo_invoice(wo="LM2604130046")
+    wo = {
+        "documents": [
+            {"type_": "POD", "file_url": "https://tms/pod.pdf"},
+            {"type_": "DO", "file_url": "https://tms/do.pdf"},
+            {"type_": "IT", "file_url": "https://tms/it.pdf"},
+        ],
+    }
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+    tms_api.download_document = AsyncMock(return_value=b"BYTES")
+
+    paths, per_doc_errors, top_error = await run_all_documents(
+        invoice, tmp_path, tms_api, skip_types={"pod", "do"},
+    )
+
+    assert top_error is None
+    assert per_doc_errors == {}
+    assert set(paths.keys()) == {"it"}
+    # Only IT should have been downloaded — skipped types never hit the network
+    assert tms_api.download_document.await_count == 1
+    args, _ = tms_api.download_document.call_args
+    assert args[0] == "https://tms/it.pdf"
+
+
+@pytest.mark.asyncio
+async def test_run_all_documents_downloads_in_parallel(tmp_path):
+    """Multiple downloads run concurrently via asyncio.gather, not serially."""
+    import asyncio
+
+    invoice = _qbo_invoice(wo="LM2604130046")
+    wo = {
+        "documents": [
+            {"type_": "POD", "file_url": "https://tms/pod.pdf"},
+            {"type_": "DO", "file_url": "https://tms/do.pdf"},
+            {"type_": "IT", "file_url": "https://tms/it.pdf"},
+        ],
+    }
+
+    # Track concurrency: each download takes 50ms; if serial, total >= 150ms.
+    # Parallel via gather -> total <= ~80ms (with overhead).
+    concurrent = 0
+    max_concurrent = 0
+
+    async def slow_download(url):
+        nonlocal concurrent, max_concurrent
+        concurrent += 1
+        max_concurrent = max(max_concurrent, concurrent)
+        await asyncio.sleep(0.05)
+        concurrent -= 1
+        return b"BYTES"
+
+    tms_api = AsyncMock()
+    tms_api.get_work_order = AsyncMock(return_value=wo)
+    tms_api.download_document = slow_download
+
+    paths, per_doc_errors, top_error = await run_all_documents(invoice, tmp_path, tms_api)
+
+    assert top_error is None
+    assert set(paths.keys()) == {"pod", "do", "it"}
+    assert max_concurrent >= 2, f"Expected concurrent downloads, got max={max_concurrent}"
