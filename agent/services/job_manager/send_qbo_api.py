@@ -13,6 +13,7 @@ from services.job_manager.util import (
     normalize_email_list,
     validate_and_append_email,
 )
+from services.qbo_api.dedup import dedupe_attachments
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -25,6 +26,27 @@ class SendQBOApiMixin:
         """Silently remove a temp directory if it exists."""
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    async def _dedup_and_emit(self, job, invoice_number: str,
+                              attachments: list[dict]) -> list[dict]:
+        """Run dedupe_attachments, log INFO if any skipped, and emit SSE event.
+
+        Returns the kept list. SSE event 'attachments_deduped' is emitted only
+        when skipped > 0.
+        """
+        kept, skipped = dedupe_attachments(attachments)
+        if skipped:
+            logger.info(
+                "Deduped attachments for %s: kept %d of %d (skipped %d TMS duplicates)",
+                invoice_number, len(kept), len(attachments), len(skipped),
+            )
+            await self._emit_send(job, "attachments_deduped", {
+                "invoiceNumber": invoice_number,
+                "kept": len(kept),
+                "skipped": len(skipped),
+                "skippedFiles": [a.get("fileName", "") for a in skipped],
+            })
+        return kept
 
     async def _tms_fetch_and_upload_missing_docs(
         self, job, invoice, api, invoice_id, verification, temp_dir,
@@ -175,7 +197,10 @@ class SendQBOApiMixin:
         att_check = await api.check_attachments(invoice_id, required_docs)
         result.attachments_found = att_check.get("found", [])
         result.attachments_missing = att_check.get("missing", [])
-        all_attachments = att_check.get("attachments", [])
+        # WORKAROUND(TMS-008): see docs/tms-workarounds.md — drop duplicate Attachable records before email
+        all_attachments = await self._dedup_and_emit(
+            job, invoice.invoice_number, att_check.get("attachments", []),
+        )
 
         # Step 3b: TMS cascade — TMS is source of truth for supporting docs.
         # Run unconditionally for non-OEC (OEC does its own POD pull in send_oec.py).
@@ -202,7 +227,9 @@ class SendQBOApiMixin:
                     att_check = await api.check_attachments(invoice_id, required_docs)
                     result.attachments_found = att_check.get("found", [])
                     result.attachments_missing = att_check.get("missing", [])
-                    all_attachments = att_check.get("attachments", [])
+                    all_attachments = await self._dedup_and_emit(
+                        job, invoice.invoice_number, att_check.get("attachments", []),
+                    )
             except asyncio.TimeoutError:
                 logger.warning("TMS doc fetch timed out after %ds for %s — skipping",
                                TMS_FETCH_TIMEOUT_S, invoice.invoice_number)
