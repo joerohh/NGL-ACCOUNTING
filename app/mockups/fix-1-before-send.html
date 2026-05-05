@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Before Send</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .state-toggle {
+    margin-left: auto;
+    display: flex; gap: 4px;
+    background: rgba(0,0,0,0.15);
+    padding: 3px;
+    border-radius: 8px;
+  }
+  .state-toggle button {
+    padding: 5px 14px; border: none; background: none;
+    color: rgba(255,255,255,0.85);
+    font-size: 0.76rem; font-weight: 600; cursor: pointer;
+    border-radius: 5px; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .state-toggle button:hover { color: white; }
+  .state-toggle button.active {
+    background: white; color: #ea580c;
+  }
+
+  .app-layout { display: flex; min-height: calc(100vh - 38px); }
+
+  .sidebar {
+    width: 200px; min-width: 200px; background: #fff;
+    border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column;
+    height: calc(100vh - 38px); position: sticky; top: 38px;
+  }
+  .sidebar-logo {
+    padding: 16px 14px 14px; text-align: center; cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .sidebar-logo .logo-mark {
+    width: 48px; height: 48px;
+    background: #0f172a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 6px;
+  }
+  .sidebar-logo .logo-title {
+    font-size: 0.78rem; font-weight: 700; color: #0f172a; line-height: 1.2;
+  }
+  .sidebar-logo .logo-subtitle {
+    font-size: 0.65rem; color: #94a3b8; margin-top: 2px;
+  }
+  .sidebar-nav { flex: 1; padding: 8px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-section-label {
+    font-size: 0.62rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 14px 11px 5px;
+  }
+  .sidebar-nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border-radius: 7px; cursor: pointer;
+    color: #475569; font-size: 0.82rem; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .sidebar-nav-item:hover { background: #f8fafc; color: #1e293b; }
+  .sidebar-nav-item.active {
+    background: #fff7ed; color: #ea580c; font-weight: 600;
+    border-color: #fed7aa;
+  }
+  .sidebar-bottom { border-top: 1px solid #f1f5f9; padding: 8px; }
+  .sidebar-bottom-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px; border-radius: 7px; cursor: pointer;
+    color: #94a3b8; font-size: 0.78rem; font-weight: 500;
+  }
+  .sidebar-footer {
+    padding: 8px 14px; border-top: 1px solid #f1f5f9;
+    font-size: 0.7rem; color: #94a3b8; text-align: center;
+  }
+
+  .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .tool-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid #e2e8f0; background: #fff;
+  }
+  .tool-title-group { display: flex; align-items: center; gap: 12px; }
+  .tool-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+  .tool-title-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #fff7ed; color: #ea580c;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tool-actions { display: flex; align-items: center; gap: 10px; }
+  .tool-switcher-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0;
+    background: #fff; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+    color: #475569; font-family: inherit;
+  }
+  .agent-indicator {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    font-size: 0.78rem; color: #15803d; font-weight: 500;
+  }
+  .agent-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #16a34a;
+    box-shadow: 0 0 6px rgba(22,163,106,0.5);
+  }
+
+  .work-area { padding: 22px 28px; overflow-y: auto; flex: 1; }
+
+  /* ─── Setup Panel: CSV + Settings (top of page) ─── */
+  .setup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .panel-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .section-label {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.78rem; font-weight: 700;
+    color: #475569;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .section-label-icon { color: #ea580c; }
+
+  .drop-zone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 10px; padding: 24px;
+    text-align: center;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .drop-zone:hover { border-color: #f97316; background: #fff7ed; }
+  .drop-zone.loaded {
+    border-style: solid;
+    border-color: #86efac;
+    background: #f0fdf4;
+    text-align: left;
+    padding: 14px 18px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .drop-zone.loaded .file-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: #16a34a; color: white;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-weight: 700;
+  }
+  .drop-zone.loaded .file-info { flex: 1; min-width: 0; }
+  .drop-zone.loaded .file-name { font-weight: 600; color: #14532d; font-size: 0.92rem; }
+  .drop-zone.loaded .file-meta { color: #16a34a; font-size: 0.78rem; margin-top: 2px; }
+  .drop-zone.loaded .remove-btn {
+    background: none; border: none; cursor: pointer;
+    color: #94a3b8; padding: 4px;
+  }
+  .drop-zone.loaded .remove-btn:hover { color: #dc2626; }
+
+  .drop-zone .icon-big {
+    width: 44px; height: 44px; margin: 0 auto 10px;
+    color: #22c55e;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .drop-zone .title { font-size: 0.95rem; font-weight: 600; color: #334155; }
+  .drop-zone .subtitle { font-size: 0.82rem; color: #64748b; margin-top: 4px; }
+  .drop-zone .file-types { font-size: 0.76rem; color: #94a3b8; margin-top: 8px; }
+
+  .field-label {
+    font-size: 0.72rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    display: block; margin-bottom: 5px;
+  }
+  .field-input {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    font-size: 0.85rem; color: #1e293b;
+    font-family: inherit;
+  }
+  .field-input:focus { outline: none; border-color: #f97316; }
+  .field-help {
+    font-size: 0.7rem; color: #94a3b8;
+    margin-top: 4px; line-height: 1.5;
+  }
+  .field-help code {
+    background: #f1f5f9;
+    padding: 1px 5px; border-radius: 3px;
+    font-size: 0.7rem; color: #475569;
+  }
+
+  .test-mode-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+    font-size: 0.78rem; color: #64748b;
+  }
+  .test-mode-row input { accent-color: #ea580c; width: 15px; height: 15px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 9px 16px; border-radius: 8px; cursor: pointer;
+    font-size: 0.86rem; font-weight: 600;
+    border: 1px solid transparent;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: #ea580c; color: white; border-color: #ea580c;
+  }
+  .btn-primary:hover { background: #c2410c; }
+  .btn-primary:disabled {
+    background: #fed7aa; color: #fff; cursor: not-allowed; border-color: #fed7aa;
+  }
+  .btn-secondary {
+    background: #fff; color: #475569; border-color: #e2e8f0;
+  }
+  .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+  .send-btn-block {
+    margin-top: 14px;
+  }
+  .send-btn-block .btn {
+    width: 100%; padding: 11px 18px; font-size: 0.92rem;
+  }
+  .send-btn-block .btn-secondary { margin-top: 8px; }
+
+  /* ─── Validation summary cards ─── */
+  .validation-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .val-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .val-card .val-label {
+    font-size: 0.72rem; font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .val-card .val-number {
+    font-size: 1.6rem; font-weight: 700; color: #0f172a;
+    line-height: 1;
+  }
+  .val-card .val-sub {
+    font-size: 0.72rem; color: #94a3b8;
+    margin-top: 4px;
+  }
+  .val-card.ready .val-number { color: #16a34a; }
+  .val-card.warn .val-number { color: #d97706; }
+  .val-card.problem .val-number { color: #dc2626; }
+  .val-card.problem { background: #fef2f2; border-color: #fecaca; }
+  .val-card.warn { background: #fffbeb; border-color: #fde68a; }
+
+  /* ─── Preview tabs + table ─── */
+  .preview-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 12px;
+  }
+  .preview-header h2 {
+    font-size: 1.05rem; font-weight: 700; color: #0f172a;
+  }
+  .preview-header .preview-meta {
+    color: #64748b; font-size: 0.82rem; margin-top: 2px;
+  }
+
+  .tabs {
+    display: flex; gap: 4px; border-bottom: 2px solid #e2e8f0; margin-bottom: 0;
+  }
+  .tab {
+    padding: 10px 16px; background: none; border: none;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    cursor: pointer; font-size: 0.84rem; font-weight: 600;
+    color: #64748b; display: flex; align-items: center; gap: 7px;
+    font-family: inherit;
+  }
+  .tab:hover { color: #ea580c; background: #fff7ed; }
+  .tab.active {
+    color: #ea580c; border-bottom-color: #ea580c; background: #fff7ed;
+  }
+  .tab .count {
+    background: #f1f5f9; color: #475569;
+    padding: 2px 7px; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700;
+  }
+  .tab.active .count { background: #ea580c; color: white; }
+  .tab.has-issues .count { background: #fee2e2; color: #b91c1c; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; background: #fff;
+    border: 1px solid #e2e8f0; border-top: none;
+    font-size: 0.82rem; color: #64748b;
+  }
+  .toolbar input.search {
+    flex: 1; max-width: 280px;
+    padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px;
+    font-size: 0.85rem; font-family: inherit;
+  }
+  .toolbar input.search:focus { outline: none; border-color: #ea580c; }
+  .toolbar .filter-meta { color: #94a3b8; }
+
+  .table-wrap {
+    background: #fff; border: 1px solid #e2e8f0; border-top: none;
+    border-radius: 0 0 8px 8px; overflow: hidden;
+    max-height: calc(100vh - 580px);
+    min-height: 260px;
+    overflow-y: auto;
+  }
+  .inv-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .inv-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+  .inv-table th {
+    padding: 10px 14px; text-align: left;
+    font-size: 0.7rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  .inv-table th input[type="checkbox"] {
+    width: 16px; height: 16px; accent-color: #ea580c; cursor: pointer;
+  }
+  .inv-table td {
+    padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+    color: #334155; vertical-align: middle;
+  }
+  .inv-table td input[type="checkbox"] {
+    width: 16px; height: 16px; accent-color: #ea580c; cursor: pointer;
+  }
+  .inv-table tbody tr:hover { background: #fafafa; }
+  .inv-table tbody tr.row-issue { background: #fef9f5; }
+  .inv-table tbody tr.row-issue:hover { background: #fff1ea; }
+  .inv-table tbody tr.row-sending { background: #eff6ff; }
+
+  .invoice-cell { font-weight: 600; color: #0f172a; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82rem; }
+  .container-cell { color: #475569; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82rem; }
+  .customer-cell { color: #334155; font-size: 0.82rem; line-height: 1.35; }
+  .customer-cell .cust-code { font-weight: 600; color: #0f172a; font-family: 'SF Mono', Consolas, monospace; font-size: 0.78rem; display: block; }
+  .customer-cell .cust-name { color: #64748b; font-size: 0.76rem; }
+
+  .method-pill {
+    display: inline-block;
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 0.66rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    background: #f1f5f9; color: #475569;
+  }
+  .method-pill.oec { background: #ffedd5; color: #9a3412; }
+  .method-pill.portal { background: #fef3c7; color: #92400e; }
+
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .badge-ready { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .badge-no-match { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-no-email { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
+  .badge-needs-do { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+  .badge-pending { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+  .badge-sending {
+    background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;
+  }
+  .badge-sent { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+
+  .small-spinner {
+    width: 11px; height: 11px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .reason-text {
+    font-size: 0.74rem; color: #b91c1c;
+    margin-top: 3px; font-weight: 500;
+  }
+  .reason-text.warn { color: #b45309; }
+
+  /* Empty state */
+  .empty-preview {
+    background: #fff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 60px 24px; text-align: center;
+    color: #94a3b8;
+  }
+  .empty-preview .big-icon {
+    font-size: 2.6rem; margin-bottom: 14px; opacity: 0.6;
+  }
+  .empty-preview h3 {
+    font-size: 1.1rem; font-weight: 700; color: #475569; margin-bottom: 6px;
+  }
+  .empty-preview p { font-size: 0.88rem; line-height: 1.55; max-width: 420px; margin: 0 auto; }
+
+  /* ─── Collapsed setup summary bar ─── */
+  .setup-collapsed {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .setup-collapsed .file-mini-icon {
+    width: 32px; height: 32px; border-radius: 7px;
+    background: #16a34a; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; flex-shrink: 0;
+  }
+  .setup-collapsed .file-text { flex: 1; min-width: 0; }
+  .setup-collapsed .file-text .name {
+    font-weight: 600; color: #0f172a; font-size: 0.92rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .setup-collapsed .file-text .meta {
+    color: #64748b; font-size: 0.78rem; margin-top: 2px;
+  }
+  .setup-collapsed .quick-meta {
+    display: flex; gap: 16px; font-size: 0.78rem; color: #64748b;
+    align-items: center;
+  }
+  .setup-collapsed .quick-meta strong { color: #0f172a; }
+  .setup-collapsed .expand-btn {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 6px 12px; font-size: 0.78rem; cursor: pointer;
+    color: #475569; font-family: inherit;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .setup-collapsed .expand-btn:hover { border-color: #ea580c; color: #ea580c; }
+
+  /* ─── Live revalidation toast ─── */
+  .revalidation-toast {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 12px;
+    animation: slideDown 0.3s ease-out;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .revalidation-toast .toast-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #16a34a; color: white;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-weight: 700;
+  }
+  .revalidation-toast .toast-text {
+    flex: 1; font-size: 0.86rem; color: #14532d; line-height: 1.4;
+  }
+  .revalidation-toast .toast-text strong { color: #064e3b; font-weight: 700; }
+  .revalidation-toast .toast-text small { display: block; color: #16a34a; font-size: 0.76rem; margin-top: 1px; }
+  .revalidation-toast .dismiss {
+    background: none; border: none; cursor: pointer;
+    color: #16a34a; font-size: 1.2rem; line-height: 1;
+    padding: 4px 8px;
+  }
+  .revalidation-toast .dismiss:hover { color: #14532d; }
+
+  /* ─── Demo trigger button (mockup-only) ─── */
+  .demo-trigger {
+    background: #1e293b; color: #f1f5f9;
+    padding: 9px 14px; border-radius: 7px;
+    font-size: 0.8rem; cursor: pointer; border: none;
+    font-family: inherit; font-weight: 500;
+    margin-bottom: 14px;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .demo-trigger:hover { background: #0f172a; }
+  .demo-trigger::before { content: "▶"; }
+
+  /* Sending state — progress bar at top */
+  .progress-bar-wrap {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+  }
+  .progress-info {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.86rem;
+    color: #334155;
+  }
+  .progress-info strong { color: #0f172a; font-weight: 700; }
+  .progress-info .pause-btn {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 6px; padding: 4px 11px;
+    font-size: 0.78rem; color: #475569; cursor: pointer;
+    font-family: inherit;
+  }
+  .progress-info .pause-btn:hover { border-color: #ea580c; color: #ea580c; }
+  .progress-track {
+    background: #f1f5f9; height: 8px; border-radius: 4px; overflow: hidden;
+  }
+  .progress-fill {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    height: 100%; border-radius: 4px;
+    transition: width 0.3s;
+  }
+  .progress-stats {
+    display: flex; gap: 16px; margin-top: 8px;
+    font-size: 0.78rem; color: #64748b;
+    align-items: center; flex-wrap: wrap;
+  }
+  .progress-stats span strong { color: #0f172a; }
+  .progress-timer-row {
+    display: flex; gap: 18px;
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+    font-size: 0.82rem;
+  }
+  .timer-block { display: flex; flex-direction: column; gap: 2px; }
+  .timer-block .timer-label {
+    font-size: 0.68rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .timer-block .timer-value {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 1.05rem; font-weight: 700; color: #0f172a;
+  }
+  .timer-block .timer-value.elapsed { color: #ea580c; }
+  .timer-block .timer-value.remaining { color: #475569; }
+  .timer-block .timer-value.eta { color: #475569; font-size: 0.92rem; }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">MOCKUP</span>
+  <span>Invoice Sender — Before-Send States</span>
+  <div class="state-toggle">
+    <button data-state="empty" onclick="setState('empty')">Empty</button>
+    <button data-state="ready" class="active" onclick="setState('ready')">Ready to Send</button>
+    <button data-state="sending" onclick="setState('sending')">Sending Live</button>
+  </div>
+</div>
+
+<div class="app-layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+        </svg>
+      </div>
+      <div class="logo-title">NGL Transportation</div>
+      <div class="logo-subtitle">Accounting Suite</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="sidebar-section-label">Workspace</div>
+      <div class="sidebar-nav-item">Merging Tool</div>
+      <div class="sidebar-nav-item">INI Chassis Finder</div>
+      <div class="sidebar-nav-item active">Invoice Sender</div>
+      <div class="sidebar-nav-item">Customers</div>
+      <div class="sidebar-nav-item">Session History</div>
+      <div class="sidebar-section-label" style="margin-top:14px;">System</div>
+      <div class="sidebar-nav-item" style="color:#94a3b8;">Settings</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-bottom-item">Help</div>
+    </div>
+    <div class="sidebar-footer">v2.40.0</div>
+  </nav>
+
+  <!-- Main content -->
+  <div class="main-content">
+    <div class="tool-header">
+      <div class="tool-title-group">
+        <div class="tool-title-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-title">Invoice Sender</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Send invoices via QBO + Gmail</div>
+        </div>
+      </div>
+      <div class="tool-actions">
+        <div class="agent-indicator"><span class="agent-dot"></span> Agent online</div>
+        <button class="tool-switcher-btn">
+          Switch Tool
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="work-area" id="workArea"><!-- injected by JS --></div>
+  </div>
+</div>
+
+<script>
+let state = 'ready';
+
+function setState(s) {
+  state = s;
+  document.querySelectorAll('.state-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.state === s);
+  });
+  render();
+}
+
+function emptyView() {
+  return `
+    <div class="setup-grid">
+      <div class="panel-card">
+        <div class="section-label"><span class="section-label-icon">📄</span> Step 1 — Invoice CSV</div>
+        <div class="drop-zone">
+          <div class="icon-big">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/>
+            </svg>
+          </div>
+          <div class="title">Drop Invoice CSV / Excel</div>
+          <div class="subtitle">QuickBooks export with Invoice # and Customer columns</div>
+          <div class="file-types">.csv · .xlsx · .xls</div>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="section-label"><span class="section-label-icon">⚙</span> Step 2 — Settings & Send</div>
+        <label class="field-label">Fallback Subject Template</label>
+        <input class="field-input" type="text" value="Invoice {invoice_number} - {customer_name}" />
+        <div class="field-help">
+          Used when Excel has no <strong>Subject</strong> column.<br>
+          Tokens: <code>{invoice_number}</code> <code>{customer_name}</code> <code>{container_number}</code>
+        </div>
+        <div class="test-mode-row">
+          <input type="checkbox" id="testMode1" />
+          <label for="testMode1">Test Mode (review each invoice before sending)</label>
+        </div>
+        <div class="send-btn-block">
+          <button class="btn btn-primary" disabled>
+            ✉ Send Invoices
+          </button>
+          <button class="btn btn-secondary">📋 Audit Log</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="empty-preview">
+      <div class="big-icon">📭</div>
+      <h3>No invoices loaded yet</h3>
+      <p>Drop a QuickBooks CSV export above to see all your invoices in a preview table here. You'll be able to review each one — confirm customer matches, recipient emails, and required documents — before clicking <strong>Send</strong>.</p>
+    </div>
+  `;
+}
+
+// Track which "no-match" issues have been fixed (for the demo)
+let fixedIssues = new Set();
+let setupExpanded = false;
+
+function readyView() {
+  // Generate 120 invoices with mostly "ready" + a few "issues"
+  const customers = ['RIVER LOGISTICS', 'CARGOWORLD INC', 'PACIFIC FREIGHT', 'SUNRISE LOG',
+    'EVERGREEN CO', 'GLOBAL CARGO LTD', 'SEAWAY EXPRESS', 'OCEANIC TRADE',
+    'BLUE WAVE SHIP', 'HORIZON FORWARDERS', 'COASTAL LINK', 'NORDIC SUPPLY'];
+  const containerPrefixes = ['MAGU','KKFU','SUDU','TGHU','TCLU','MSCU','CMAU','OOLU','TRHU','UETU'];
+  const codes = ['RIVERL01','CARGOW01','PACFIC01','SUNRIS01','EVERGR01','GLOBAL01','SEAWAY01','OCEANI01','BLUEWA01','HORIZN01','COASTL01','NORDIC01'];
+  const issues = [
+    { idx: 8, status: 'no-match', code: 'XYZHOL01', name: '(unknown customer)', method: 'email' },
+    { idx: 23, status: 'no-email', code: 'TANDBL02', name: 'TANDEM BLUE LOG', method: 'email' },
+  ];
+
+  // Compute live counts based on what's been "fixed" in the demo
+  const issueCount = issues.length - fixedIssues.size;
+  const readyCount = 120 - issueCount;
+  const noMatchCount = issues.filter(x => x.status === 'no-match' && !fixedIssues.has(x.idx)).length;
+  const noEmailCount = issues.filter(x => x.status === 'no-email' && !fixedIssues.has(x.idx)).length;
+
+  let rows = '';
+  for (let i = 0; i < 120; i++) {
+    const issue = issues.find(x => x.idx === i);
+    const inv = 'LM' + (26050000 + i) + 'F';
+    const cont = containerPrefixes[i % 10] + (1000000 + i * 1234).toString().slice(0, 7);
+    if (issue && !fixedIssues.has(issue.idx)) {
+      const badge = issue.status === 'no-match'
+        ? '<span class="status-badge badge-no-match">⚠ No Customer Match</span>'
+        : '<span class="status-badge badge-no-email">⚠ No Email Configured</span>';
+      const reason = issue.status === 'no-match'
+        ? `<div class="reason-text">Customer code "${issue.code}" not found in your customer list</div>`
+        : `<div class="reason-text warn">Customer profile has no email address — open Customers to fix</div>`;
+      const methodPill = issue.method === 'oec'
+        ? '<span class="method-pill oec">OEC + POD</span>'
+        : '<span class="method-pill">Email</span>';
+      rows += `<tr class="row-issue">
+        <td><input type="checkbox"></td>
+        <td class="invoice-cell">${inv}</td>
+        <td class="container-cell">${cont}</td>
+        <td class="customer-cell">
+          <span class="cust-code">${issue.code}</span>
+          <span class="cust-name">${issue.name}</span>
+        </td>
+        <td>${methodPill}</td>
+        <td>${badge}${reason}</td>
+      </tr>`;
+    } else if (issue && fixedIssues.has(issue.idx)) {
+      // The issue was just fixed — show as ready (with a brief "✨ just fixed" note)
+      const cidx = i % customers.length;
+      rows += `<tr style="background:#f0fdf4;">
+        <td><input type="checkbox" checked></td>
+        <td class="invoice-cell">${inv}</td>
+        <td class="container-cell">${cont}</td>
+        <td class="customer-cell">
+          <span class="cust-code">${issue.code}</span>
+          <span class="cust-name">${issue.name === '(unknown customer)' ? 'XYZ HOLDINGS' : issue.name}</span>
+        </td>
+        <td><span class="method-pill">Email</span></td>
+        <td>
+          <span class="status-badge badge-ready">✓ Ready</span>
+          <div style="font-size:0.74rem; color:#16a34a; margin-top:3px; font-weight:500;">✨ Just fixed — auto-revalidated</div>
+        </td>
+      </tr>`;
+    } else {
+      const cidx = i % customers.length;
+      rows += `<tr>
+        <td><input type="checkbox" checked></td>
+        <td class="invoice-cell">${inv}</td>
+        <td class="container-cell">${cont}</td>
+        <td class="customer-cell">
+          <span class="cust-code">${codes[cidx]}</span>
+          <span class="cust-name">${customers[cidx]}</span>
+        </td>
+        <td><span class="method-pill">Email</span></td>
+        <td><span class="status-badge badge-ready">✓ Ready</span></td>
+      </tr>`;
+    }
+  }
+
+  // Setup panel: collapsed by default after CSV upload, expandable
+  const setupPanel = setupExpanded ? `
+    <div class="setup-grid">
+      <div class="panel-card">
+        <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
+          <span><span class="section-label-icon">📄</span> Step 1 — Invoice CSV</span>
+          <button class="expand-btn" onclick="toggleSetup()">▴ Collapse</button>
+        </div>
+        <div class="drop-zone loaded">
+          <div class="file-icon">✓</div>
+          <div class="file-info">
+            <div class="file-name">May_Invoices_2026-05-04.xlsx</div>
+            <div class="file-meta">120 invoices loaded · 8 columns matched</div>
+          </div>
+          <button class="remove-btn" title="Remove">×</button>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="section-label"><span class="section-label-icon">⚙</span> Step 2 — Settings & Send</div>
+        <label class="field-label">Fallback Subject Template</label>
+        <input class="field-input" type="text" value="Invoice {invoice_number} - {customer_name}" />
+        <div class="field-help">Used when Excel has no <strong>Subject</strong> column.</div>
+        <div class="test-mode-row">
+          <input type="checkbox" id="testMode2" />
+          <label for="testMode2">Test Mode (review each invoice before sending)</label>
+        </div>
+        <div class="send-btn-block">
+          <button class="btn btn-primary" ${noMatchCount > 0 ? 'disabled' : ''}>
+            ✉ Send ${readyCount} Ready Invoice${readyCount === 1 ? '' : 's'}
+          </button>
+          <button class="btn btn-secondary">📋 Audit Log</button>
+        </div>
+      </div>
+    </div>
+  ` : `
+    <div class="setup-collapsed">
+      <div class="file-mini-icon">✓</div>
+      <div class="file-text">
+        <div class="name">May_Invoices_2026-05-04.xlsx</div>
+        <div class="meta">120 invoices · loaded a moment ago</div>
+      </div>
+      <div class="quick-meta">
+        <span><strong>${readyCount}</strong> ready</span>
+        ${issueCount > 0 ? `<span style="color:#dc2626;"><strong>${issueCount}</strong> need fixing</span>` : ''}
+      </div>
+      <button class="expand-btn" onclick="toggleSetup()">⚙ Settings</button>
+      <button class="btn btn-primary" style="padding:8px 16px;" ${noMatchCount > 0 ? 'disabled' : ''}>
+        ✉ Send ${readyCount}
+      </button>
+    </div>
+  `;
+
+  // Auto-revalidation toast — appears briefly when an issue gets resolved
+  const lastFixed = fixedIssues.size > 0 ? Array.from(fixedIssues).pop() : null;
+  const toastHtml = (lastFixed !== null && window.showToast) ? `
+    <div class="revalidation-toast">
+      <div class="toast-icon">↻</div>
+      <div class="toast-text">
+        <strong>Customer added — re-checked your CSV automatically.</strong>
+        <small>1 invoice moved from "No Customer Match" to "Ready" — no need to re-upload the file.</small>
+      </div>
+      <button class="dismiss" onclick="dismissToast()">×</button>
+    </div>
+  ` : '';
+
+  // Demo trigger for the user to see auto-revalidation in action
+  const demoTrigger = (issues.some(x => x.status === 'no-match' && !fixedIssues.has(x.idx))) ? `
+    <button class="demo-trigger" onclick="demoFix()">Demo: Imagine I just added customer "XYZHOL01" in another tab</button>
+  ` : '';
+
+  return `
+    ${setupPanel}
+    ${toastHtml}
+    ${demoTrigger}
+
+    <div class="validation-row" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="val-card ready">
+        <div class="val-label">Ready to Send</div>
+        <div class="val-number">${readyCount}</div>
+        <div class="val-sub">Customer + email matched, ready to ship</div>
+      </div>
+      <div class="val-card ${noMatchCount > 0 ? 'problem' : ''}">
+        <div class="val-label">Customer Not Found</div>
+        <div class="val-number" ${noMatchCount === 0 ? 'style="color:#94a3b8;"' : ''}>${noMatchCount}</div>
+        <div class="val-sub">Code missing from your customer list</div>
+      </div>
+      <div class="val-card ${noEmailCount > 0 ? 'warn' : ''}">
+        <div class="val-label">Missing Email</div>
+        <div class="val-number" ${noEmailCount === 0 ? 'style="color:#94a3b8;"' : ''}>${noEmailCount}</div>
+        <div class="val-sub">Customer profile has no email</div>
+      </div>
+    </div>
+
+    <div class="preview-header">
+      <div>
+        <h2>Invoice Preview</h2>
+        <div class="preview-meta">Review who, what, and how before sending</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active">All <span class="count">120</span></button>
+      <button class="tab">✓ Ready <span class="count">${readyCount}</span></button>
+      <button class="tab ${issueCount > 0 ? 'has-issues' : ''}">⚠ Issues <span class="count">${issueCount}</span></button>
+      <button class="tab">OEC <span class="count">1</span></button>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="🔍 Search by invoice, container, or customer...">
+      <span class="filter-meta">Showing 120 of 120 invoices · ${readyCount} selected</span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" checked></th>
+            <th>Invoice</th>
+            <th>Container</th>
+            <th>Customer</th>
+            <th>Method</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+  `;
+}
+
+function sendingView() {
+  const customers = ['RIVER LOGISTICS','CARGOWORLD INC','PACIFIC FREIGHT','SUNRISE LOG',
+    'EVERGREEN CO','GLOBAL CARGO LTD','SEAWAY EXPRESS','OCEANIC TRADE'];
+  const codes = ['RIVERL01','CARGOW01','PACFIC01','SUNRIS01','EVERGR01','GLOBAL01','SEAWAY01','OCEANI01'];
+  const containerPrefixes = ['MAGU','KKFU','SUDU','TGHU','TCLU','MSCU','CMAU','OOLU','TRHU','UETU'];
+
+  let rows = '';
+  for (let i = 0; i < 12; i++) {
+    const inv = 'LM' + (26050000 + i) + 'F';
+    const cont = containerPrefixes[i % 10] + (1000000 + i * 1234).toString().slice(0, 7);
+    const cidx = i % customers.length;
+    let badge, rowClass = '';
+    if (i < 7) {
+      badge = '<span class="status-badge badge-sent">✓ Sent</span>';
+    } else if (i === 7) {
+      badge = '<span class="status-badge badge-sending"><span class="small-spinner"></span> Sending...</span>';
+      rowClass = 'row-sending';
+    } else {
+      badge = '<span class="status-badge badge-pending">Queued</span>';
+    }
+    rows += `<tr class="${rowClass}">
+      <td class="invoice-cell">${inv}</td>
+      <td class="container-cell">${cont}</td>
+      <td class="customer-cell">
+        <span class="cust-code">${codes[cidx]}</span>
+        <span class="cust-name">${customers[cidx]}</span>
+      </td>
+      <td><span class="method-pill">Email</span></td>
+      <td>${badge}</td>
+    </tr>`;
+  }
+
+  return `
+    <div class="progress-bar-wrap">
+      <div class="progress-info">
+        <div><strong>Sending batch...</strong> 8 of 117 complete</div>
+        <button class="pause-btn">⏸ Pause</button>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" style="width:6.8%;"></div>
+      </div>
+      <div class="progress-stats">
+        <span>✓ <strong>7</strong> sent</span>
+        <span>⏱ <strong>1</strong> sending</span>
+        <span>⏳ <strong>109</strong> queued</span>
+      </div>
+      <div class="progress-timer-row">
+        <div class="timer-block">
+          <div class="timer-label">Elapsed</div>
+          <div class="timer-value elapsed" id="elapsedTimer">0:00</div>
+        </div>
+        <div class="timer-block">
+          <div class="timer-label">Estimated Remaining</div>
+          <div class="timer-value remaining">~18 min</div>
+        </div>
+        <div class="timer-block" style="margin-left:auto;">
+          <div class="timer-label">Done by approx.</div>
+          <div class="timer-value eta" id="etaTimer">3:42 PM</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active">All <span class="count">117</span></button>
+      <button class="tab">✓ Sent <span class="count">7</span></button>
+      <button class="tab">⏳ In Progress <span class="count">110</span></button>
+      <button class="tab has-issues">⚠ Failed <span class="count">0</span></button>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="🔍 Search...">
+      <span class="filter-meta">Live updating · Showing 12 of 117</span>
+    </div>
+
+    <div class="table-wrap" style="max-height:none;">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Container</th>
+            <th>Customer</th>
+            <th>Method</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:18px; padding:12px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:0.82rem; color:#1e3a8a; line-height:1.55;">
+      <strong>📍 During the send:</strong> Rows update live as the agent works through them. You can switch tabs, pause, or even leave this page — when you come back, the same view picks up wherever it is. If anything fails, the "Failed" tab badge will turn red and the row will pop into the diagnostic flow you saw in the post-send mockup.
+    </div>
+  `;
+}
+
+function toggleSetup() {
+  setupExpanded = !setupExpanded;
+  render();
+}
+
+function demoFix() {
+  // Mark the no-match issue as fixed and trigger the toast
+  fixedIssues.add(8);
+  window.showToast = true;
+  render();
+  // Auto-dismiss the toast after 5 seconds
+  setTimeout(() => {
+    window.showToast = false;
+    if (state === 'ready') render();
+  }, 5000);
+}
+
+function dismissToast() {
+  window.showToast = false;
+  render();
+}
+
+// Live elapsed timer
+let elapsedSeconds = 0;
+let timerInterval = null;
+
+function startTimer() {
+  stopTimer();
+  elapsedSeconds = 0;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    elapsedSeconds++;
+    updateTimerDisplay();
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('elapsedTimer');
+  if (!el) return;
+  const m = Math.floor(elapsedSeconds / 60);
+  const s = elapsedSeconds % 60;
+  el.textContent = `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function render() {
+  const wa = document.getElementById('workArea');
+  if (state === 'empty') {
+    wa.innerHTML = emptyView();
+    stopTimer();
+  } else if (state === 'ready') {
+    wa.innerHTML = readyView();
+    stopTimer();
+  } else {
+    wa.innerHTML = sendingView();
+    startTimer();
+  }
+}
+
+render();
+</script>
+
+</body>
+</html>

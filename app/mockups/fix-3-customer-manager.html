@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Fix 3: Customer Manager (Invoice removed + Duplicate detection)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 200;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .mockup-banner .hint {
+    margin-left: auto; font-weight: 400; opacity: 0.9; font-size: 0.76rem;
+  }
+
+  .app-layout { display: flex; min-height: calc(100vh - 38px); }
+
+  /* ─── Sidebar (matches fix-2) ─── */
+  .sidebar {
+    width: 200px; min-width: 200px; background: #fff;
+    border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column;
+    height: calc(100vh - 38px); position: sticky; top: 38px;
+  }
+  .sidebar-logo {
+    padding: 16px 14px 14px; text-align: center; cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .sidebar-logo .logo-mark {
+    width: 48px; height: 48px;
+    background: #0f172a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 6px;
+  }
+  .sidebar-logo .logo-title {
+    font-size: 0.78rem; font-weight: 700; color: #0f172a; line-height: 1.2;
+  }
+  .sidebar-logo .logo-subtitle {
+    font-size: 0.65rem; color: #94a3b8; margin-top: 2px;
+  }
+  .sidebar-nav { flex: 1; padding: 8px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-section-label {
+    font-size: 0.62rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 14px 11px 5px;
+  }
+  .sidebar-nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border-radius: 7px; cursor: pointer;
+    color: #475569; font-size: 0.82rem; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .sidebar-nav-item:hover { background: #f8fafc; color: #1e293b; }
+  .sidebar-nav-item.active {
+    background: #fff7ed; color: #ea580c; font-weight: 600;
+    border-color: #fed7aa;
+  }
+  .sidebar-bottom { border-top: 1px solid #f1f5f9; padding: 8px; }
+  .sidebar-bottom-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px; border-radius: 7px; cursor: pointer;
+    color: #94a3b8; font-size: 0.78rem; font-weight: 500;
+  }
+  .sidebar-footer {
+    padding: 8px 14px; border-top: 1px solid #f1f5f9;
+    font-size: 0.7rem; color: #94a3b8; text-align: center;
+  }
+
+  .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .tool-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid #e2e8f0; background: #fff;
+  }
+  .tool-title-group { display: flex; align-items: center; gap: 12px; }
+  .tool-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+  .tool-title-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #fff7ed; color: #ea580c;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tool-actions { display: flex; align-items: center; gap: 10px; }
+  .tool-switcher-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0;
+    background: #fff; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+    color: #475569; font-family: inherit;
+  }
+  .agent-indicator {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    font-size: 0.78rem; color: #15803d; font-weight: 500;
+  }
+  .agent-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #16a34a; box-shadow: 0 0 6px rgba(22,163,106,0.5);
+  }
+
+  .work-area { flex: 1; padding: 20px 24px; overflow-y: auto; min-width: 0; }
+
+  .page-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+  .page-heading h1 { font-size: 1.3rem; font-weight: 700; color: #0f172a; }
+  .page-heading .subtitle { color: #64748b; font-size: 0.85rem; margin-top: 2px; }
+
+  .top-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    font-family: inherit; border: 1px solid;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: #ea580c; color: white; border-color: #ea580c; }
+  .btn-primary:hover { background: #c2410c; border-color: #c2410c; }
+  .btn-secondary { background: #fff; color: #475569; border-color: #e2e8f0; }
+  .btn-secondary:hover { border-color: #94a3b8; color: #1e293b; }
+
+  /* Demo controls */
+  .demo-controls {
+    background: #1e293b; color: #f1f5f9;
+    padding: 10px 14px; border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 0.78rem;
+    display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap;
+  }
+  .demo-controls .demo-label {
+    color: #fde68a; font-weight: 700;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .demo-controls button {
+    background: #334155; color: white;
+    border: none; padding: 6px 12px; border-radius: 6px;
+    font-size: 0.76rem; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+  }
+  .demo-controls button:hover { background: #475569; }
+  .demo-controls button.active {
+    background: #ea580c; color: white; font-weight: 600;
+  }
+  .demo-controls .spacer { flex: 1; }
+  .demo-controls .scenario-hint { color: #cbd5e1; font-size: 0.74rem; }
+
+  /* Customer list table */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 8px 8px 0 0;
+    border-bottom: none;
+    font-size: 0.82rem; color: #64748b;
+  }
+  .toolbar input.search {
+    flex: 1; max-width: 320px;
+    padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px;
+    font-size: 0.85rem; font-family: inherit;
+  }
+  .toolbar input.search:focus { outline: none; border-color: #ea580c; }
+  .toolbar .filter-meta { color: #94a3b8; }
+
+  .table-wrap {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 0 0 8px 8px; overflow: hidden;
+  }
+  .cust-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .cust-table thead { background: #f8fafc; }
+  .cust-table th {
+    padding: 10px 14px; text-align: left;
+    font-size: 0.7rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  .cust-table td {
+    padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+    color: #334155; vertical-align: middle;
+  }
+  .cust-table tbody tr { cursor: pointer; }
+  .cust-table tbody tr:hover { background: #fafafa; }
+  .cust-table tbody tr.flash-highlight {
+    animation: rowFlash 1.4s ease-out;
+  }
+  @keyframes rowFlash {
+    0% { background: #fed7aa; }
+    100% { background: transparent; }
+  }
+  .code-cell { font-weight: 700; color: #0f172a; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82rem; }
+  .send-method-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    background: #f1f5f9; color: #475569;
+  }
+  .send-method-badge.email { background: #eff6ff; color: #1e40af; }
+  .send-method-badge.oec { background: #fff7ed; color: #c2410c; }
+  .send-method-badge.portal { background: #fefce8; color: #854d0e; }
+
+  .req-docs-cell { font-size: 0.78rem; color: #475569; font-family: 'SF Mono', Consolas, monospace; }
+  .req-docs-cell .all-pill { color: #15803d; font-style: italic; font-family: inherit; }
+
+  .row-actions {
+    display: flex; gap: 6px; justify-content: flex-end;
+    opacity: 0; transition: opacity 0.12s;
+  }
+  .cust-table tbody tr:hover .row-actions { opacity: 1; }
+  .row-action-btn {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 5px;
+    padding: 4px 10px; font-size: 0.74rem; font-weight: 500;
+    color: #475569; cursor: pointer; font-family: inherit;
+  }
+  .row-action-btn:hover { border-color: #ea580c; color: #ea580c; }
+
+  /* ─── Modal (the main event) ─── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 20px;
+    animation: fadeIn 0.18s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal-overlay.hidden { display: none; }
+
+  .modal-box {
+    background: #fff; border-radius: 12px;
+    width: 600px; max-width: 100%;
+    max-height: calc(100vh - 80px);
+    display: flex; flex-direction: column;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.25);
+    animation: slideUp 0.22s ease-out;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .modal-header {
+    padding: 16px 22px; border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h2 {
+    font-size: 1.05rem; font-weight: 700; color: #0f172a;
+  }
+  .modal-header .header-sub {
+    font-size: 0.74rem; color: #94a3b8; margin-top: 2px;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .modal-close {
+    background: none; border: none; cursor: pointer;
+    color: #94a3b8; font-size: 1.5rem; line-height: 1;
+    width: 30px; height: 30px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { background: #f1f5f9; color: #0f172a; }
+
+  .modal-body {
+    padding: 18px 22px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .modal-footer {
+    padding: 12px 22px;
+    border-top: 1px solid #e2e8f0;
+    display: flex; justify-content: flex-end; gap: 8px;
+    background: #f8fafc;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .field-row { margin-bottom: 14px; }
+  .field-label {
+    display: block;
+    font-size: 0.78rem; font-weight: 600; color: #334155;
+    margin-bottom: 5px;
+  }
+  .field-label .required { color: #dc2626; margin-left: 2px; }
+  .field-input {
+    width: 100%; padding: 8px 11px;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    font-size: 0.88rem; font-family: inherit;
+    background: #fff; color: #0f172a;
+    transition: all 0.12s;
+  }
+  .field-input:focus {
+    outline: none; border-color: #ea580c;
+    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+  }
+  .field-input.has-error {
+    border-color: #dc2626;
+    background: #fef2f2;
+  }
+  .field-input.has-error:focus {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  }
+  .field-help {
+    font-size: 0.72rem; color: #94a3b8; margin-top: 4px;
+  }
+  .field-row-double {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+
+  /* ─── Duplicate-code warning (Fix 3 piece #2) ─── */
+  .dup-warning {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    display: none;
+    animation: slideDown 0.18s ease-out;
+  }
+  .dup-warning.visible { display: block; }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .dup-warning-title {
+    color: #991b1b; font-size: 0.82rem; font-weight: 700;
+    display: flex; align-items: flex-start; gap: 6px;
+    margin-bottom: 3px;
+  }
+  .dup-warning-title .warn-icon {
+    flex-shrink: 0; font-size: 0.92rem;
+  }
+  .dup-warning-text {
+    color: #7f1d1d; font-size: 0.78rem;
+    line-height: 1.45;
+    margin-left: 22px;
+  }
+  .dup-warning-link {
+    color: #c2410c; font-weight: 700; text-decoration: none;
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; font-size: 0.78rem;
+    padding: 0; margin-left: 4px;
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  .dup-warning-link:hover { color: #9a3412; text-decoration: underline; }
+
+  /* Send method dropdown — styled native select */
+  .field-select {
+    width: 100%; padding: 8px 11px;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    font-size: 0.88rem; font-family: inherit;
+    background: #fff; color: #0f172a;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+    padding-right: 32px;
+  }
+
+  /* Tag input (compressed) */
+  .tag-input {
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    padding: 5px 8px; min-height: 36px;
+    display: flex; flex-wrap: wrap; gap: 5px;
+    align-items: center;
+    background: #fff; cursor: text;
+  }
+  .tag-chip {
+    background: #f1f5f9; color: #334155;
+    padding: 3px 8px 3px 9px; border-radius: 5px;
+    font-size: 0.78rem; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .tag-chip .x {
+    color: #94a3b8; font-weight: 700; cursor: pointer;
+    font-size: 0.92rem; line-height: 1;
+  }
+  .tag-input input {
+    border: none; outline: none; flex: 1; min-width: 100px;
+    padding: 4px 2px; font-size: 0.84rem; font-family: inherit;
+    background: transparent;
+  }
+
+  /* ─── Required Documents block (Fix 3 piece #1) ─── */
+  .docs-section {
+    border: 1px solid #e2e8f0; border-radius: 9px;
+    padding: 14px; background: #f8fafc;
+  }
+  .docs-section .section-title {
+    font-size: 0.78rem; font-weight: 700; color: #334155;
+    margin-bottom: 10px;
+  }
+
+  /* THE static helper banner (replaces the old Invoice checkbox) */
+  .invoice-info-banner {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    display: flex; align-items: flex-start; gap: 9px;
+  }
+  .invoice-info-banner .info-icon {
+    flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #2563eb; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.78rem;
+  }
+  .invoice-info-banner .info-text {
+    flex: 1; color: #1e3a8a; font-size: 0.8rem; line-height: 1.5;
+  }
+  .invoice-info-banner .info-text strong { color: #1e40af; }
+
+  .docs-mode-toggle {
+    display: flex; gap: 0;
+    border: 1px solid #e2e8f0; border-radius: 7px; overflow: hidden;
+    background: #fff;
+    margin-bottom: 8px;
+  }
+  .docs-mode-btn {
+    flex: 1; padding: 8px 10px;
+    background: #fff; border: none;
+    font-size: 0.8rem; font-weight: 500;
+    color: #64748b; cursor: pointer; font-family: inherit;
+    transition: all 0.12s;
+  }
+  .docs-mode-btn:not(:first-child) { border-left: 1px solid #e2e8f0; }
+  .docs-mode-btn.active {
+    background: #fff7ed; color: #ea580c; font-weight: 700;
+  }
+  .docs-mode-hint {
+    font-size: 0.74rem; color: #64748b; margin-bottom: 8px;
+    font-style: italic;
+  }
+
+  .docs-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+  .doc-check {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 9px;
+    border: 1px solid #e2e8f0; border-radius: 6px;
+    background: #fff;
+    font-size: 0.8rem; font-weight: 500; color: #475569;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .doc-check:hover { border-color: #fdba74; color: #9a3412; }
+  .doc-check input { accent-color: #ea580c; cursor: pointer; }
+  .doc-check.checked {
+    background: #fff7ed; border-color: #fdba74; color: #9a3412; font-weight: 600;
+  }
+
+  /* Background customer list dimming when modal open */
+  .work-area.modal-active {
+    pointer-events: none;
+    user-select: none;
+  }
+  .work-area.modal-active .demo-controls,
+  .work-area.modal-active .page-heading,
+  .work-area.modal-active .toolbar,
+  .work-area.modal-active .table-wrap {
+    opacity: 0.55;
+    transition: opacity 0.18s;
+  }
+
+  /* What's-new note at bottom of work area */
+  .whats-new-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: #1e3a8a;
+    line-height: 1.55;
+  }
+  .whats-new-note strong { color: #1e40af; }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">MOCKUP</span>
+  <span>Fix 3 — Customer Manager (Invoice removed + Duplicate detection)</span>
+  <span class="hint">Try: type "APEXMA01" in the modal · click "View existing" · switch scenarios with the dark bar</span>
+</div>
+
+<div class="app-layout">
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+        </svg>
+      </div>
+      <div class="logo-title">NGL Transportation</div>
+      <div class="logo-subtitle">Accounting Suite</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="sidebar-section-label">Workspace</div>
+      <div class="sidebar-nav-item">Merging Tool</div>
+      <div class="sidebar-nav-item">INI Chassis Finder</div>
+      <div class="sidebar-nav-item">Invoice Sender</div>
+      <div class="sidebar-nav-item active">Customers</div>
+      <div class="sidebar-nav-item">Session History</div>
+      <div class="sidebar-section-label" style="margin-top:14px;">System</div>
+      <div class="sidebar-nav-item" style="color:#94a3b8;">Settings</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-bottom-item">Help</div>
+    </div>
+    <div class="sidebar-footer">v2.40.0</div>
+  </nav>
+
+  <div class="main-content">
+    <div class="tool-header">
+      <div class="tool-title-group">
+        <div class="tool-title-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-title">Customers</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Profiles, emails, document rules</div>
+        </div>
+      </div>
+      <div class="tool-actions">
+        <div class="agent-indicator"><span class="agent-dot"></span> Agent online</div>
+        <button class="tool-switcher-btn">
+          Switch Tool
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="work-area" id="workArea">
+      <div class="demo-controls">
+        <span class="demo-label">Demo:</span>
+        <button id="scenA" class="active" onclick="loadScenario('A')">A · New customer (duplicate code)</button>
+        <button id="scenB" onclick="loadScenario('B')">B · Editing APEXMA01 (Invoice removed)</button>
+        <span class="spacer"></span>
+        <span class="scenario-hint" id="scenHint">In Scenario A — type "APEXMA01" to trigger the warning</span>
+      </div>
+
+      <div class="page-heading">
+        <div>
+          <h1>Customers <span style="font-size:0.82rem; color:#94a3b8; font-weight:500; margin-left:8px;">214 total · 161 active</span></h1>
+          <div class="subtitle">Email addresses, send method, and required-document rules per customer</div>
+        </div>
+        <div class="top-actions">
+          <button class="btn btn-secondary">⬇ Export</button>
+          <button class="btn btn-secondary">⬆ Import</button>
+          <button class="btn btn-primary" onclick="loadScenario('A')">+ Add Customer</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input type="text" class="search" placeholder="🔍 Search by code, name, or email...">
+        <span class="filter-meta">Showing 6 of 214 customers</span>
+      </div>
+      <div class="table-wrap">
+        <table class="cust-table">
+          <thead>
+            <tr>
+              <th style="width:130px;">Code</th>
+              <th>Name</th>
+              <th style="width:160px;">Send Method</th>
+              <th style="width:170px;">Required Docs</th>
+              <th style="width:90px;"></th>
+            </tr>
+          </thead>
+          <tbody id="custTableBody">
+            <tr id="row-APEXMA01" onclick="loadScenario('B')">
+              <td class="code-cell">APEXMA01</td>
+              <td>APEX MARITIME CO</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td class="req-docs-cell">POD</td>
+              <td><div class="row-actions"><button class="row-action-btn" onclick="event.stopPropagation(); loadScenario('B')">Edit</button></div></td>
+            </tr>
+            <tr id="row-TOPTRA02" onclick="loadScenario('B')">
+              <td class="code-cell">TOPTRA02</td>
+              <td>TOP TRADING USA INC</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td class="req-docs-cell">POD</td>
+              <td><div class="row-actions"><button class="row-action-btn" onclick="event.stopPropagation(); loadScenario('B')">Edit</button></div></td>
+            </tr>
+            <tr>
+              <td class="code-cell">OECNYC01</td>
+              <td>OEC GROUP — NEW YORK</td>
+              <td><span class="send-method-badge oec">OEC Two-Email</span></td>
+              <td class="req-docs-cell"><span class="all-pill">handled automatically</span></td>
+              <td><div class="row-actions"><button class="row-action-btn">Edit</button></div></td>
+            </tr>
+            <tr>
+              <td class="code-cell">GLBCAR01</td>
+              <td>GLOBAL CARGO LTD</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td class="req-docs-cell">POD, BOL</td>
+              <td><div class="row-actions"><button class="row-action-btn">Edit</button></div></td>
+            </tr>
+            <tr>
+              <td class="code-cell">SEAEXP01</td>
+              <td>SEAWAY EXPRESS</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td class="req-docs-cell"><span class="all-pill">all attachments</span></td>
+              <td><div class="row-actions"><button class="row-action-btn">Edit</button></div></td>
+            </tr>
+            <tr>
+              <td class="code-cell">TRURET01</td>
+              <td>TRUE VALUE RETAIL SUPPORT CENTER</td>
+              <td><span class="send-method-badge portal">Portal Upload</span></td>
+              <td class="req-docs-cell"><span class="all-pill">handled automatically</span></td>
+              <td><div class="row-actions"><button class="row-action-btn">Edit</button></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="whats-new-note">
+        <strong>📍 What's new in Fix 3:</strong>
+        Two changes here, both invisible until you open a customer.
+        <strong>(1) Duplicate-code detection</strong> — typing a code that already exists shows a friendly red message under the field with a "View existing →" jump link, instead of silently overwriting or failing on Save.
+        <strong>(2) The "Invoice" checkbox is gone</strong> from Required Documents, replaced by a static helper line. The invoice PDF is always sent automatically, so checking it as a "required doc" only ever caused false failures (this is what burned APEXMA01 + TOPTRA02 in Lorena's batch).
+        On first run after upgrade, a one-time migration strips <code style="background:#fff; padding:1px 5px; border-radius:3px; font-size:0.78rem;">"invoice"</code> out of any saved <code style="background:#fff; padding:1px 5px; border-radius:3px; font-size:0.78rem;">requiredDocs</code> in Supabase + SQLite.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Modal ═══════════════ -->
+<div class="modal-overlay hidden" id="custModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h2 id="modalTitle">Add Customer</h2>
+        <div class="header-sub" id="modalSubtitle">New customer profile</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+
+      <div class="field-row-double">
+        <div class="field-row" style="margin-bottom:0;">
+          <label class="field-label">Customer Code <span class="required">*</span></label>
+          <input
+            type="text"
+            class="field-input"
+            id="codeInput"
+            placeholder="e.g. APEXMA01"
+            autocomplete="off"
+            oninput="onCodeInput(event)"
+          >
+          <div class="field-help" id="codeHelp">Short unique identifier — usually customer name + 2 digits</div>
+          <!-- Duplicate warning slot -->
+          <div class="dup-warning" id="dupWarning">
+            <div class="dup-warning-title">
+              <span class="warn-icon">⚠</span>
+              <span>Customer code "<span id="dupCode">APEXMA01</span>" is already in use.</span>
+            </div>
+            <div class="dup-warning-text">
+              That code belongs to <strong id="dupName">APEX MARITIME CO</strong>. Want to edit that customer instead?
+              <button class="dup-warning-link" onclick="jumpToExisting()">View existing →</button>
+            </div>
+          </div>
+        </div>
+        <div class="field-row" style="margin-bottom:0;">
+          <label class="field-label">Customer Name <span class="required">*</span></label>
+          <input type="text" class="field-input" id="nameInput" placeholder="e.g. APEX MARITIME CO">
+          <div class="field-help">As it appears on QuickBooks invoices</div>
+        </div>
+      </div>
+
+      <div class="field-row" style="margin-top:14px;">
+        <label class="field-label">Send Method</label>
+        <select class="field-select" id="sendMethodSelect">
+          <option value="email">Email (Standard) — invoice + attachments via QBO email</option>
+          <option value="qbo_invoice_only_then_pod_email">OEC Two-Email Flow — invoice via QBO, POD via Gmail</option>
+          <option value="portal_upload">Portal Upload — merge invoice + POD, push to TranzAct portal</option>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label">Email To <span style="color:#94a3b8; font-weight:400; font-size:0.74rem;">(press Enter to add)</span></label>
+        <div class="tag-input" id="emailToTags" onclick="this.querySelector('input').focus()">
+          <span id="emailToChips"></span>
+          <input type="email" placeholder="customer@example.com">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label">Required Documents</label>
+        <div class="docs-section">
+
+          <!-- ★ NEW: static info banner that REPLACES the old "Invoice" checkbox ★ -->
+          <div class="invoice-info-banner">
+            <div class="info-icon">i</div>
+            <div class="info-text">
+              <strong>The invoice PDF is always sent automatically</strong> — you don't need to set this here.
+              Choose only the supporting documents this customer requires (POD, BOL, etc).
+            </div>
+          </div>
+
+          <div class="docs-mode-toggle">
+            <button type="button" class="docs-mode-btn" id="modeAllBtn" onclick="setDocsMode('all')">
+              Send All Attachments
+            </button>
+            <button type="button" class="docs-mode-btn active" id="modeSpecificBtn" onclick="setDocsMode('specific')">
+              Require Specific Docs
+            </button>
+          </div>
+          <div class="docs-mode-hint" id="docsModeHint">
+            The invoice will only send if the boxes you check below are attached in QBO.
+          </div>
+
+          <!-- ★ NEW: NO "Invoice" checkbox here. Only supporting docs. ★ -->
+          <div class="docs-checkboxes" id="docsCheckboxes">
+            <label class="doc-check" data-doc="pod"><input type="checkbox" value="pod" onchange="toggleDocCheck(this)"> POD</label>
+            <label class="doc-check" data-doc="pol"><input type="checkbox" value="pol" onchange="toggleDocCheck(this)"> POL</label>
+            <label class="doc-check" data-doc="bol"><input type="checkbox" value="bol" onchange="toggleDocCheck(this)"> BOL</label>
+            <label class="doc-check" data-doc="pl"><input type="checkbox" value="pl" onchange="toggleDocCheck(this)"> PL</label>
+            <label class="doc-check" data-doc="do"><input type="checkbox" value="do" onchange="toggleDocCheck(this)"> DO</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label">Notes</label>
+        <textarea class="field-input" rows="2" id="notesInput" placeholder="Optional notes about this customer..."></textarea>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="closeModal()">Save Customer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Existing customer codes (would come from Supabase in real app) ──
+const EXISTING_CODES = {
+  'APEXMA01': 'APEX MARITIME CO',
+  'TOPTRA02': 'TOP TRADING USA INC',
+  'OECNYC01': 'OEC GROUP — NEW YORK',
+  'GLBCAR01': 'GLOBAL CARGO LTD',
+  'SEAEXP01': 'SEAWAY EXPRESS',
+  'TRURET01': 'TRUE VALUE RETAIL SUPPORT CENTER',
+};
+
+let currentScenario = 'A';
+
+function loadScenario(letter) {
+  currentScenario = letter;
+  document.getElementById('scenA').classList.toggle('active', letter === 'A');
+  document.getElementById('scenB').classList.toggle('active', letter === 'B');
+
+  if (letter === 'A') {
+    document.getElementById('scenHint').textContent =
+      'In Scenario A — type "APEXMA01" to trigger the warning';
+    openAddCustomerModal();
+  } else {
+    document.getElementById('scenHint').textContent =
+      'In Scenario B — note the Invoice checkbox is gone, replaced by the blue helper banner';
+    openEditCustomerModal('APEXMA01');
+  }
+}
+
+function openAddCustomerModal() {
+  document.getElementById('modalTitle').textContent = 'Add Customer';
+  document.getElementById('modalSubtitle').textContent = 'New customer profile';
+  document.getElementById('codeInput').value = '';
+  document.getElementById('codeInput').classList.remove('has-error');
+  document.getElementById('nameInput').value = '';
+  document.getElementById('emailToChips').innerHTML = '';
+  document.getElementById('notesInput').value = '';
+  document.getElementById('dupWarning').classList.remove('visible');
+  document.getElementById('saveBtn').disabled = false;
+  document.getElementById('saveBtn').textContent = 'Save Customer';
+  document.getElementById('sendMethodSelect').value = 'email';
+  setDocsMode('specific');
+  // Clear all doc checkboxes
+  document.querySelectorAll('#docsCheckboxes input').forEach(cb => {
+    cb.checked = false;
+    cb.parentElement.classList.remove('checked');
+  });
+
+  showModal();
+  setTimeout(() => document.getElementById('codeInput').focus(), 60);
+}
+
+function openEditCustomerModal(code) {
+  document.getElementById('modalTitle').textContent = 'Edit Customer';
+  document.getElementById('modalSubtitle').textContent = code + ' · ' + EXISTING_CODES[code];
+  document.getElementById('codeInput').value = code;
+  document.getElementById('codeInput').classList.remove('has-error');
+  document.getElementById('nameInput').value = EXISTING_CODES[code];
+
+  // APEXMA01 has POD as required doc (post-migration — Invoice was stripped)
+  document.getElementById('emailToChips').innerHTML =
+    chipHtml('ar@apexmaritime.com') + chipHtml('pod@apexmaritime.com');
+  document.getElementById('notesInput').value = '';
+  document.getElementById('dupWarning').classList.remove('visible');
+  document.getElementById('saveBtn').disabled = false;
+  document.getElementById('saveBtn').textContent = 'Save Changes';
+  document.getElementById('sendMethodSelect').value = 'email';
+  setDocsMode('specific');
+
+  // Pre-check POD for APEXMA01
+  document.querySelectorAll('#docsCheckboxes input').forEach(cb => {
+    const isPod = cb.value === 'pod';
+    cb.checked = isPod;
+    cb.parentElement.classList.toggle('checked', isPod);
+  });
+
+  showModal();
+}
+
+function chipHtml(email) {
+  return `<span class="tag-chip">${email} <span class="x">×</span></span>`;
+}
+
+function showModal() {
+  document.getElementById('custModal').classList.remove('hidden');
+  document.getElementById('workArea').classList.add('modal-active');
+}
+
+function closeModal() {
+  document.getElementById('custModal').classList.add('hidden');
+  document.getElementById('workArea').classList.remove('modal-active');
+}
+
+// ── Live duplicate-code detection ──
+let dupTimer = null;
+function onCodeInput(event) {
+  const v = event.target.value.trim().toUpperCase();
+  // Auto-uppercase to match conventions, but leave caret position alone
+  if (v !== event.target.value) event.target.value = v;
+
+  clearTimeout(dupTimer);
+  const warn = document.getElementById('dupWarning');
+  const input = document.getElementById('codeInput');
+  const saveBtn = document.getElementById('saveBtn');
+
+  // Hide while typing — show after a short pause (debounced, like a real validator)
+  warn.classList.remove('visible');
+  input.classList.remove('has-error');
+  saveBtn.disabled = false;
+
+  if (!v) return;
+
+  dupTimer = setTimeout(() => {
+    if (EXISTING_CODES[v] && currentScenario === 'A') {
+      document.getElementById('dupCode').textContent = v;
+      document.getElementById('dupName').textContent = EXISTING_CODES[v];
+      warn.classList.add('visible');
+      input.classList.add('has-error');
+      saveBtn.disabled = true;
+    }
+  }, 350);
+}
+
+function jumpToExisting() {
+  const code = document.getElementById('dupCode').textContent;
+  // Close modal, flash the row in the background list, then re-open as edit
+  closeModal();
+  setTimeout(() => {
+    const row = document.getElementById('row-' + code);
+    if (row) {
+      row.classList.add('flash-highlight');
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => row.classList.remove('flash-highlight'), 1500);
+    }
+    setTimeout(() => loadScenario('B'), 700);
+  }, 220);
+}
+
+// ── Required-docs UI ──
+function setDocsMode(mode) {
+  const allBtn = document.getElementById('modeAllBtn');
+  const specBtn = document.getElementById('modeSpecificBtn');
+  const hint = document.getElementById('docsModeHint');
+  const boxes = document.getElementById('docsCheckboxes');
+
+  if (mode === 'all') {
+    allBtn.classList.add('active');
+    specBtn.classList.remove('active');
+    hint.textContent = 'All attachments on the invoice will be included when sending.';
+    boxes.style.display = 'none';
+  } else {
+    allBtn.classList.remove('active');
+    specBtn.classList.add('active');
+    hint.textContent = 'The invoice will only send if the boxes you check below are attached in QBO.';
+    boxes.style.display = 'grid';
+  }
+}
+
+function toggleDocCheck(cb) {
+  cb.parentElement.classList.toggle('checked', cb.checked);
+}
+
+// ── Boot: open Scenario A modal so the demo is immediately visible ──
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => loadScenario('A'), 150);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Fix 4: Validation Gate + CSV Import Errors</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 200;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .mockup-banner .hint {
+    margin-left: auto; font-weight: 400; opacity: 0.9; font-size: 0.76rem;
+  }
+
+  .app-layout { display: flex; min-height: calc(100vh - 38px); }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    width: 200px; min-width: 200px; background: #fff;
+    border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column;
+    height: calc(100vh - 38px); position: sticky; top: 38px;
+  }
+  .sidebar-logo {
+    padding: 16px 14px 14px; text-align: center; cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .sidebar-logo .logo-mark {
+    width: 48px; height: 48px;
+    background: #0f172a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 6px;
+  }
+  .sidebar-logo .logo-title { font-size: 0.78rem; font-weight: 700; color: #0f172a; line-height: 1.2; }
+  .sidebar-logo .logo-subtitle { font-size: 0.65rem; color: #94a3b8; margin-top: 2px; }
+  .sidebar-nav { flex: 1; padding: 8px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-section-label {
+    font-size: 0.62rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 14px 11px 5px;
+  }
+  .sidebar-nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border-radius: 7px; cursor: pointer;
+    color: #475569; font-size: 0.82rem; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .sidebar-nav-item:hover { background: #f8fafc; color: #1e293b; }
+  .sidebar-nav-item.active {
+    background: #fff7ed; color: #ea580c; font-weight: 600;
+    border-color: #fed7aa;
+  }
+  .sidebar-bottom { border-top: 1px solid #f1f5f9; padding: 8px; }
+  .sidebar-bottom-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px; border-radius: 7px; cursor: pointer;
+    color: #94a3b8; font-size: 0.78rem; font-weight: 500;
+  }
+  .sidebar-footer {
+    padding: 8px 14px; border-top: 1px solid #f1f5f9;
+    font-size: 0.7rem; color: #94a3b8; text-align: center;
+  }
+
+  .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .tool-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid #e2e8f0; background: #fff;
+  }
+  .tool-title-group { display: flex; align-items: center; gap: 12px; }
+  .tool-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+  .tool-title-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #fff7ed; color: #ea580c;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tool-actions { display: flex; align-items: center; gap: 10px; }
+  .tool-switcher-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0;
+    background: #fff; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+    color: #475569; font-family: inherit;
+  }
+  .agent-indicator {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    font-size: 0.78rem; color: #15803d; font-weight: 500;
+  }
+  .agent-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #16a34a; box-shadow: 0 0 6px rgba(22,163,106,0.5);
+  }
+
+  .work-area { flex: 1; padding: 20px 24px; overflow-y: auto; min-width: 0; }
+
+  .page-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+  .page-heading h1 { font-size: 1.3rem; font-weight: 700; color: #0f172a; }
+  .page-heading .subtitle { color: #64748b; font-size: 0.85rem; margin-top: 2px; }
+
+  .top-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    font-family: inherit; border: 1px solid;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: #ea580c; color: white; border-color: #ea580c; }
+  .btn-primary:hover { background: #c2410c; border-color: #c2410c; }
+  .btn-primary:disabled { background: #fed7aa; border-color: #fed7aa; cursor: not-allowed; }
+  .btn-secondary { background: #fff; color: #475569; border-color: #e2e8f0; }
+  .btn-secondary:hover { border-color: #94a3b8; color: #1e293b; }
+  .btn-danger-outline {
+    background: #fff; color: #b91c1c; border-color: #fca5a5;
+  }
+  .btn-danger-outline:hover { background: #fef2f2; }
+
+  /* Demo controls */
+  .demo-controls {
+    background: #1e293b; color: #f1f5f9;
+    padding: 10px 14px; border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 0.78rem;
+    display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap;
+  }
+  .demo-controls .demo-label {
+    color: #fde68a; font-weight: 700;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .demo-controls button {
+    background: #334155; color: white;
+    border: none; padding: 6px 12px; border-radius: 6px;
+    font-size: 0.76rem; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+  }
+  .demo-controls button:hover { background: #475569; }
+  .demo-controls button.active {
+    background: #ea580c; color: white; font-weight: 600;
+  }
+  .demo-controls .spacer { flex: 1; }
+  .demo-controls .scenario-hint { color: #cbd5e1; font-size: 0.74rem; }
+
+  /* Customer list table (background) */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 8px 8px 0 0;
+    border-bottom: none;
+    font-size: 0.82rem; color: #64748b;
+  }
+  .toolbar input.search {
+    flex: 1; max-width: 320px;
+    padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px;
+    font-size: 0.85rem; font-family: inherit;
+  }
+  .toolbar input.search:focus { outline: none; border-color: #ea580c; }
+  .toolbar .filter-meta { color: #94a3b8; }
+
+  .table-wrap {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 0 0 8px 8px; overflow: hidden;
+  }
+  .cust-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .cust-table thead { background: #f8fafc; }
+  .cust-table th {
+    padding: 10px 14px; text-align: left;
+    font-size: 0.7rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  .cust-table td {
+    padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+    color: #334155; vertical-align: middle;
+  }
+  .code-cell { font-weight: 700; color: #0f172a; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82rem; }
+  .send-method-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    background: #f1f5f9; color: #475569;
+  }
+  .send-method-badge.email { background: #eff6ff; color: #1e40af; }
+
+  /* Background dim when modal open */
+  .work-area.modal-active {
+    pointer-events: none;
+    user-select: none;
+  }
+  .work-area.modal-active > *:not(.demo-controls) {
+    opacity: 0.55;
+    transition: opacity 0.18s;
+  }
+
+  /* ─── Modal ─── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 20px;
+    animation: fadeIn 0.18s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal-overlay.hidden { display: none; }
+
+  .modal-box {
+    background: #fff; border-radius: 12px;
+    width: 760px; max-width: 100%;
+    max-height: calc(100vh - 80px);
+    display: flex; flex-direction: column;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.25);
+    animation: slideUp 0.22s ease-out;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .modal-header {
+    padding: 16px 22px; border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h2 { font-size: 1.05rem; font-weight: 700; color: #0f172a; }
+  .modal-header .header-sub {
+    font-size: 0.74rem; color: #94a3b8; margin-top: 2px;
+  }
+  .modal-close {
+    background: none; border: none; cursor: pointer;
+    color: #94a3b8; font-size: 1.5rem; line-height: 1;
+    width: 30px; height: 30px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { background: #f1f5f9; color: #0f172a; }
+
+  .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+
+  .modal-footer {
+    padding: 12px 22px;
+    border-top: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center;
+    background: #f8fafc;
+    border-radius: 0 0 12px 12px;
+    gap: 8px;
+  }
+  .modal-footer .footer-left { display: flex; gap: 6px; }
+  .modal-footer .footer-right { display: flex; gap: 8px; }
+
+  /* ─── Drop zone (initial import state) ─── */
+  .drop-zone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: #f8fafc;
+  }
+  .drop-zone:hover { border-color: #ea580c; background: #fff7ed; }
+  .drop-zone .dz-icon { font-size: 2.4rem; margin-bottom: 8px; color: #94a3b8; }
+  .drop-zone:hover .dz-icon { color: #ea580c; }
+  .drop-zone .dz-title { font-size: 1rem; font-weight: 600; color: #334155; margin-bottom: 4px; }
+  .drop-zone .dz-subtitle { font-size: 0.82rem; color: #94a3b8; }
+
+  .help-text {
+    font-size: 0.82rem; color: #64748b; line-height: 1.55;
+    margin-bottom: 14px;
+  }
+  .help-text code {
+    background: #f1f5f9; padding: 1px 6px; border-radius: 4px;
+    font-size: 0.78rem; color: #334155;
+  }
+
+  /* ─── Validation results view ─── */
+  .results-summary-card {
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .results-summary-card.has-errors {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+  }
+  .results-summary-card.all-clean {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+  }
+  .summary-icon {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem; font-weight: 700; color: white;
+    flex-shrink: 0;
+  }
+  .has-errors .summary-icon { background: #fb923c; }
+  .all-clean .summary-icon { background: #16a34a; }
+  .summary-text { flex: 1; }
+  .summary-title { font-size: 0.96rem; font-weight: 700; }
+  .has-errors .summary-title { color: #9a3412; }
+  .all-clean .summary-title { color: #14532d; }
+  .summary-counts {
+    font-size: 0.82rem; margin-top: 3px;
+    display: flex; gap: 14px;
+  }
+  .summary-counts .count-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-weight: 600;
+  }
+  .count-pill .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .count-pill.valid { color: #15803d; }
+  .count-pill.valid .dot { background: #16a34a; }
+  .count-pill.error { color: #b91c1c; }
+  .count-pill.error .dot { background: #dc2626; }
+  .count-pill.warn { color: #b45309; }
+  .count-pill.warn .dot { background: #d97706; }
+
+  .file-meta-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 0.82rem; color: #475569;
+  }
+  .file-meta-bar .file-icon { font-size: 1.1rem; }
+  .file-meta-bar strong { color: #0f172a; font-weight: 600; }
+  .file-meta-bar .meta-divider { color: #cbd5e1; margin: 0 4px; }
+  .file-meta-bar .replace-link {
+    margin-left: auto;
+    background: none; border: none; cursor: pointer;
+    color: #ea580c; font-weight: 600; font-size: 0.78rem;
+    font-family: inherit; padding: 4px 8px; border-radius: 5px;
+  }
+  .file-meta-bar .replace-link:hover { background: #fff7ed; }
+
+  /* Filter tabs */
+  .results-filter-tabs {
+    display: flex; gap: 4px; margin-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .results-filter-tab {
+    padding: 8px 14px; background: none; border: none;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    color: #64748b; display: flex; align-items: center; gap: 6px;
+    font-family: inherit;
+  }
+  .results-filter-tab:hover { color: #ea580c; }
+  .results-filter-tab.active { color: #ea580c; border-bottom-color: #ea580c; }
+  .results-filter-tab .tab-count {
+    background: #f1f5f9; color: #475569;
+    padding: 1px 7px; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 700;
+  }
+  .results-filter-tab.active .tab-count { background: #ea580c; color: white; }
+  .results-filter-tab.has-errors .tab-count { background: #fee2e2; color: #b91c1c; }
+  .results-filter-tab.has-errors.active .tab-count { background: #dc2626; color: white; }
+
+  /* Per-row results list */
+  .row-results {
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    overflow: hidden;
+    max-height: 380px; overflow-y: auto;
+    background: #fff;
+  }
+  .row-result {
+    display: grid;
+    grid-template-columns: 50px 130px 1fr 110px;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    align-items: start;
+    font-size: 0.84rem;
+  }
+  .row-result:last-child { border-bottom: none; }
+  .row-result.valid {}
+  .row-result.error { background: #fefaf6; }
+  .row-result.warn { background: #fffbeb; }
+
+  .rr-num { color: #94a3b8; font-size: 0.74rem; font-weight: 600; padding-top: 2px; font-family: 'SF Mono', Consolas, monospace; }
+  .rr-code {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-weight: 700; color: #0f172a; font-size: 0.82rem;
+    padding-top: 1px;
+  }
+  .rr-code.empty { color: #dc2626; font-weight: 500; font-style: italic; }
+  .rr-name { color: #334155; font-size: 0.82rem; padding-top: 1px; }
+  .rr-name.empty { color: #94a3b8; font-style: italic; font-size: 0.78rem; }
+  .rr-status {
+    text-align: right; padding-top: 1px;
+  }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .status-pill.valid {
+    background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+  }
+  .status-pill.error {
+    background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5;
+  }
+  .status-pill.warn {
+    background: #fffbeb; color: #b45309; border: 1px solid #fde68a;
+  }
+
+  .rr-error-detail {
+    grid-column: 2 / 5;
+    margin-top: 5px;
+    background: #fef2f2;
+    border-left: 3px solid #dc2626;
+    padding: 7px 10px;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.78rem;
+    color: #7f1d1d;
+    line-height: 1.5;
+  }
+  .rr-error-detail.warn {
+    background: #fffbeb;
+    border-left-color: #d97706;
+    color: #78350f;
+  }
+  .rr-error-detail .column-tag {
+    background: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+    margin-right: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .rr-error-detail.warn .column-tag {
+    border-color: #fcd34d;
+    color: #92400e;
+  }
+  .rr-error-detail .problem-line {
+    line-height: 1.55;
+  }
+  .rr-error-detail .fix-line {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 1px dashed #fca5a5;
+    font-size: 0.78rem;
+    color: #57534e;
+    line-height: 1.5;
+  }
+  .rr-error-detail.warn .fix-line {
+    border-top-color: #fcd34d;
+  }
+  .rr-error-detail .fix-line strong {
+    color: #15803d;
+    font-weight: 700;
+  }
+
+  .rr-error-detail .view-existing-link {
+    background: none; border: none; cursor: pointer;
+    color: #c2410c; font-weight: 700; text-decoration: none;
+    font-family: inherit; font-size: 0.78rem;
+    padding: 0; margin-left: 4px;
+  }
+  .rr-error-detail .view-existing-link:hover { text-decoration: underline; }
+
+  /* Empty state when filter results in zero rows */
+  .empty-filter-state {
+    padding: 36px 20px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.86rem;
+  }
+
+  /* What's-new note */
+  .whats-new-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: #1e3a8a;
+    line-height: 1.55;
+  }
+  .whats-new-note strong { color: #1e40af; }
+  .whats-new-note code {
+    background: #fff; padding: 1px 5px; border-radius: 3px;
+    font-size: 0.78rem; color: #1e40af;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">MOCKUP</span>
+  <span>Fix 4 — Validation Gate + CSV Import Errors</span>
+  <span class="hint">Try: drop a "file" with errors · filter tabs · skip-errors button enables/disables</span>
+</div>
+
+<div class="app-layout">
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+        </svg>
+      </div>
+      <div class="logo-title">NGL Transportation</div>
+      <div class="logo-subtitle">Accounting Suite</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="sidebar-section-label">Workspace</div>
+      <div class="sidebar-nav-item">Merging Tool</div>
+      <div class="sidebar-nav-item">INI Chassis Finder</div>
+      <div class="sidebar-nav-item">Invoice Sender</div>
+      <div class="sidebar-nav-item active">Customers</div>
+      <div class="sidebar-nav-item">Session History</div>
+      <div class="sidebar-section-label" style="margin-top:14px;">System</div>
+      <div class="sidebar-nav-item" style="color:#94a3b8;">Settings</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-bottom-item">Help</div>
+    </div>
+    <div class="sidebar-footer">v2.42.0</div>
+  </nav>
+
+  <div class="main-content">
+    <div class="tool-header">
+      <div class="tool-title-group">
+        <div class="tool-title-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-title">Customers</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Profiles, emails, document rules</div>
+        </div>
+      </div>
+      <div class="tool-actions">
+        <div class="agent-indicator"><span class="agent-dot"></span> Agent online</div>
+        <button class="tool-switcher-btn">
+          Switch Tool
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="work-area" id="workArea">
+      <div class="demo-controls">
+        <span class="demo-label">Demo:</span>
+        <button id="scenA" class="active" onclick="loadScenario('A')">A · Initial drop zone</button>
+        <button id="scenB" onclick="loadScenario('B')">B · Import with errors</button>
+        <button id="scenC" onclick="loadScenario('C')">C · All clean import</button>
+        <span class="spacer"></span>
+        <span class="scenario-hint" id="scenHint">In Scenario A — click the drop zone to "drop" a file</span>
+      </div>
+
+      <div class="page-heading">
+        <div>
+          <h1>Customers <span style="font-size:0.82rem; color:#94a3b8; font-weight:500; margin-left:8px;">214 total · 161 active</span></h1>
+          <div class="subtitle">Email addresses, send method, and required-document rules per customer</div>
+        </div>
+        <div class="top-actions">
+          <button class="btn btn-secondary">⬇ Export</button>
+          <button class="btn btn-secondary" onclick="loadScenario('A')">⬆ Import</button>
+          <button class="btn btn-primary">+ Add Customer</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input type="text" class="search" placeholder="🔍 Search by code, name, or email...">
+        <span class="filter-meta">Showing 6 of 214 customers</span>
+      </div>
+      <div class="table-wrap">
+        <table class="cust-table">
+          <thead>
+            <tr>
+              <th style="width:130px;">Code</th>
+              <th>Name</th>
+              <th style="width:160px;">Send Method</th>
+              <th style="width:170px;">Required Docs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="row-APEXMA01">
+              <td class="code-cell">APEXMA01</td>
+              <td>APEX MARITIME CO</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td style="font-family:'SF Mono',Consolas,monospace; font-size:0.78rem;">POD</td>
+            </tr>
+            <tr>
+              <td class="code-cell">TOPTRA02</td>
+              <td>TOP TRADING USA INC</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td style="font-family:'SF Mono',Consolas,monospace; font-size:0.78rem;">POD</td>
+            </tr>
+            <tr>
+              <td class="code-cell">OECNYC01</td>
+              <td>OEC GROUP — NEW YORK</td>
+              <td><span class="send-method-badge email" style="background:#fff7ed;color:#c2410c;">OEC Two-Email</span></td>
+              <td style="font-style:italic;color:#15803d;font-size:0.78rem;">handled automatically</td>
+            </tr>
+            <tr>
+              <td class="code-cell">GLBCAR01</td>
+              <td>GLOBAL CARGO LTD</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td style="font-family:'SF Mono',Consolas,monospace; font-size:0.78rem;">POD, BOL</td>
+            </tr>
+            <tr>
+              <td class="code-cell">SEAEXP01</td>
+              <td>SEAWAY EXPRESS</td>
+              <td><span class="send-method-badge email">Email</span></td>
+              <td style="font-style:italic;color:#15803d;font-size:0.78rem;">all attachments</td>
+            </tr>
+            <tr>
+              <td class="code-cell">TRURET01</td>
+              <td>TRUE VALUE RETAIL SUPPORT CENTER</td>
+              <td><span class="send-method-badge email" style="background:#fefce8;color:#854d0e;">Portal Upload</span></td>
+              <td style="font-style:italic;color:#15803d;font-size:0.78rem;">handled automatically</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="whats-new-note">
+        <strong>📍 What's new in Fix 4:</strong>
+        Two safety nets that prevent garbage-in.
+        <strong>(1) The server now validates every customer record</strong> before saving — `sendMethod` must be one of three allowed values, `requiredDocs` must be drawn from a fixed list (POD, POL, BOL, PL, DO — note <strong>no "invoice"</strong>, that's Fix 3).
+        <strong>(2) CSV import shows a per-row breakdown</strong> when something is off: which rows are valid, which are rejected, and exactly why. You can skip the bad rows and import only the good ones in one click — no more all-or-nothing failures, no more silent overwrites.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Import Modal ═══════════════ -->
+<div class="modal-overlay hidden" id="importModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h2 id="modalTitle">Import Customers</h2>
+        <div class="header-sub" id="modalSub">Upload an Excel, CSV, or JSON file</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+
+    <div class="modal-body" id="modalBody">
+      <!-- Filled by renderModal() -->
+    </div>
+
+    <div class="modal-footer" id="modalFooter">
+      <!-- Filled by renderModal() -->
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Demo data ────────────────────────────────────────────────
+// Existing codes (for duplicate detection)
+const EXISTING_CODES = {
+  'APEXMA01': 'APEX MARITIME CO',
+  'TOPTRA02': 'TOP TRADING USA INC',
+  'OECNYC01': 'OEC GROUP — NEW YORK',
+  'GLBCAR01': 'GLOBAL CARGO LTD',
+  'SEAEXP01': 'SEAWAY EXPRESS',
+  'TRURET01': 'TRUE VALUE RETAIL SUPPORT CENTER',
+};
+
+const ALLOWED_SEND_METHODS = ['email', 'qbo_invoice_only_then_pod_email', 'portal_upload'];
+const ALLOWED_DOCS = ['pod', 'pol', 'bol', 'pl', 'do'];
+
+// Simulated parsed-CSV results — what the server would return after validation.
+// Each row already has been parsed; `errors` and `warnings` are validation output.
+const SCENARIO_B_ROWS = [
+  { row: 1, code: 'HAPLOY01', name: 'HAPAG-LLOYD AMERICA',  status: 'valid' },
+  { row: 2, code: 'MAERSK03', name: 'MAERSK LINE LIMITED',
+    status: 'error',
+    errors: [{ column: 'Send Method',
+               problem: "We don't recognize “qbo_standard”.",
+               fix: 'Use one of: Email, OEC Two-Email, or Portal Upload.' }],
+  },
+  { row: 3, code: 'CMACGM02', name: 'CMA CGM AMERICA',     status: 'valid' },
+  { row: 4, code: 'EVERGRN1', name: 'EVERGREEN SHIPPING',  status: 'valid' },
+  { row: 5, code: 'MSCSHP04', name: 'MSC SHIPPING USA',
+    status: 'error',
+    errors: [{ column: 'Required Docs',
+               problem: 'You can’t list “Invoice” anymore — the invoice PDF is sent automatically with every email.',
+               fix: 'Just remove “Invoice” from this row and keep the rest.' }],
+  },
+  { row: 6, code: 'COSCO05',  name: 'COSCO SHIPPING LINES', status: 'valid' },
+  { row: 7, code: 'YANGM01',  name: 'YANG MING MARINE',    status: 'valid' },
+  { row: 8, code: 'APEXMA01', name: 'APEX MARITIME CO',
+    status: 'warn',
+    errors: [{ column: 'Code',
+               problem: '“APEXMA01” already belongs to APEX MARITIME CO.',
+               isDup: true,
+               existing: 'APEX MARITIME CO' }],
+  },
+  { row: 9, code: 'ZIMLIN02', name: 'ZIM INTEGRATED',      status: 'valid' },
+  { row: 10, code: 'ONEAPL01', name: 'ONE — OCEAN NETWORK', status: 'valid' },
+  { row: 11, code: '',        name: 'PIL PACIFIC INTL',
+    status: 'error',
+    errors: [{ column: 'Code',
+               problem: 'This row is missing a customer code.',
+               fix: 'Every row needs a unique code (like “PILPAC01”).' }],
+  },
+  { row: 12, code: 'WANHAI03', name: 'WAN HAI LINES',      status: 'valid' },
+  { row: 13, code: 'PSALOG01', name: 'PSA LOGISTICS',
+    status: 'error',
+    errors: [{ column: 'Required Docs',
+               problem: 'We don’t know what “Manifest” is.',
+               fix: 'Pick from: POD, POL, BOL, PL, or DO.' }],
+  },
+  { row: 14, code: 'SUDU8888', name: 'HAMBURG SUD',        status: 'valid' },
+  { row: 15, code: 'MATSON01', name: 'MATSON NAVIGATION',  status: 'valid' },
+  { row: 16, code: 'NIPPON02', name: 'NIPPON YUSEN KAISHA', status: 'valid' },
+  { row: 17, code: 'KLINE03',  name: 'K LINE AMERICA',     status: 'valid' },
+  { row: 18, code: 'OOCL04',   name: 'ORIENT OVERSEAS',    status: 'valid' },
+  { row: 19, code: 'WHLINE01', name: 'WESTWOOD HOLDINGS',  status: 'valid' },
+  { row: 20, code: 'TRUSE01',  name: 'TRANS USA EXPRESS',  status: 'valid' },
+  { row: 21, code: 'BLUSTAR2', name: 'BLUE STAR LINE',     status: 'valid' },
+  { row: 22, code: 'PACIFIC1', name: 'PACIFIC CARRIERS',   status: 'valid' },
+];
+
+const SCENARIO_C_ROWS = SCENARIO_B_ROWS.map((r, i) => ({
+  row: i + 1,
+  code: r.code || `FIXED${String(i + 1).padStart(2, '0')}`,
+  name: r.name || `Pacific Intl Lines ${i}`,
+  status: 'valid',
+}));
+
+// Demo state
+let scenario = 'A';
+let activeFilter = 'all'; // 'all' | 'errors' | 'valid'
+const FILE_META = { name: 'customers-april-2026.xlsx', size: '12 KB', sheet: 'Customers' };
+
+function loadScenario(letter) {
+  scenario = letter;
+  activeFilter = 'all';
+  document.getElementById('scenA').classList.toggle('active', letter === 'A');
+  document.getElementById('scenB').classList.toggle('active', letter === 'B');
+  document.getElementById('scenC').classList.toggle('active', letter === 'C');
+
+  const hints = {
+    A: 'In Scenario A — click the drop zone to "drop" a file (jumps to Scenario B)',
+    B: 'In Scenario B — try the filter tabs · "Import 18 valid →" skips the rejected rows',
+    C: 'In Scenario C — clean file, all 22 rows pass validation',
+  };
+  document.getElementById('scenHint').textContent = hints[letter];
+
+  showModal();
+  renderModal();
+}
+
+function showModal() {
+  document.getElementById('importModal').classList.remove('hidden');
+  document.getElementById('workArea').classList.add('modal-active');
+}
+
+function closeModal() {
+  document.getElementById('importModal').classList.add('hidden');
+  document.getElementById('workArea').classList.remove('modal-active');
+}
+
+function setFilter(name) {
+  activeFilter = name;
+  renderModal();
+}
+
+function getRows() {
+  if (scenario === 'B') return SCENARIO_B_ROWS;
+  if (scenario === 'C') return SCENARIO_C_ROWS;
+  return [];
+}
+
+function getCounts(rows) {
+  return {
+    valid: rows.filter(r => r.status === 'valid').length,
+    error: rows.filter(r => r.status === 'error').length,
+    warn:  rows.filter(r => r.status === 'warn').length,
+    total: rows.length,
+  };
+}
+
+function renderModal() {
+  const body = document.getElementById('modalBody');
+  const footer = document.getElementById('modalFooter');
+  const sub = document.getElementById('modalSub');
+
+  // ── Scenario A: Drop zone ──
+  if (scenario === 'A') {
+    document.getElementById('modalTitle').textContent = 'Import Customers';
+    sub.textContent = 'Upload an Excel, CSV, or JSON file';
+
+    body.innerHTML = `
+      <div class="drop-zone" onclick="loadScenario('B')">
+        <div class="dz-icon">⬆</div>
+        <div class="dz-title">Drop your Excel file here</div>
+        <div class="dz-subtitle">.xlsx only — or click to browse</div>
+      </div>
+      <div style="margin-top:14px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:7px; font-size:0.85rem; color:#334155;">
+        <div style="font-weight:600; color:#0f172a; margin-bottom:6px;">What your file should have:</div>
+        <div style="display:flex; gap:24px; flex-wrap:wrap;">
+          <div>
+            <div style="font-size:0.74rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:700; margin-bottom:3px;">Required</div>
+            <div>Code, Name</div>
+          </div>
+          <div>
+            <div style="font-size:0.74rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:700; margin-bottom:3px;">Optional</div>
+            <div>Email, Send Method, Required Docs, Notes</div>
+          </div>
+        </div>
+        <div style="margin-top:8px; font-size:0.78rem; color:#64748b;">
+          Don't have a file yet? <button style="background:none; border:none; color:#ea580c; font-weight:600; cursor:pointer; font-family:inherit; font-size:0.78rem; padding:0; text-decoration:underline;" onclick="alert('In the real app, this downloads a template .xlsx with dropdowns pre-filled for Send Method and Required Docs — so you can\\'t pick a wrong value.')">Download a template</button>
+        </div>
+      </div>
+    `;
+
+    footer.innerHTML = `
+      <div class="footer-left"></div>
+      <div class="footer-right">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      </div>
+    `;
+    return;
+  }
+
+  // ── Scenario B & C: Validation results view ──
+  const rows = getRows();
+  const counts = getCounts(rows);
+  const hasErrors = counts.error > 0 || counts.warn > 0;
+
+  document.getElementById('modalTitle').textContent = 'Validate & Import';
+  sub.textContent = `${counts.total} rows parsed from file`;
+
+  // File meta + summary card
+  let summaryCardHtml;
+  if (hasErrors) {
+    summaryCardHtml = `
+      <div class="results-summary-card has-errors">
+        <div class="summary-icon">!</div>
+        <div class="summary-text">
+          <div class="summary-title">${counts.error + counts.warn} of ${counts.total} rows need attention</div>
+          <div class="summary-counts">
+            <span class="count-pill valid"><span class="dot"></span> ${counts.valid} valid</span>
+            ${counts.error > 0 ? `<span class="count-pill error"><span class="dot"></span> ${counts.error} ${counts.error === 1 ? 'error' : 'errors'}</span>` : ''}
+            ${counts.warn > 0 ? `<span class="count-pill warn"><span class="dot"></span> ${counts.warn} ${counts.warn === 1 ? 'warning' : 'warnings'}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    summaryCardHtml = `
+      <div class="results-summary-card all-clean">
+        <div class="summary-icon">✓</div>
+        <div class="summary-text">
+          <div class="summary-title">All ${counts.total} rows passed validation</div>
+          <div class="summary-counts">
+            <span class="count-pill valid"><span class="dot"></span> ${counts.valid} valid · ready to import</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Filter tabs (only show if there's a mix)
+  let filterTabsHtml = '';
+  if (hasErrors) {
+    filterTabsHtml = `
+      <div class="results-filter-tabs">
+        <button class="results-filter-tab ${activeFilter === 'all' ? 'active' : ''}" onclick="setFilter('all')">
+          All <span class="tab-count">${counts.total}</span>
+        </button>
+        <button class="results-filter-tab has-errors ${activeFilter === 'errors' ? 'active' : ''}" onclick="setFilter('errors')">
+          Errors <span class="tab-count">${counts.error + counts.warn}</span>
+        </button>
+        <button class="results-filter-tab ${activeFilter === 'valid' ? 'active' : ''}" onclick="setFilter('valid')">
+          Valid <span class="tab-count">${counts.valid}</span>
+        </button>
+      </div>
+    `;
+  }
+
+  // Filter rows
+  let visibleRows;
+  if (activeFilter === 'errors') visibleRows = rows.filter(r => r.status !== 'valid');
+  else if (activeFilter === 'valid') visibleRows = rows.filter(r => r.status === 'valid');
+  else visibleRows = rows;
+
+  let rowsHtml;
+  if (visibleRows.length === 0) {
+    rowsHtml = `<div class="empty-filter-state">No rows in this filter.</div>`;
+  } else {
+    rowsHtml = visibleRows.map(r => {
+      const statusPill = r.status === 'valid'
+        ? '<span class="status-pill valid">✓ Valid</span>'
+        : r.status === 'error'
+          ? '<span class="status-pill error">✕ Rejected</span>'
+          : '<span class="status-pill warn">⚠ Warning</span>';
+
+      const codeCls = r.code ? '' : 'empty';
+      const codeText = r.code || '(empty)';
+      const nameCls = r.name ? '' : 'empty';
+      const nameText = r.name || '(empty)';
+
+      let errorDetail = '';
+      if (r.errors && r.errors.length) {
+        const isWarn = r.status === 'warn';
+        const cls = isWarn ? 'rr-error-detail warn' : 'rr-error-detail';
+        errorDetail = r.errors.map(e => {
+          let fixLine = '';
+          if (e.fix) {
+            fixLine = `<div class="fix-line"><strong>How to fix:</strong> ${e.fix}</div>`;
+          }
+          if (e.isDup) {
+            fixLine = `<div class="fix-line"><strong>What to do:</strong> if it's the same customer, update the existing one instead.
+              <button class="view-existing-link" onclick="alert('In the real app, this opens the existing customer record so you can compare and decide what to do.')">View existing →</button></div>`;
+          }
+          return `<div class="${cls}">
+            <div class="problem-line"><span class="column-tag">${e.column}</span> ${e.problem}</div>
+            ${fixLine}
+          </div>`;
+        }).join('');
+      }
+
+      return `<div class="row-result ${r.status}">
+        <div class="rr-num">Row ${r.row}</div>
+        <div class="rr-code ${codeCls}">${codeText}</div>
+        <div class="rr-name ${nameCls}">${nameText}</div>
+        <div class="rr-status">${statusPill}</div>
+        ${errorDetail ? `<div></div>${errorDetail}` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  body.innerHTML = `
+    <div class="file-meta-bar">
+      <span class="file-icon">📄</span>
+      <strong>${FILE_META.name}</strong>
+      <span class="meta-divider">·</span>
+      <span>${FILE_META.size}</span>
+      <span class="meta-divider">·</span>
+      <span>Sheet: <strong>${FILE_META.sheet}</strong></span>
+      <button class="replace-link" onclick="loadScenario('A')">↻ Replace file</button>
+    </div>
+    ${summaryCardHtml}
+    ${filterTabsHtml}
+    <div class="row-results">${rowsHtml}</div>
+  `;
+
+  // Footer actions
+  if (hasErrors) {
+    const skipDisabled = counts.valid === 0;
+    footer.innerHTML = `
+      <div class="footer-left">
+        <button class="btn btn-danger-outline" onclick="alert('In the real app, this downloads a CSV listing only the rejected rows + their errors, so you can fix them in Excel and re-upload.')">⬇ Download error log</button>
+      </div>
+      <div class="footer-right">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" ${skipDisabled ? 'disabled' : ''} onclick="finishImport()">
+          Skip errors and import ${counts.valid} valid →
+        </button>
+      </div>
+    `;
+  } else {
+    footer.innerHTML = `
+      <div class="footer-left"></div>
+      <div class="footer-right">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="finishImport()">
+          Import all ${counts.total} customers →
+        </button>
+      </div>
+    `;
+  }
+}
+
+function finishImport() {
+  alert('In the real app, this calls the agent\'s POST /customers/import endpoint with only the valid rows. You\'d see a green toast: "Imported 18 customers (15 new, 3 updated)."');
+  closeModal();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => loadScenario('A'), 150);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Fix 1 in Full App</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  /* ─── Mockup banner (top of screen, full width) ─── */
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .mockup-banner .hint {
+    margin-left: auto; font-weight: 400; opacity: 0.9; font-size: 0.76rem;
+  }
+
+  /* ─── App shell (sidebar + main) ─── */
+  .app-layout { display: flex; min-height: calc(100vh - 38px); }
+
+  /* Sidebar */
+  .sidebar {
+    width: 200px; min-width: 200px; background: #fff;
+    border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column;
+    height: calc(100vh - 38px); position: sticky; top: 38px;
+  }
+  .sidebar-logo {
+    padding: 16px 14px 14px; text-align: center; cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .sidebar-logo .logo-mark {
+    width: 48px; height: 48px;
+    background: #0f172a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 6px;
+  }
+  .sidebar-logo .logo-title {
+    font-size: 0.78rem; font-weight: 700; color: #0f172a; line-height: 1.2;
+  }
+  .sidebar-logo .logo-subtitle {
+    font-size: 0.65rem; color: #94a3b8; margin-top: 2px;
+  }
+  .sidebar-nav { flex: 1; padding: 8px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-section-label {
+    font-size: 0.62rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 14px 11px 5px;
+  }
+  .sidebar-nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border-radius: 7px; cursor: pointer;
+    color: #475569; font-size: 0.82rem; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .sidebar-nav-item:hover { background: #f8fafc; color: #1e293b; }
+  .sidebar-nav-item.active {
+    background: #fff7ed; color: #ea580c; font-weight: 600;
+    border-color: #fed7aa;
+  }
+  .sidebar-bottom {
+    border-top: 1px solid #f1f5f9; padding: 8px 8px 10px;
+  }
+  .sidebar-bottom-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px; border-radius: 7px; cursor: pointer;
+    color: #94a3b8; font-size: 0.78rem; font-weight: 500;
+  }
+  .sidebar-bottom-item:hover { background: #f8fafc; color: #64748b; }
+  .sidebar-footer {
+    padding: 8px 14px; border-top: 1px solid #f1f5f9;
+    font-size: 0.7rem; color: #94a3b8; text-align: center;
+  }
+
+  /* Main content */
+  .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* Tool header bar (top of main content) */
+  .tool-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid #e2e8f0; background: #fff;
+  }
+  .tool-title-group { display: flex; align-items: center; gap: 12px; }
+  .tool-title {
+    font-size: 1.1rem; font-weight: 700; color: #0f172a;
+  }
+  .tool-title-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #fff7ed; color: #ea580c;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tool-actions { display: flex; align-items: center; gap: 10px; }
+  .tool-switcher-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0;
+    background: #fff; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+    color: #475569; font-family: inherit;
+  }
+  .tool-switcher-btn:hover { border-color: #cbd5e1; background: #f8fafc; }
+  .agent-indicator {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    font-size: 0.78rem; color: #15803d; font-weight: 500;
+  }
+  .agent-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #16a34a;
+    box-shadow: 0 0 6px rgba(22,163,106,0.5);
+  }
+
+  /* Invoice sender body */
+  .invoice-sender-body {
+    flex: 1; display: flex; min-width: 0;
+  }
+  .invoice-sender-body .work-area {
+    flex: 1; padding: 22px 28px; overflow-y: auto; min-width: 0;
+    transition: padding-right 0.25s ease;
+  }
+  .invoice-sender-body.panel-open .work-area { padding-right: 22px; }
+
+  /* Page heading */
+  .page-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
+  .page-heading h1 {
+    font-size: 1.32rem; font-weight: 700; color: #0f172a;
+  }
+  .page-heading .subtitle { color: #64748b; font-size: 0.85rem; margin-top: 2px; }
+  .page-heading .right-meta {
+    font-size: 0.78rem; color: #94a3b8; text-align: right;
+  }
+  .page-heading .right-meta strong { color: #475569; }
+
+  /* Sticky alert banner */
+  .alert-banner {
+    background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .alert-banner .alert-icon {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #fb923c; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; font-weight: 700; flex-shrink: 0;
+  }
+  .alert-banner .alert-text { flex: 1; font-size: 0.92rem; color: #7c2d12; }
+  .alert-banner .alert-text strong { color: #9a3412; font-weight: 700; }
+  .alert-banner .alert-text small { display: block; color: #b45309; font-size: 0.78rem; margin-top: 2px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #e2e8f0; margin-bottom: 0; }
+  .tab {
+    padding: 10px 18px; background: none; border: none;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    cursor: pointer; font-size: 0.86rem; font-weight: 600;
+    color: #64748b; display: flex; align-items: center; gap: 8px;
+    font-family: inherit;
+  }
+  .tab:hover { color: #ea580c; background: #fff7ed; }
+  .tab.active {
+    color: #ea580c; border-bottom-color: #ea580c; background: #fff7ed;
+  }
+  .tab .count {
+    background: #f1f5f9; color: #475569;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .tab.active .count { background: #ea580c; color: white; }
+  .tab.has-issues .count { background: #fee2e2; color: #b91c1c; }
+  .tab.has-issues.active .count { background: #dc2626; color: white; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; background: #fff;
+    border: 1px solid #e2e8f0; border-top: none;
+    font-size: 0.82rem; color: #64748b;
+  }
+  .toolbar input.search {
+    flex: 1; max-width: 280px;
+    padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px;
+    font-size: 0.85rem; font-family: inherit;
+  }
+  .toolbar input.search:focus { outline: none; border-color: #ea580c; }
+  .toolbar .filter-meta { color: #94a3b8; }
+  .quick-jump {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; margin-left: auto;
+  }
+  .quick-jump-label { font-size: 0.76rem; color: #94a3b8; margin-right: 4px; }
+  .chip {
+    padding: 4px 10px; background: #fef2f2; border: 1px solid #fecaca;
+    border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+    color: #b91c1c; cursor: pointer;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .chip:hover { background: #b91c1c; color: white; transform: translateY(-1px); }
+
+  /* Table */
+  .table-wrap {
+    background: #fff; border: 1px solid #e2e8f0; border-top: none;
+    border-radius: 0 0 8px 8px; overflow: hidden;
+    max-height: calc(100vh - 410px); overflow-y: auto;
+  }
+  .inv-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .inv-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+  .inv-table th {
+    padding: 10px 14px; text-align: left;
+    font-size: 0.7rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  .inv-table td {
+    padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+    color: #334155; vertical-align: middle;
+  }
+  .inv-table tbody tr { cursor: pointer; }
+  .inv-table tbody tr:hover { background: #fafafa; }
+  .inv-table tbody tr.row-failed { background: #fef9f5; }
+  .inv-table tbody tr.row-failed:hover { background: #fff1ea; }
+  .inv-table tbody tr.active { background: #fff7ed !important; }
+  .inv-table tbody tr.active td:first-child { box-shadow: inset 3px 0 0 #ea580c; }
+
+  .invoice-cell { font-weight: 600; color: #0f172a; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82rem; }
+  .container-cell { color: #475569; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82rem; }
+  .customer-cell { color: #334155; font-size: 0.82rem; }
+
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .badge-sent { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .badge-missing-doc {
+    background: #fef2f2; color: #b91c1c;
+    border: 1px solid #fca5a5; font-weight: 800;
+  }
+  .badge-api-error {
+    background: #fffbeb; color: #b45309;
+    border: 1px solid #fcd34d;
+  }
+  .reason-text {
+    font-size: 0.74rem; color: #b91c1c;
+    margin-top: 3px; font-weight: 500;
+  }
+  .reason-text.warn { color: #b45309; }
+
+  .empty-state {
+    padding: 48px 24px; text-align: center; color: #64748b;
+  }
+  .empty-state .icon { font-size: 2.4rem; margin-bottom: 12px; }
+  .empty-state strong { color: #0f172a; font-weight: 700; }
+
+  /* Side detail panel */
+  .detail-panel {
+    width: 0; background: #fff; border-left: 1px solid #e2e8f0;
+    overflow: hidden; transition: width 0.25s ease; flex-shrink: 0;
+  }
+  .invoice-sender-body.panel-open .detail-panel { width: 400px; }
+  .panel-inner { width: 400px; padding: 22px; height: 100%; overflow-y: auto; }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .panel-title {
+    font-size: 0.74rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .panel-close {
+    background: none; border: none; cursor: pointer; color: #94a3b8;
+    font-size: 1.5rem; line-height: 1;
+    padding: 0; width: 28px; height: 28px; border-radius: 6px;
+  }
+  .panel-close:hover { background: #f1f5f9; color: #0f172a; }
+  .panel-invoice-id {
+    font-size: 1.25rem; font-weight: 700; color: #0f172a;
+    font-family: 'SF Mono', Consolas, monospace; margin-bottom: 4px;
+  }
+  .panel-meta { color: #64748b; font-size: 0.82rem; margin-bottom: 18px; line-height: 1.5; }
+  .panel-meta .label { color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .panel-error-box {
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .panel-error-box.warn { background: #fffbeb; border-color: #fde68a; }
+  .panel-error-title {
+    font-size: 1rem; font-weight: 700; color: #991b1b;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .panel-error-box.warn .panel-error-title { color: #92400e; }
+  .panel-error-text { color: #7f1d1d; line-height: 1.55; font-size: 0.85rem; }
+  .panel-error-box.warn .panel-error-text { color: #78350f; }
+  .panel-section { margin-bottom: 14px; }
+  .panel-section-title {
+    font-size: 0.72rem; font-weight: 700; color: #475569;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;
+  }
+  .check-list { list-style: none; }
+  .check-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 7px 11px; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 6px;
+    margin-bottom: 5px; font-size: 0.82rem; color: #334155;
+  }
+  .check-list .icon {
+    flex-shrink: 0; width: 17px; height: 17px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.68rem; font-weight: 700; margin-top: 1px;
+  }
+  .icon.ok { background: #dcfce7; color: #15803d; }
+  .icon.fail { background: #fee2e2; color: #b91c1c; }
+  .icon.warn { background: #fef3c7; color: #b45309; }
+  .next-step {
+    background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
+    padding: 13px;
+    color: #7c2d12; font-size: 0.85rem; line-height: 1.55;
+  }
+  .next-step strong { color: #9a3412; }
+  .tech-toggle {
+    background: none; border: none; color: #64748b; font-size: 0.76rem;
+    cursor: pointer; padding: 6px 0; margin-top: 4px;
+    text-decoration: underline; font-family: inherit;
+  }
+  .tech-toggle:hover { color: #ea580c; }
+  .tech-details {
+    display: none; background: #0f172a; color: #cbd5e1;
+    padding: 10px; border-radius: 6px;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.72rem; line-height: 1.5; margin-top: 6px;
+    white-space: pre-wrap;
+  }
+  .tech-details.open { display: block; }
+
+  .panel-nav {
+    display: flex; gap: 6px; margin-bottom: 14px;
+    padding: 7px 10px; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    align-items: center; font-size: 0.76rem; color: #64748b;
+  }
+  .panel-nav .nav-btn {
+    background: white; border: 1px solid #e2e8f0; border-radius: 5px;
+    padding: 4px 10px; cursor: pointer; font-size: 0.76rem;
+    color: #475569; font-family: inherit;
+  }
+  .panel-nav .nav-btn:hover {
+    border-color: #ea580c; color: #ea580c; background: #fff7ed;
+  }
+  .panel-nav .position { margin-left: auto; font-weight: 600; color: #0f172a; }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">MOCKUP</span>
+  <span>Fix 1 — Inside the full app shell</span>
+  <span class="hint">Sidebar + tool header are real · Click rows · Switch tabs</span>
+</div>
+
+<div class="app-layout">
+
+  <!-- ─── LEFT SIDEBAR ─── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+        </svg>
+      </div>
+      <div class="logo-title">NGL Transportation</div>
+      <div class="logo-subtitle">Accounting Suite</div>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="sidebar-section-label">Workspace</div>
+      <div class="sidebar-nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+        </svg>
+        Merging Tool
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        INI Chassis Finder
+      </div>
+      <div class="sidebar-nav-item active">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+        </svg>
+        Invoice Sender
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+        </svg>
+        Customers
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        Session History
+      </div>
+
+      <div class="sidebar-section-label" style="margin-top:14px;">System</div>
+      <div class="sidebar-nav-item" style="color:#94a3b8;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-bottom-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        Help
+      </div>
+    </div>
+    <div class="sidebar-footer">v2.40.0</div>
+  </nav>
+
+  <!-- ─── MAIN CONTENT AREA ─── -->
+  <div class="main-content">
+
+    <!-- Tool header -->
+    <div class="tool-header">
+      <div class="tool-title-group">
+        <div class="tool-title-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-title">Invoice Sender</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Send invoices via QBO + Gmail</div>
+        </div>
+      </div>
+      <div class="tool-actions">
+        <div class="agent-indicator">
+          <span class="agent-dot"></span>
+          Agent online
+        </div>
+        <button class="tool-switcher-btn">
+          Switch Tool
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Invoice sender body (table + side panel) -->
+    <div class="invoice-sender-body panel-open" id="invSender">
+      <div class="work-area">
+
+        <div class="page-heading">
+          <div>
+            <h1>Send Results</h1>
+            <div class="subtitle">Batch from 2026-05-04 · 120 invoices · finished 2 minutes ago</div>
+          </div>
+          <div class="right-meta">
+            Last batch: <strong>117 sent</strong> · <strong style="color:#dc2626;">3 failed</strong><br>
+            <a href="#" style="color:#ea580c; font-weight:500;">View all batches →</a>
+          </div>
+        </div>
+
+        <div class="alert-banner">
+          <div class="alert-icon">!</div>
+          <div class="alert-text">
+            <strong>3 invoices need your attention.</strong>
+            <small>The other 117 sent successfully — you can ignore them.</small>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab has-issues active" data-tab="needs-attention" onclick="switchTab(this)">
+            ⚠ Needs Attention <span class="count">3</span>
+          </button>
+          <button class="tab" data-tab="sent" onclick="switchTab(this)">
+            ✓ Sent <span class="count">117</span>
+          </button>
+          <button class="tab" data-tab="all" onclick="switchTab(this)">
+            All Invoices <span class="count">120</span>
+          </button>
+        </div>
+
+        <div class="toolbar">
+          <input type="text" class="search" placeholder="🔍 Search by invoice, container, or customer..." oninput="filterRows(this.value)">
+          <span class="filter-meta" id="filterMeta">Showing 3 of 120 invoices</span>
+          <div class="quick-jump" id="quickJump" style="display:none;">
+            <span class="quick-jump-label">Jump to failure:</span>
+            <span class="chip" onclick="jumpToRow('LM26040864F')">LM26040864F</span>
+            <span class="chip" onclick="jumpToRow('LM26040841F')">LM26040841F</span>
+            <span class="chip" onclick="jumpToRow('LM26040899F')">LM26040899F</span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th>Invoice</th>
+                <th>Container</th>
+                <th>Customer</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:18px; padding:12px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:0.82rem; color:#1e3a8a; line-height:1.55;">
+          <strong>📍 Where this lives:</strong> This is the same Invoice Sender page you're already on. After a batch finishes, the table flips into this "results view" automatically — no popup, no new window. The diagnostic panel on the right slides in over the empty space when you click a failed row, and slides back out when you close it.
+        </div>
+      </div>
+
+      <!-- Side detail panel -->
+      <div class="detail-panel">
+        <div class="panel-inner" id="panelInner"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function generateMockData() {
+  const customers = [
+    'RIVER LOGISTICS', 'CARGOWORLD INC', 'PACIFIC FREIGHT', 'SUNRISE LOG',
+    'EVERGREEN CO', 'GLOBAL CARGO LTD', 'SEAWAY EXPRESS', 'OCEANIC TRADE',
+    'BLUE WAVE SHIP', 'HORIZON FORWARDERS', 'COASTAL LINK', 'NORDIC SUPPLY',
+    'TRANSWORLD INTL', 'PORT GATEWAY', 'PRIMELINE LOG', 'WESTPORT MOVERS'
+  ];
+  const containerPrefixes = ['MAGU', 'KKFU', 'SUDU', 'TGHU', 'TCLU', 'MSCU', 'CMAU', 'OOLU', 'TRHU', 'UETU'];
+  const failures = [
+    {
+      idx: 12, invoiceId: 'LM26040864F', container: 'TRHU4593053', customer: 'APEXMA01 — APEX',
+      status: 'pod-missing', badgeText: '⚠ POD Missing', badgeClass: 'badge-missing-doc',
+      reason: 'Not found in QBO or TMS — needs to be uploaded', reasonClass: ''
+    },
+    {
+      idx: 47, invoiceId: 'LM26040841F', container: 'MSCU8852311', customer: 'GLOBAL CARGO LTD',
+      status: 'bol-missing', badgeText: '⚠ BOL Missing', badgeClass: 'badge-missing-doc',
+      reason: 'QBO is missing the bill of lading', reasonClass: ''
+    },
+    {
+      idx: 88, invoiceId: 'LM26040899F', container: 'CMAU5566778', customer: 'SEAWAY EXPRESS',
+      status: 'qbo-error', badgeText: '⚡ QBO Error', badgeClass: 'badge-api-error',
+      reason: 'QuickBooks didn\'t respond — safe to retry', reasonClass: 'warn'
+    },
+  ];
+
+  const rows = [];
+  let invNum = 26040800;
+  for (let i = 0; i < 120; i++) {
+    const fail = failures.find(f => f.idx === i);
+    if (fail) {
+      rows.push({ ...fail, sent: false });
+    } else {
+      const cust = customers[i % customers.length];
+      const prefix = containerPrefixes[i % containerPrefixes.length];
+      const contNum = String(1000000 + i * 7919).slice(0, 7);
+      rows.push({
+        invoiceId: 'LM' + (invNum + i) + 'F',
+        container: `${prefix}${contNum}`,
+        customer: cust, sent: true,
+      });
+    }
+  }
+  return rows;
+}
+
+const ROWS = generateMockData();
+const FAIL_ORDER = ROWS.filter(r => !r.sent).map(r => r.invoiceId);
+let currentTab = 'needs-attention';
+let currentSearch = '';
+
+const SCENARIOS = {
+  'pod-missing': {
+    invoiceId: 'LM26040864F', container: 'TRHU4593053',
+    customer: 'APEXMA01 — APEX', woNumber: 'LM2604160021',
+    badgeClass: 'panel-error-box', icon: '⚠', title: 'POD is missing',
+    explanation: "We couldn't find a Proof of Delivery anywhere — QBO has no POD attachment, and the TMS work order doesn't show one either. The driver may not have submitted it yet, or it was filed under a different work order.",
+    checks: [
+      { status: 'ok', text: 'Found invoice in QuickBooks' },
+      { status: 'ok', text: 'Verified container number matches' },
+      { status: 'ok', text: 'Connected to TMS work order LM2604160021' },
+      { status: 'fail', text: 'No POD attached in QuickBooks' },
+      { status: 'fail', text: 'No POD listed on the TMS work order' },
+    ],
+    nextStep: "<strong>What to do:</strong> Track down the POD from the driver or the warehouse, then upload it to QBO or TMS. Once it's there, you can re-run this invoice.",
+    techDetails: "audit_log.error: \"Missing required docs: pod\"\nstatus: missing_docs\nrequired_docs: [\"invoice\", \"pod\"]\nfound_attachments: [\"do\", \"invoice\", \"other\"]\nmissing: [\"pod\"]\ntimestamp: 2026-05-04T21:34:19Z",
+  },
+  'bol-missing': {
+    invoiceId: 'LM26040841F', container: 'MSCU8852311',
+    customer: 'GLOBAL CARGO LTD', woNumber: 'LM2604160048',
+    badgeClass: 'panel-error-box', icon: '⚠', title: 'BOL is missing',
+    explanation: "QuickBooks doesn't have a Bill of Lading attached, and TMS doesn't show one either. This customer has BOL set as a required document, so we paused before sending.",
+    checks: [
+      { status: 'ok', text: 'Found invoice in QuickBooks' },
+      { status: 'ok', text: 'Verified container number matches' },
+      { status: 'ok', text: 'Connected to TMS work order LM2604160048' },
+      { status: 'ok', text: 'POD attached in QuickBooks' },
+      { status: 'fail', text: 'No BOL attached in QuickBooks' },
+      { status: 'fail', text: 'No BOL on the TMS work order' },
+    ],
+    nextStep: "<strong>What to do:</strong> Find the BOL from your shipping line or carrier, then upload it. If this customer doesn't actually need a BOL, you can update their profile in Customer Manager to remove the requirement.",
+    techDetails: "audit_log.error: \"Missing required docs: bol\"\nstatus: missing_docs\nrequired_docs: [\"invoice\", \"pod\", \"bol\"]\nfound_attachments: [\"invoice\", \"pod\", \"do\"]\nmissing: [\"bol\"]",
+  },
+  'qbo-error': {
+    invoiceId: 'LM26040899F', container: 'CMAU5566778',
+    customer: 'SEAWAY EXPRESS', woNumber: 'LM2604160099',
+    badgeClass: 'panel-error-box warn', icon: '⚡',
+    title: 'QuickBooks didn\'t respond',
+    explanation: "We tried to read this invoice's attachments from QuickBooks, but the QBO API timed out. This happens occasionally — usually QBO is just slow or briefly unavailable.",
+    checks: [
+      { status: 'ok', text: 'Found invoice in QuickBooks' },
+      { status: 'ok', text: 'Verified container number matches' },
+      { status: 'fail', text: 'Could not load attachments — request timed out after 30 seconds' },
+      { status: 'warn', text: 'TMS work order check skipped' },
+    ],
+    nextStep: "<strong>What to do:</strong> Just retry — most QBO timeouts clear up on their own within a minute. If it keeps failing, check QuickBooks' status page or your internet connection.",
+    techDetails: "audit_log.error: \"QBO API timeout: list_attachments\"\nstatus: error\nhttp_response: ReadTimeout\nelapsed: 30.2s",
+  },
+};
+
+function escHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  let visible = ROWS;
+  if (currentTab === 'needs-attention') visible = ROWS.filter(r => !r.sent);
+  else if (currentTab === 'sent') visible = ROWS.filter(r => r.sent);
+  else visible = [...ROWS.filter(r => !r.sent), ...ROWS.filter(r => r.sent)];
+
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    visible = visible.filter(r =>
+      r.invoiceId.toLowerCase().includes(q) ||
+      r.container.toLowerCase().includes(q) ||
+      r.customer.toLowerCase().includes(q)
+    );
+  }
+
+  document.getElementById('filterMeta').textContent =
+    `Showing ${visible.length} of ${ROWS.length} invoices`;
+
+  if (visible.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">
+      <div class="icon">🔍</div><strong>No invoices match.</strong><br>
+      Try a different search or switch tabs.
+    </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = visible.map(r => {
+    if (r.sent) {
+      return `<tr data-id="${r.invoiceId}">
+        <td class="invoice-cell">${r.invoiceId}</td>
+        <td class="container-cell">${r.container}</td>
+        <td class="customer-cell">${escHtml(r.customer)}</td>
+        <td><span class="status-badge badge-sent">✓ Sent</span></td>
+      </tr>`;
+    } else {
+      return `<tr class="row-failed" data-id="${r.invoiceId}" onclick="openPanel('${r.status}', this)">
+        <td class="invoice-cell">${r.invoiceId}</td>
+        <td class="container-cell">${r.container}</td>
+        <td class="customer-cell">${escHtml(r.customer)}</td>
+        <td>
+          <span class="status-badge ${r.badgeClass}">${r.badgeText}</span>
+          <div class="reason-text ${r.reasonClass}">${r.reason}</div>
+        </td>
+      </tr>`;
+    }
+  }).join('');
+
+  document.getElementById('quickJump').style.display =
+    (currentTab === 'all' && !currentSearch) ? 'flex' : 'none';
+}
+
+function switchTab(btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  currentTab = btn.dataset.tab;
+  renderTable();
+}
+
+function filterRows(q) {
+  currentSearch = q.trim();
+  renderTable();
+}
+
+function jumpToRow(invoiceId) {
+  if (currentTab !== 'all') {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.tab[data-tab="all"]').classList.add('active');
+    currentTab = 'all';
+    renderTable();
+  }
+  setTimeout(() => {
+    const row = document.querySelector(`tr[data-id="${invoiceId}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.click();
+    }
+  }, 50);
+}
+
+function openPanel(scenarioKey, rowEl) {
+  const scenario = SCENARIOS[scenarioKey];
+  if (!scenario) return;
+  document.querySelectorAll('.inv-table tr').forEach(r => r.classList.remove('active'));
+  if (rowEl) rowEl.classList.add('active');
+
+  const idx = FAIL_ORDER.indexOf(scenario.invoiceId);
+  const total = FAIL_ORDER.length;
+  const prevId = idx > 0 ? FAIL_ORDER[idx - 1] : null;
+  const nextId = idx < total - 1 ? FAIL_ORDER[idx + 1] : null;
+
+  const checksHtml = scenario.checks.map(c => {
+    const iconChar = c.status === 'ok' ? '✓' : c.status === 'warn' ? '!' : '✕';
+    return `<li><span class="icon ${c.status}">${iconChar}</span> ${c.text}</li>`;
+  }).join('');
+
+  document.getElementById('panelInner').innerHTML = `
+    <div class="panel-header">
+      <span class="panel-title">Send Diagnostic</span>
+      <button class="panel-close" onclick="closePanel()">×</button>
+    </div>
+    <div class="panel-nav">
+      <button class="nav-btn" ${prevId ? `onclick="navToFail('${prevId}')"` : 'disabled style="opacity:0.4; cursor:not-allowed;"'}>← Prev</button>
+      <button class="nav-btn" ${nextId ? `onclick="navToFail('${nextId}')"` : 'disabled style="opacity:0.4; cursor:not-allowed;"'}>Next →</button>
+      <span class="position">Failure ${idx + 1} of ${total}</span>
+    </div>
+    <div class="panel-invoice-id">${scenario.invoiceId}</div>
+    <div class="panel-meta">
+      <span class="label">CONTAINER:</span> ${scenario.container}<br>
+      <span class="label">CUSTOMER:</span> ${escHtml(scenario.customer)}<br>
+      <span class="label">TMS WO#:</span> ${scenario.woNumber}
+    </div>
+    <div class="${scenario.badgeClass}">
+      <div class="panel-error-title">${scenario.icon} ${scenario.title}</div>
+      <div class="panel-error-text">${scenario.explanation}</div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">What we checked</div>
+      <ul class="check-list">${checksHtml}</ul>
+    </div>
+    <div class="panel-section">
+      <div class="next-step">${scenario.nextStep}</div>
+    </div>
+    <button class="tech-toggle" onclick="toggleTech(this)">▸ Show technical details</button>
+    <pre class="tech-details">${scenario.techDetails}</pre>
+  `;
+
+  document.getElementById('invSender').classList.add('panel-open');
+}
+
+function navToFail(invoiceId) {
+  const r = ROWS.find(x => x.invoiceId === invoiceId);
+  if (!r) return;
+  const rowEl = document.querySelector(`tr[data-id="${invoiceId}"]`);
+  if (rowEl) {
+    rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    openPanel(r.status, rowEl);
+  }
+}
+
+function closePanel() {
+  document.getElementById('invSender').classList.remove('panel-open');
+  document.querySelectorAll('.inv-table tr').forEach(r => r.classList.remove('active'));
+}
+
+function toggleTech(btn) {
+  const pre = btn.nextElementSibling;
+  pre.classList.toggle('open');
+  btn.textContent = pre.classList.contains('open') ? '▾ Hide technical details' : '▸ Show technical details';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  renderTable();
+  setTimeout(() => {
+    const firstFail = document.querySelector('tr.row-failed');
+    if (firstFail) openPanel('pod-missing', firstFail);
+  }, 100);
+});
+</script>
+
+</body>
+</html>
