@@ -5,6 +5,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from services.qbo_api.dedup import dedupe_attachments
+
 logger = logging.getLogger("ngl.job_manager")
 
 
@@ -76,16 +78,19 @@ class SendPortalUploadMixin:
 
         # Find and download POD from attachments
         att_check = await api.check_attachments(invoice_id, ["pod"])
-        all_attachments = att_check.get("attachments", [])
+        # WORKAROUND(TMS-008): see docs/tms-workarounds.md — drop duplicate Attachable records, pick newest POD
+        all_attachments = await self._dedup_and_emit(
+            job, invoice.invoice_number, att_check.get("attachments", []),
+        )
 
         pod_path = None
-        for att in all_attachments:
-            if att.get("docType") == "pod" and att.get("id"):
-                pod_path = await api.download_attachment(
-                    att["id"], att.get("fileName", "pod.pdf"), temp_dir
-                )
-                if pod_path:
-                    break
+        pod_candidates = [a for a in all_attachments
+                          if a.get("docType") == "pod" and a.get("id")]
+        if pod_candidates:
+            chosen = max(pod_candidates, key=lambda a: int(a["id"]))
+            pod_path = await api.download_attachment(
+                chosen["id"], chosen.get("fileName", "pod.pdf"), temp_dir
+            )
 
         if not pod_path:
             result.status = "missing_docs"
