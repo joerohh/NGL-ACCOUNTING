@@ -10,6 +10,7 @@ from config import (
     MAX_BATCH_SIZE, CONTAINER_TIMEOUT_S,
     FETCH_CONCURRENCY,
 )
+from services.qbo_api.dedup import dedupe_attachments
 from utils import strip_motw
 
 logger = logging.getLogger("ngl.job_manager")
@@ -131,7 +132,15 @@ class FetchJobMixin:
             })
 
             attachments = await api.list_attachments(invoice_id)
-            pod_att = next((a for a in attachments if a.get("docType") == "pod"), None)
+            # WORKAROUND(TMS-008): see docs/tms-workarounds.md — drop duplicate Attachable records, pick newest POD
+            kept, skipped = dedupe_attachments(attachments)
+            if skipped:
+                logger.info(
+                    "Deduped attachments for %s: kept %d of %d (skipped %d TMS duplicates)",
+                    container.invoice_number, len(kept), len(attachments), len(skipped),
+                )
+            pod_candidates = [a for a in kept if a.get("docType") == "pod"]
+            pod_att = max(pod_candidates, key=lambda a: int(a["id"])) if pod_candidates else None
 
             if pod_att:
                 pod_path = await api.download_attachment(
