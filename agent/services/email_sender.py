@@ -2,10 +2,13 @@
 
 import asyncio
 import logging
+import mimetypes
 import os
 import smtplib
 from typing import Optional
+from email import encoders
 from email.mime.application import MIMEApplication
+from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -174,12 +177,22 @@ class EmailSender:
         else:
             msg.attach(MIMEText(body, "plain"))
 
-        # Attach files (raw bytes)
+        # Attach files (raw bytes). Use mimetypes to pick the proper MIME so
+        # Excel/CSV/etc render with the right icon in Outlook + Gmail instead
+        # of a generic "binary file."
         for att in attachments:
             filename = att["filename"]
             data = att["data"]
-            subtype = "pdf" if filename.lower().endswith(".pdf") else "octet-stream"
-            part = MIMEApplication(data, _subtype=subtype)
+            ctype, _ = mimetypes.guess_type(filename)
+            if not ctype:
+                ctype = "application/octet-stream"
+            maintype, subtype = ctype.split("/", 1)
+            if maintype == "application":
+                part = MIMEApplication(data, _subtype=subtype)
+            else:
+                part = MIMEBase(maintype, subtype)
+                part.set_payload(data)
+                encoders.encode_base64(part)
             part.add_header("Content-Disposition", "attachment", filename=filename)
             msg.attach(part)
 
