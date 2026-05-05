@@ -20,7 +20,7 @@ Sorted newest-first.
 
 | ID      | Title                                                | System | Tools affected             | Status      |
 |---------|------------------------------------------------------|--------|----------------------------|-------------|
-| TMS-008 | Duplicate attachment filter on send                  | TMS    | Invoice Sender             | In progress |
+| TMS-008 | Duplicate attachment filter on send                  | TMS    | Invoice Sender             | Active      |
 | TMS-007 | Manual TMS login prerequisite                        | TMS    | Invoice Sender             | Active      |
 | TMS-006 | TMS REST API surface gaps                            | TMS    | Invoice Sender             | Active      |
 | TMS-005 | SPA navigation via direct `page.goto("/main/imp")`   | TMS    | Invoice Sender             | Active      |
@@ -46,12 +46,19 @@ Sorted newest-first.
 - **Workaround:** Send-time dedup. A pure helper drops duplicates by
   `(filename.lower().strip(), size)` before the agent emails or uploads any
   attachment list. Tie-breaker: keep the highest QBO Attachable Id (newest
-  upload). The QBO record itself is untouched.
-- **Files:** `agent/services/qbo_api/dedup.py` (helper) and four call sites in
-  `agent/services/job_manager/`: `send_qbo_api.py`, `send_oec.py`,
-  `send_portal.py`, `fetch_job.py`.
-- **Status:** In progress — see
-  `docs/superpowers/specs/2026-05-05-workarounds-registry-and-tms-dup-filter-design.md`.
+  upload). The QBO record itself is untouched. Skipped count is logged at
+  INFO and surfaced to the Invoice Sender UI via the `attachments_deduped`
+  SSE event so the user can see when TMS is misbehaving.
+- **Files:**
+  - Helper: `agent/services/qbo_api/dedup.py` (`dedupe_attachments`)
+  - Call sites:
+    - `agent/services/job_manager/send_qbo_api.py` (`_dedup_and_emit` + two `check_attachments` call points; the customer-visible bug)
+    - `agent/services/job_manager/send_oec.py` (POD pick — newest by id)
+    - `agent/services/job_manager/send_portal.py` (POD pick — newest by id)
+    - `agent/services/job_manager/fetch_job.py` (POD pick — newest by id)
+  - UI: `app/assets/js/tools/invoice-sender/invoice-sender.js` (`attachments_deduped` handler + `dedupNote` row field)
+  - Tests: `agent/tests/test_qbo_api_dedup.py`, `agent/tests/test_job_manager/test_send_qbo_api_tms_data.py`
+- **Status:** Active.
 
 ### TMS-007 — Manual TMS login prerequisite
 
