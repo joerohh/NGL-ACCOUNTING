@@ -374,10 +374,12 @@ function invRenderTable() {
         case 'sent':
           statusHtml = '<span class="status-badge status-sent">Sent</span>';
           if (inv.sentAt) statusHtml += '<br><span style="font-size:0.68rem; color:#64748b;">' + inv.sentAt + '</span>';
+          if (inv.dedupNote) statusHtml += '<br><span style="font-size:0.68rem; color:#92400e;" title="TMS uploaded duplicate attachments — auto-skipped before sending">' + escHtml(inv.dedupNote) + '</span>';
           break;
         case 'sent_no_pod':
           statusHtml = '<span class="status-badge" style="background:#fef3c7; color:#92400e; border:1px solid #f59e0b;">Sent (No POD)</span>';
           if (inv.errorMessage) statusHtml += '<br><span style="font-size:0.68rem; color:#92400e;" title="' + escHtml(inv.errorMessage) + '">' + escHtml(inv.errorMessage.substring(0, 50)) + '</span>';
+          if (inv.dedupNote) statusHtml += '<br><span style="font-size:0.68rem; color:#92400e;" title="TMS uploaded duplicate attachments — auto-skipped before sending">' + escHtml(inv.dedupNote) + '</span>';
           break;
         case 'skipped_no_attachments':
           statusHtml = '<span class="status-badge status-skipped">No Attachments</span>';
@@ -819,7 +821,7 @@ async function invSendViaQBO() {
   // Clear previous send statuses for invoices about to be sent
   invoicePayload.forEach(function(p) {
     const inv = invoiceState.invoices.find(function(i) { return i.invoiceNumber === p.invoiceNumber; });
-    if (inv) { inv.sendStatus = null; inv.sentAt = null; inv.errorMessage = null; }
+    if (inv) { inv.sendStatus = null; inv.sentAt = null; inv.errorMessage = null; inv.dedupNote = null; }
   });
   invRenderTable();
 
@@ -1038,6 +1040,26 @@ const _sendEventHandlers = {
   },
   do_sender_from_cache(event) {
     invAddLog('info', '  [OEC] D/O sender from cache: ' + (event.doSenderEmail || '') + ' (previous successful lookup)');
+  },
+
+  // ── TMS-008 dedup ──
+  attachments_deduped(event) {
+    const skipped = event.skipped || 0;
+    if (skipped <= 0) return;
+    const noun = skipped === 1 ? 'duplicate attachment' : 'duplicate attachments';
+    invAddLog('info',
+      '  [TMS-008] Skipped ' + skipped + ' ' + noun + ' for ' +
+      (event.invoiceNumber || '') +
+      (event.skippedFiles && event.skippedFiles.length
+        ? ' (' + event.skippedFiles.join(', ') + ')'
+        : ''));
+    const inv = invoiceState.invoices.find(function(i) {
+      return i.invoiceNumber === event.invoiceNumber;
+    });
+    if (inv) {
+      inv.dedupNote = skipped + ' ' + noun + ' skipped';
+      invRenderTable();
+    }
   },
 
   // ── TMS flow events ──
