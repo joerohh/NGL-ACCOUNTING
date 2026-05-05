@@ -16,6 +16,7 @@ from services.job_manager.util import (
     normalize_email_list,
     validate_and_append_email,
 )
+from services.qbo_api.dedup import dedupe_attachments
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -50,23 +51,28 @@ class SendOECFlowMixin:
 
         # Look for POD already attached to QBO before going to TMS.
         att_check = await api.check_attachments(invoice_id, ["invoice", "pod"])
-        all_attachments = att_check.get("attachments", [])
+        # WORKAROUND(TMS-008): see docs/tms-workarounds.md — drop duplicate Attachable records, pick newest POD
+        all_attachments = await self._dedup_and_emit(
+            job, invoice.invoice_number, att_check.get("attachments", []),
+        )
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_"))
         pod_path = None
         pod_source = None
 
-        for att in all_attachments:
-            if att.get("docType") == "pod" and att.get("id"):
-                await self._emit_send(job, "oec_downloading_pod", {
-                    "invoiceNumber": invoice.invoice_number,
-                })
-                pod_path = await api.download_attachment(
-                    att["id"], att.get("fileName", "pod.pdf"), temp_dir
-                )
-                if pod_path:
-                    pod_source = "QBO"
-                    logger.info("POD downloaded from QBO API: %s", pod_path.name)
-                break
+        # Pick the newest POD via highest int(id) — same tie-breaker as the dedup helper.
+        pod_candidates = [a for a in all_attachments
+                          if a.get("docType") == "pod" and a.get("id")]
+        if pod_candidates:
+            chosen = max(pod_candidates, key=lambda a: int(a["id"]))
+            await self._emit_send(job, "oec_downloading_pod", {
+                "invoiceNumber": invoice.invoice_number,
+            })
+            pod_path = await api.download_attachment(
+                chosen["id"], chosen.get("fileName", "pod.pdf"), temp_dir
+            )
+            if pod_path:
+                pod_source = "QBO"
+                logger.info("POD downloaded from QBO API: %s", pod_path.name)
 
         # ── TMS Data Layer: D/O sender + POD (if not already from QBO) ──
         csv_do_sender = invoice.do_sender_email or ""
