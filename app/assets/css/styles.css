@@ -1565,3 +1565,51 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   color: #ea580c;
   transform: translateX(3px);
 }
+
+/* ── M2: Review-state success card (no-issues happy path) ── */
+#mergeToolViewV2 .review-success-card {
+  width: 100%;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  padding: 36px 32px;
+  text-align: center;
+  margin-bottom: 18px;
+}
+#mergeToolViewV2 .review-success-card .check-icon {
+  width: 56px; height: 56px;
+  margin: 0 auto 14px;
+  background: #16a34a; color: white; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+#mergeToolViewV2 .review-success-card .title {
+  font-size: 1.1rem; font-weight: 700; color: #15803d;
+  margin-bottom: 4px;
+}
+#mergeToolViewV2 .review-success-card .subtitle {
+  font-size: 0.9rem; color: #166534; margin-bottom: 18px;
+}
+#mergeToolViewV2 .review-success-card .fetch-btn {
+  background: #ea580c; color: white; border: none;
+  padding: 11px 24px; border-radius: 8px;
+  font-size: 0.92rem; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+#mergeToolViewV2 .review-success-card .fetch-btn:hover { background: #c2410c; }
+#mergeToolViewV2 .review-success-card .fetch-btn:disabled,
+#mergeToolViewV2 .review-success-card .fetch-btn[disabled] {
+  background: #fed7aa; cursor: not-allowed;
+}
+#mergeToolViewV2 .review-success-card .show-all-link {
+  display: inline-block; margin-top: 16px;
+  background: none; border: none; cursor: pointer;
+  font-size: 0.84rem; color: #15803d; font-family: inherit;
+  text-decoration: underline;
+}
+#mergeToolViewV2 .review-success-card .show-all-link:hover { color: #14532d; }
+
+/* Inline error hint shown on the loading state when parsing fails */
+#mergeToolViewV2 .centered-stage p.subtitle.error-text {
+  color: #b91c1c;
+}
