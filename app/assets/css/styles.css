@@ -758,3 +758,810 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   MERGE TOOL V2 (BETA) — scoped to #mergeToolViewV2
+   Source of truth: app/mockups/merge-tool-redesign.html
+   Each non-keyframe selector is prefixed with `#mergeToolViewV2 ` so
+   the rules stay isolated from the legacy merge tool and other views.
+   `@keyframes spin` is NOT redefined — it's already global earlier.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── v2 tool header (mirrors legacy tool-header pattern, v2-prefixed classes) ── */
+#mergeToolViewV2 .v2-tool-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; border-bottom: 1px solid #e2e8f0; background: #fff;
+}
+#mergeToolViewV2 .v2-tool-title-group { display: flex; align-items: center; gap: 12px; }
+#mergeToolViewV2 .v2-tool-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+#mergeToolViewV2 .v2-tool-title-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: #fff7ed; color: #ea580c;
+  display: flex; align-items: center; justify-content: center;
+}
+#mergeToolViewV2 .v2-tool-actions { display: flex; align-items: center; gap: 10px; }
+#mergeToolViewV2 .v2-work-area { padding: 24px 28px; min-height: calc(100vh - 200px); }
+
+/* ── Centered stage (Empty / Loading / Review-stub) ── */
+#mergeToolViewV2 .centered-stage {
+  display: flex; flex-direction: column; align-items: center;
+  max-width: 620px; margin: 0 auto;
+}
+#mergeToolViewV2 .centered-stage h1 {
+  font-size: 1.4rem; font-weight: 700; color: #0f172a;
+  margin-bottom: 6px; text-align: center;
+}
+#mergeToolViewV2 .centered-stage .subtitle {
+  color: #64748b; font-size: 0.92rem;
+  margin-bottom: 22px; text-align: center;
+}
+
+/* ── Big drop zone (Empty / Loading) ── */
+#mergeToolViewV2 .big-drop {
+  width: 100%; padding: 48px 32px;
+  border: 2px dashed #cbd5e1; border-radius: 14px;
+  background: #fff; text-align: center; cursor: pointer;
+  transition: all 0.15s;
+}
+#mergeToolViewV2 .big-drop:hover { border-color: #f97316; background: #fff7ed; }
+#mergeToolViewV2 .big-drop.kind-excel:hover .drop-icon { color: #16a34a; }
+#mergeToolViewV2 .big-drop.kind-pdf .drop-icon { color: #ea580c; }
+#mergeToolViewV2 .big-drop .drop-icon {
+  width: 56px; height: 56px; margin: 0 auto 16px;
+  color: #22c55e;
+  display: flex; align-items: center; justify-content: center;
+}
+#mergeToolViewV2 .big-drop .drop-title { font-size: 1.05rem; font-weight: 600; color: #1e293b; }
+#mergeToolViewV2 .big-drop .drop-help { font-size: 0.86rem; color: #64748b; margin-top: 6px; }
+#mergeToolViewV2 .big-drop .drop-types { font-size: 0.76rem; color: #94a3b8; margin-top: 14px; }
+#mergeToolViewV2 .big-drop.loading { cursor: default; border-style: solid; border-color: #fed7aa; background: #fff7ed; }
+#mergeToolViewV2 .big-drop.loading:hover { background: #fff7ed; border-color: #fed7aa; }
+#mergeToolViewV2 .big-drop .big-spinner {
+  width: 56px; height: 56px; margin: 0 auto 16px;
+  border: 3px solid #fed7aa; border-top-color: #ea580c;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Hint chip + stage file summary ── */
+#mergeToolViewV2 .hint-chip {
+  margin-top: 18px; text-align: center;
+  color: #94a3b8; font-size: 0.84rem;
+}
+#mergeToolViewV2 .hint-chip .step-num {
+  display: inline-block; width: 18px; height: 18px;
+  background: #f1f5f9; border-radius: 50%;
+  color: #64748b; font-weight: 700; font-size: 0.7rem;
+  line-height: 18px; margin-right: 6px;
+}
+#mergeToolViewV2 .stage-file-summary { width: 100%; margin-bottom: 16px; }
+
+/* ── Top bar (Excel summary + PDF drop side-by-side) ── */
+#mergeToolViewV2 .top-bar {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; margin-bottom: 18px;
+}
+#mergeToolViewV2 .file-summary {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+#mergeToolViewV2 .file-summary .icon-box {
+  width: 36px; height: 36px; border-radius: 8px;
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.7rem; flex-shrink: 0;
+}
+#mergeToolViewV2 .file-summary .icon-box.xlsx { background: #16a34a; }
+#mergeToolViewV2 .file-summary .icon-box.pdf  { background: #ea580c; }
+#mergeToolViewV2 .file-summary .text { flex: 1; min-width: 0; }
+#mergeToolViewV2 .file-summary .name {
+  font-weight: 600; color: #0f172a; font-size: 0.88rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#mergeToolViewV2 .file-summary .meta { color: #64748b; font-size: 0.76rem; margin-top: 1px; }
+#mergeToolViewV2 .file-summary button {
+  background: none; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 5px 10px; font-size: 0.74rem; cursor: pointer;
+  color: #64748b; font-family: inherit;
+}
+#mergeToolViewV2 .file-summary button:hover { border-color: #ea580c; color: #ea580c; }
+
+/* ── Containers preview ── */
+#mergeToolViewV2 .containers-preview {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 14px 18px;
+  font-size: 0.82rem; color: #64748b;
+}
+#mergeToolViewV2 .containers-preview strong { color: #1e293b; }
+#mergeToolViewV2 .container-list {
+  margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px;
+}
+#mergeToolViewV2 .container-list .chip {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.75rem; color: #475569;
+  background: #f1f5f9; padding: 3px 9px; border-radius: 5px;
+}
+#mergeToolViewV2 .container-list .chip-more { color: #94a3b8; padding: 3px 4px; }
+
+/* ── Review card (pre-fetch validation) ── */
+#mergeToolViewV2 .review-card {
+  width: 100%;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 12px; padding: 22px 24px;
+  margin-bottom: 18px;
+}
+#mergeToolViewV2 .review-card.has-issues { border-color: #fde68a; background: #fffbeb; }
+#mergeToolViewV2 .review-card.all-clear  { border-color: #bbf7d0; background: #f0fdf4; }
+#mergeToolViewV2 .review-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+}
+#mergeToolViewV2 .review-head .badge {
+  width: 36px; height: 36px; border-radius: 50%;
+  color: white; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 1rem;
+}
+#mergeToolViewV2 .review-head .badge.warn { background: #f59e0b; }
+#mergeToolViewV2 .review-head .badge.ok   { background: #16a34a; }
+#mergeToolViewV2 .review-head h3 { font-size: 1.02rem; font-weight: 700; color: #0f172a; }
+#mergeToolViewV2 .review-head .sub { font-size: 0.84rem; color: #64748b; margin-top: 2px; }
+#mergeToolViewV2 .issue-group { margin-bottom: 14px; }
+#mergeToolViewV2 .issue-group:last-child { margin-bottom: 0; }
+#mergeToolViewV2 .issue-group .igh {
+  font-size: 0.74rem; font-weight: 700; color: #92400e;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+#mergeToolViewV2 .issue-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px; background: #fff;
+  border: 1px solid #fde68a; border-radius: 7px;
+  font-size: 0.84rem; color: #78350f;
+  margin-bottom: 5px;
+}
+#mergeToolViewV2 .issue-row:last-child { margin-bottom: 0; }
+#mergeToolViewV2 .issue-row .ref {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.78rem; color: #92400e; font-weight: 600;
+  background: #fef3c7; padding: 2px 7px; border-radius: 4px;
+}
+#mergeToolViewV2 .issue-row .where { margin-left: auto; font-size: 0.76rem; color: #b45309; }
+#mergeToolViewV2 .review-actions {
+  display: flex; gap: 10px; align-items: center;
+  margin-top: 18px; padding-top: 18px;
+  border-top: 1px solid #fde68a;
+}
+#mergeToolViewV2 .review-card.all-clear .review-actions { border-top-color: #bbf7d0; }
+#mergeToolViewV2 .review-actions .secondary-btn {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 8px; padding: 9px 16px;
+  font-size: 0.85rem; font-weight: 600; color: #475569;
+  cursor: pointer; font-family: inherit;
+}
+#mergeToolViewV2 .review-actions .secondary-btn:hover { border-color: #cbd5e1; color: #1e293b; }
+
+/* ── PDF drop card (top-bar variant) ── */
+#mergeToolViewV2 .pdf-drop-card {
+  background: #fff; border: 2px dashed #cbd5e1;
+  border-radius: 10px; padding: 12px 16px;
+  cursor: pointer; transition: all 0.15s;
+  display: flex; align-items: center; gap: 12px;
+}
+#mergeToolViewV2 .pdf-drop-card:hover { border-color: #f97316; background: #fff7ed; }
+#mergeToolViewV2 .pdf-drop-card.has-failures { border-color: #f59e0b; background: #fffbeb; }
+#mergeToolViewV2 .pdf-drop-card.has-failures:hover { background: #fef3c7; }
+#mergeToolViewV2 .pdf-drop-card .icon-box {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: #fff7ed; color: #ea580c;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+#mergeToolViewV2 .pdf-drop-card .text { flex: 1; min-width: 0; }
+#mergeToolViewV2 .pdf-drop-card .label-line {
+  font-weight: 600; color: #1e293b; font-size: 0.86rem;
+  display: flex; align-items: center; gap: 8px;
+}
+#mergeToolViewV2 .pdf-drop-card .label-line .count-pill {
+  background: #ea580c; color: white;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700;
+}
+#mergeToolViewV2 .pdf-drop-card .help { color: #64748b; font-size: 0.76rem; margin-top: 2px; }
+#mergeToolViewV2 .pdf-drop-card.has-failures .help { color: #b45309; }
+
+/* ── Pre-fetch validation badge ── */
+#mergeToolViewV2 .val-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 5px;
+  font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+#mergeToolViewV2 .val-badge.ok    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+#mergeToolViewV2 .val-badge.dup   { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+#mergeToolViewV2 .val-badge.miss  { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+#mergeToolViewV2 .val-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+#mergeToolViewV2 .val-badge.ok .dot { background: #16a34a; }
+#mergeToolViewV2 .val-badge.dup .dot { background: #f59e0b; }
+#mergeToolViewV2 .val-badge.miss .dot { background: #dc2626; }
+
+/* ── Top action button (Fetch / Run) ── */
+#mergeToolViewV2 .top-action-btn {
+  padding: 9px 18px; background: #ea580c; color: white;
+  border: none; border-radius: 8px; font-weight: 700;
+  font-size: 0.86rem; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+#mergeToolViewV2 .top-action-btn:hover { background: #c2410c; }
+#mergeToolViewV2 .top-action-btn.disabled,
+#mergeToolViewV2 .top-action-btn:disabled { background: #fed7aa; cursor: not-allowed; }
+
+/* ── Detail sidebar (slides from right when error row is clicked) ── */
+#mergeToolViewV2 .sidebar-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,0.35);
+  z-index: 200;
+  display: none;
+}
+#mergeToolViewV2 .sidebar-backdrop.open { display: block; }
+#mergeToolViewV2 .detail-sidebar {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 520px; max-width: 90vw;
+  background: #fff;
+  border-left: 1px solid #e2e8f0;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.08);
+  z-index: 201;
+  display: none;
+  flex-direction: column;
+}
+#mergeToolViewV2 .detail-sidebar.open { display: flex; }
+#mergeToolViewV2 .ds-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+#mergeToolViewV2 .ds-header .ds-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: #fef2f2; color: #dc2626;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+#mergeToolViewV2 .ds-header .ds-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
+#mergeToolViewV2 .ds-header .ds-subtitle {
+  font-size: 0.8rem; color: #64748b; margin-top: 2px;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+#mergeToolViewV2 .ds-header .ds-close {
+  margin-left: auto;
+  background: none; border: none; cursor: pointer;
+  color: #94a3b8; padding: 6px; border-radius: 6px;
+}
+#mergeToolViewV2 .ds-header .ds-close:hover { color: #1e293b; background: #fff; }
+#mergeToolViewV2 .ds-body { flex: 1; overflow-y: auto; padding: 20px; }
+#mergeToolViewV2 .ds-section { margin-bottom: 22px; }
+#mergeToolViewV2 .ds-section:last-child { margin-bottom: 0; }
+#mergeToolViewV2 .ds-section-label {
+  font-size: 0.72rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+#mergeToolViewV2 .ds-doc-list { display: flex; flex-direction: column; gap: 6px; }
+#mergeToolViewV2 .ds-doc-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  font-size: 0.84rem;
+}
+#mergeToolViewV2 .ds-doc-row.found { background: #f0fdf4; border-color: #bbf7d0; }
+#mergeToolViewV2 .ds-doc-row.miss  { background: #fef2f2; border-color: #fca5a5; }
+#mergeToolViewV2 .ds-doc-row .ds-doc-label { font-weight: 700; min-width: 50px; }
+#mergeToolViewV2 .ds-doc-row.found .ds-doc-label { color: #15803d; }
+#mergeToolViewV2 .ds-doc-row.miss .ds-doc-label  { color: #b91c1c; }
+#mergeToolViewV2 .ds-doc-row .ds-doc-name {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.78rem; color: #475569;
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#mergeToolViewV2 .ds-doc-row.miss .ds-doc-name { color: #b91c1c; font-style: italic; }
+#mergeToolViewV2 .ds-doc-row .ds-doc-action {
+  background: #fff; border: 1px solid #e2e8f0;
+  padding: 4px 10px; border-radius: 5px;
+  font-size: 0.74rem; cursor: pointer; color: #475569;
+  font-family: inherit;
+}
+#mergeToolViewV2 .ds-doc-row .ds-doc-action:hover { border-color: #ea580c; color: #ea580c; }
+#mergeToolViewV2 .retry-api-btn {
+  width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 16px;
+  background: #ea580c; color: white;
+  border: none; border-radius: 8px;
+  font-family: inherit; font-size: 0.88rem; font-weight: 700;
+  cursor: pointer;
+}
+#mergeToolViewV2 .retry-api-btn:hover { background: #c2410c; }
+#mergeToolViewV2 .resolve-divider {
+  text-align: center; margin: 14px 0;
+  font-size: 0.74rem; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  position: relative;
+}
+#mergeToolViewV2 .resolve-divider::before,
+#mergeToolViewV2 .resolve-divider::after {
+  content: ''; position: absolute; top: 50%;
+  width: calc(50% - 60px); height: 1px;
+  background: #e2e8f0;
+}
+#mergeToolViewV2 .resolve-divider::before { left: 0; }
+#mergeToolViewV2 .resolve-divider::after  { right: 0; }
+#mergeToolViewV2 .resolve-divider span { background: #fff; padding: 0 8px; position: relative; }
+#mergeToolViewV2 .ds-upload {
+  border: 2px dashed #fca5a5;
+  border-radius: 10px;
+  background: #fef2f2;
+  padding: 22px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+#mergeToolViewV2 .ds-upload:hover { border-color: #dc2626; background: #fee2e2; }
+#mergeToolViewV2 .ds-upload .icon { width: 36px; height: 36px; margin: 0 auto 8px; color: #dc2626; }
+#mergeToolViewV2 .ds-upload .title { font-size: 0.9rem; font-weight: 600; color: #b91c1c; }
+#mergeToolViewV2 .ds-upload .help { font-size: 0.78rem; color: #b91c1c; margin-top: 4px; opacity: 0.85; }
+#mergeToolViewV2 .ds-footer {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+#mergeToolViewV2 .ds-footer .skip-link {
+  font-size: 0.82rem; color: #64748b; cursor: pointer;
+  background: none; border: none; font-family: inherit;
+  text-decoration: underline;
+}
+#mergeToolViewV2 .ds-footer .skip-link:hover { color: #dc2626; }
+#mergeToolViewV2 .ds-footer .nav-btn {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 7px; padding: 7px 12px;
+  font-size: 0.82rem; cursor: pointer; color: #475569;
+  font-family: inherit;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+#mergeToolViewV2 .ds-footer .nav-btn:hover { border-color: #ea580c; color: #ea580c; }
+#mergeToolViewV2 .ds-footer .next-issue-btn {
+  margin-left: auto;
+  background: #ea580c; color: white; border: none;
+  padding: 11px 22px; border-radius: 8px;
+  font-size: 0.92rem; font-weight: 700; cursor: pointer;
+  font-family: inherit;
+  display: inline-flex; align-items: center; gap: 8px;
+  box-shadow: 0 2px 6px rgba(234,88,12,0.25);
+}
+#mergeToolViewV2 .ds-footer .next-issue-btn:hover { background: #c2410c; box-shadow: 0 2px 8px rgba(234,88,12,0.35); }
+#mergeToolViewV2 .ds-footer .next-issue-btn.done { background: #16a34a; box-shadow: 0 2px 6px rgba(22,163,74,0.25); }
+#mergeToolViewV2 .ds-footer .next-issue-btn.done:hover { background: #15803d; }
+#mergeToolViewV2 .ds-footer .next-issue-btn .count-badge {
+  background: rgba(255,255,255,0.22);
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 700;
+}
+
+/* ── Header action buttons (Back to Ready / New Merge) ── */
+#mergeToolViewV2 .header-action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px;
+  background: #fff; border: 1px solid #e2e8f0;
+  font-size: 0.82rem; font-weight: 500; color: #475569;
+  cursor: pointer; font-family: inherit;
+}
+#mergeToolViewV2 .header-action-btn:hover { border-color: #cbd5e1; color: #1e293b; }
+#mergeToolViewV2 .header-action-btn.new-merge-btn { color: #ea580c; border-color: #fed7aa; }
+#mergeToolViewV2 .header-action-btn.new-merge-btn:hover { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+
+/* ── Merge table (Review / Fetching / Ready / Merging) ── */
+#mergeToolViewV2 .merge-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+#mergeToolViewV2 .merge-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+#mergeToolViewV2 .merge-table th {
+  padding: 10px 14px; text-align: left;
+  font-size: 0.68rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+}
+#mergeToolViewV2 .merge-table th input[type="checkbox"],
+#mergeToolViewV2 .merge-table td input[type="checkbox"] {
+  width: 15px; height: 15px; accent-color: #ea580c; cursor: pointer;
+}
+#mergeToolViewV2 .merge-table .check-col {
+  width: 36px; padding-left: 14px; padding-right: 6px;
+  text-align: center;
+}
+#mergeToolViewV2 .merge-table td input.row-check:disabled {
+  opacity: 0.35; cursor: not-allowed;
+}
+#mergeToolViewV2 .merge-table td {
+  padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+  color: #334155; vertical-align: middle;
+}
+#mergeToolViewV2 .merge-table tbody tr:hover { background: #fafafa; }
+#mergeToolViewV2 .merge-table tbody tr.row-issue { background: #fefce8; }
+#mergeToolViewV2 .merge-table tbody tr.row-issue:hover { background: #fef9c3; }
+#mergeToolViewV2 .merge-table tbody tr.row-merged { background: #f0fdf4; }
+#mergeToolViewV2 .merge-table tbody tr.row-processing { background: #eff6ff; }
+#mergeToolViewV2 .merge-table tbody tr.row-clickable { cursor: pointer; }
+#mergeToolViewV2 .merge-table tbody tr.row-clickable:hover { background: #fff7ed; }
+#mergeToolViewV2 .table-wrap {
+  background: #fff; border: 1px solid #e2e8f0; border-top: none;
+  border-radius: 0 0 8px 8px; overflow: hidden;
+  max-height: calc(100vh - 420px);
+  min-height: 240px; overflow-y: auto;
+  margin-bottom: 18px;
+}
+
+/* ── Mono + doc indicators ── */
+#mergeToolViewV2 .mono {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.82rem; font-weight: 600; color: #0f172a;
+}
+#mergeToolViewV2 .mono-sub { color: #475569; font-weight: 500; }
+#mergeToolViewV2 .doc-row { display: flex; gap: 6px; align-items: center; }
+#mergeToolViewV2 .doc-pill {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 5px;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+#mergeToolViewV2 .doc-pill.ok       { background: #dcfce7; color: #15803d; }
+#mergeToolViewV2 .doc-pill.fallback { background: #fef3c7; color: #92400e; }
+#mergeToolViewV2 .doc-pill.miss     { background: #fee2e2; color: #b91c1c; }
+#mergeToolViewV2 .doc-pill.queued   { background: #f1f5f9; color: #94a3b8; }
+
+/* ── Status text + small spinner ── */
+#mergeToolViewV2 .status-text {
+  font-size: 0.8rem; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+#mergeToolViewV2 .status-text.ready    { color: #16a34a; }
+#mergeToolViewV2 .status-text.issue    { color: #d97706; }
+#mergeToolViewV2 .status-text.error    { color: #dc2626; }
+#mergeToolViewV2 .status-text.merged   { color: #047857; }
+#mergeToolViewV2 .status-text.proc     { color: #1e40af; }
+#mergeToolViewV2 .status-text.queued   { color: #94a3b8; }
+#mergeToolViewV2 .small-spinner {
+  width: 11px; height: 11px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* ── Row action + fix-error button ── */
+#mergeToolViewV2 .row-action {
+  background: none; border: 1px solid #e2e8f0; border-radius: 5px;
+  padding: 3px 9px; font-size: 0.74rem; cursor: pointer;
+  color: #475569; font-family: inherit;
+}
+#mergeToolViewV2 .row-action:hover { border-color: #ea580c; color: #ea580c; }
+#mergeToolViewV2 .fix-error-btn {
+  background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;
+  padding: 6px 14px; border-radius: 6px;
+  font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  font-family: inherit;
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap;
+}
+#mergeToolViewV2 .fix-error-btn:hover { background: #fecaca; border-color: #f87171; color: #991b1b; }
+
+/* ── Tabs ── */
+#mergeToolViewV2 .tabs-row {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 2px solid #e2e8f0; margin-bottom: 0;
+}
+#mergeToolViewV2 .tabs { display: flex; gap: 4px; }
+#mergeToolViewV2 .tab {
+  padding: 9px 14px; background: none; border: none;
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+  cursor: pointer; font-size: 0.82rem; font-weight: 600;
+  color: #64748b; display: flex; align-items: center; gap: 7px;
+  font-family: inherit;
+}
+#mergeToolViewV2 .tab:hover { color: #ea580c; }
+#mergeToolViewV2 .tab.active { color: #ea580c; border-bottom-color: #ea580c; }
+#mergeToolViewV2 .tab .count {
+  background: #f1f5f9; color: #475569;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700;
+}
+#mergeToolViewV2 .tab.active .count { background: #ea580c; color: white; }
+#mergeToolViewV2 .tab.has-issues .count { background: #fee2e2; color: #b91c1c; }
+
+/* ── Toolbar (search + sort + filter-meta) ── */
+#mergeToolViewV2 .toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: #fff;
+  border: 1px solid #e2e8f0; border-top: none;
+  font-size: 0.86rem; color: #64748b;
+}
+#mergeToolViewV2 .toolbar input.search {
+  flex: 1; min-width: 240px;
+  padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 0.92rem; font-family: inherit; color: #334155;
+  background: #fff;
+}
+#mergeToolViewV2 .toolbar input.search:focus { outline: none; border-color: #ea580c; }
+#mergeToolViewV2 select.sort-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  padding: 7px 30px 7px 12px;
+  border: 1px solid #e2e8f0; border-radius: 7px;
+  font-size: 0.82rem; color: #1e293b; font-weight: 600;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer; font-family: inherit;
+  transition: border-color 0.15s, color 0.15s;
+}
+#mergeToolViewV2 select.sort-select:hover  { border-color: #fed7aa; color: #ea580c; }
+#mergeToolViewV2 select.sort-select:focus  { outline: none; border-color: #ea580c; color: #ea580c; }
+#mergeToolViewV2 .toolbar .filter-meta { color: #94a3b8; margin-left: auto; }
+
+/* ── Controls line + dropdown buttons ── */
+#mergeToolViewV2 .controls-line {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; flex-wrap: wrap;
+}
+#mergeToolViewV2 .dropdown-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; background: #fff;
+  border: 1px solid #e2e8f0; border-radius: 7px;
+  font-size: 0.82rem; cursor: pointer; font-family: inherit;
+  color: #475569;
+}
+#mergeToolViewV2 .dropdown-btn:hover { border-color: #cbd5e1; color: #1e293b; }
+#mergeToolViewV2 .dropdown-btn .dd-label {
+  color: #94a3b8; font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+#mergeToolViewV2 .dropdown-btn .dd-value { color: #1e293b; font-weight: 600; }
+#mergeToolViewV2 .summary-line { color: #64748b; font-size: 0.86rem; margin-left: auto; }
+#mergeToolViewV2 .summary-line strong { color: #0f172a; font-weight: 700; }
+#mergeToolViewV2 .summary-line .ok   { color: #16a34a; }
+#mergeToolViewV2 .summary-line .warn { color: #d97706; }
+
+/* ── Merge modes card + actions (M4) ── */
+#mergeToolViewV2 .merge-modes-card {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 16px 18px;
+  margin-bottom: 14px;
+}
+#mergeToolViewV2 .merge-modes-help { font-size: 0.8rem; color: #64748b; margin-top: -4px; margin-bottom: 12px; }
+#mergeToolViewV2 .mode-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+#mergeToolViewV2 .mode-action {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 11px 14px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 8px; cursor: pointer;
+  font-family: inherit; text-align: left;
+  transition: all 0.15s; position: relative;
+}
+#mergeToolViewV2 .mode-action:hover { border-color: #ea580c; box-shadow: 0 1px 3px rgba(234,88,12,0.1); }
+#mergeToolViewV2 .mode-action .mn { font-size: 0.88rem; font-weight: 700; color: #0f172a; }
+#mergeToolViewV2 .mode-action .mo { font-size: 0.74rem; color: #64748b; }
+#mergeToolViewV2 .mode-action.recommended { border-color: #fed7aa; background: #fff7ed; }
+#mergeToolViewV2 .mode-action.recommended .mn { color: #c2410c; }
+#mergeToolViewV2 .mode-action.recommended::before {
+  content: 'DEFAULT'; position: absolute;
+  top: -8px; right: 10px;
+  background: #ea580c; color: white;
+  font-size: 0.62rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+#mergeToolViewV2 .mode-action.completed { background: #f0fdf4; border-color: #bbf7d0; }
+#mergeToolViewV2 .mode-action.completed .mn { color: #15803d; }
+#mergeToolViewV2 .mode-action.completed .mo { color: #16a34a; }
+#mergeToolViewV2 .mode-action.completed::after {
+  content: '✓'; position: absolute;
+  top: 50%; right: 12px; transform: translateY(-50%);
+  color: #16a34a; font-weight: 700; font-size: 1rem;
+}
+#mergeToolViewV2 .merge-modes-footer {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+#mergeToolViewV2 .merge-modes-footer .control-label {
+  font-size: 0.72rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+#mergeToolViewV2 .merge-modes-footer .summary { margin-left: auto; font-size: 0.84rem; color: #64748b; }
+#mergeToolViewV2 .merge-modes-footer .summary strong { color: #0f172a; }
+
+/* ── Ready action bar + Run Merge button ── */
+#mergeToolViewV2 .ready-action-bar {
+  display: flex; align-items: center; gap: 14px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 12px 18px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+#mergeToolViewV2 .ready-status { color: #475569; font-size: 0.86rem; flex: 1; }
+#mergeToolViewV2 .ready-status strong { color: #0f172a; font-weight: 700; }
+#mergeToolViewV2 .ready-action-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+#mergeToolViewV2 .ready-action-right .control-label {
+  font-size: 0.7rem; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+#mergeToolViewV2 .merge-btn {
+  padding: 9px 18px; background: #ea580c; color: white;
+  border: none; border-radius: 8px; font-weight: 700;
+  font-size: 0.86rem; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+#mergeToolViewV2 .merge-btn:hover { background: #c2410c; }
+#mergeToolViewV2 .merge-btn:disabled { background: #fed7aa; cursor: not-allowed; }
+#mergeToolViewV2 .merge-btn.primary-merge { padding: 9px 22px; font-size: 0.92rem; }
+#mergeToolViewV2 .merge-btn .count-badge {
+  background: rgba(255,255,255,0.22);
+  padding: 2px 9px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 700;
+}
+
+/* ── Progress line (Fetching / Merging) ── */
+#mergeToolViewV2 .progress-line {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 12px 18px; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 14px;
+}
+#mergeToolViewV2 .progress-line .now { font-size: 0.88rem; color: #1e293b; flex-shrink: 0; }
+#mergeToolViewV2 .progress-line .now strong { color: #0f172a; font-weight: 700; }
+#mergeToolViewV2 .progress-line .now .container-name {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.82rem; color: #ea580c; font-weight: 700;
+}
+#mergeToolViewV2 .progress-line .progress-track {
+  flex: 1;
+  background: #f1f5f9; height: 6px; border-radius: 3px; overflow: hidden;
+}
+#mergeToolViewV2 .progress-line .progress-fill {
+  background: linear-gradient(90deg, #ea580c, #f97316);
+  height: 100%; border-radius: 3px; transition: width 0.3s;
+}
+#mergeToolViewV2 .progress-line .cancel-btn {
+  background: none; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 6px 12px; font-size: 0.78rem; color: #64748b; cursor: pointer;
+  font-family: inherit; flex-shrink: 0;
+}
+#mergeToolViewV2 .progress-line .cancel-btn:hover { border-color: #dc2626; color: #dc2626; }
+
+/* ── Bottom utilities ── */
+#mergeToolViewV2 .bottom-utilities {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  margin-top: 18px;
+}
+#mergeToolViewV2 .util-card {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; overflow: hidden;
+}
+#mergeToolViewV2 .util-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; cursor: pointer;
+}
+#mergeToolViewV2 .util-header .label {
+  font-size: 0.74rem; font-weight: 700; color: #475569;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  display: flex; align-items: center; gap: 7px;
+}
+#mergeToolViewV2 .util-header .right {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.74rem; color: #94a3b8;
+}
+#mergeToolViewV2 .util-body { padding: 0 16px 14px; display: none; border-top: 1px solid #f1f5f9; padding-top: 14px; }
+#mergeToolViewV2 .util-card.open .util-body { display: block; }
+#mergeToolViewV2 .util-card.open .util-arrow { transform: rotate(180deg); }
+#mergeToolViewV2 .util-arrow { transition: transform 0.2s; color: #94a3b8; }
+
+/* ── Outputs card (Done state) — split into Completed + Run another groups ── */
+#mergeToolViewV2 .outputs-card {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 16px 18px;
+  margin-bottom: 14px;
+}
+#mergeToolViewV2 .output-group { margin-bottom: 18px; }
+#mergeToolViewV2 .output-group:last-child { margin-bottom: 0; }
+#mergeToolViewV2 .output-group-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 10px;
+}
+#mergeToolViewV2 .output-group-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; font-weight: 700; color: #475569;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+#mergeToolViewV2 .output-group-completed .output-group-head { border-bottom-color: #bbf7d0; }
+#mergeToolViewV2 .output-group-completed .output-group-title { color: #15803d; }
+#mergeToolViewV2 .output-group-completed .group-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #16a34a; color: white; font-size: 0.72rem; font-weight: 700;
+}
+#mergeToolViewV2 .output-group-count {
+  background: #f1f5f9; color: #64748b;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0;
+  text-transform: none;
+}
+#mergeToolViewV2 .output-group-completed .output-group-count {
+  background: #dcfce7; color: #15803d;
+}
+#mergeToolViewV2 .output-group-action {
+  background: #fff; border: 1px solid #bbf7d0;
+  border-radius: 6px; padding: 4px 10px;
+  font-size: 0.74rem; font-weight: 600; cursor: pointer;
+  color: #15803d; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+#mergeToolViewV2 .output-group-action:hover { background: #f0fdf4; border-color: #86efac; }
+#mergeToolViewV2 .output-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0; border-radius: 8px;
+  margin-bottom: 8px;
+  transition: all 0.15s;
+}
+#mergeToolViewV2 .output-row:last-child { margin-bottom: 0; }
+#mergeToolViewV2 .output-row.done { background: #f0fdf4; border-color: #bbf7d0; }
+#mergeToolViewV2 .output-row.pending { cursor: pointer; }
+#mergeToolViewV2 .output-row.pending:hover { border-color: #ea580c; background: #fff7ed; }
+#mergeToolViewV2 .output-info { flex: 1; min-width: 0; }
+#mergeToolViewV2 .output-name {
+  font-size: 0.92rem; font-weight: 700; color: #0f172a;
+  display: flex; align-items: center; gap: 6px;
+}
+#mergeToolViewV2 .output-row.done .output-name { color: #15803d; }
+#mergeToolViewV2 .output-row.done .output-name::before {
+  content: '✓'; color: #16a34a;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #dcfce7;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.74rem; flex-shrink: 0;
+}
+#mergeToolViewV2 .output-row.pending .output-name::before {
+  content: ''; width: 14px; height: 14px; border-radius: 50%;
+  background: transparent; border: 1.5px solid #cbd5e1; flex-shrink: 0;
+}
+#mergeToolViewV2 .output-meta { font-size: 0.78rem; color: #64748b; margin-top: 3px; }
+#mergeToolViewV2 .output-actions { display: flex; gap: 6px; flex-shrink: 0; }
+#mergeToolViewV2 .output-action {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 6px; padding: 6px 12px;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  color: #475569; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+#mergeToolViewV2 .output-action:hover { border-color: #ea580c; color: #ea580c; }
+#mergeToolViewV2 .output-action.primary { background: #ea580c; color: white; border-color: #ea580c; }
+#mergeToolViewV2 .output-action.primary:hover { background: #c2410c; color: white; }
+#mergeToolViewV2 .output-run-hint {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.78rem; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  flex-shrink: 0;
+  transition: color 0.15s, transform 0.15s;
+}
+#mergeToolViewV2 .output-row.pending:hover .output-run-hint {
+  color: #ea580c;
+  transform: translateX(3px);
+}
