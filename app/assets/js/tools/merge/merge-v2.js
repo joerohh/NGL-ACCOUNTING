@@ -110,9 +110,11 @@ async function handleExcelChange(e) {
     return;
   }
 
-  v2State.rows = result.rows;          // validation will tag these in Task 3
+  v2State.rows = validateRows(result.rows);
   v2State.excelHeaders = result.headers;
-  v2State.activeTab = 'all';           // Task 3 will switch to issues-when-issues-exist
+  // Default-active tab: Issues if any issue exists, All otherwise.
+  const hasIssues = v2State.rows.some(r => r.status !== 'ok');
+  v2State.activeTab = hasIssues ? 'issues' : 'all';
   v2State.searchQuery = '';
   v2State.sortMode = 'excel';
   v2State.showAllInSuccess = false;
@@ -188,6 +190,46 @@ async function parseExcelFile(file) {
   }
 
   return { rows, headers, containerKey, invoiceKey, customerKey };
+}
+
+function validateRows(rows) {
+  // Walk in Excel order. Track first occurrence of each container.
+  const firstSeen = new Map();    // containerLower → { rowNum, invoiceNumber }
+  for (const row of rows) {
+    const key = row.containerNumber.toLowerCase();
+    const prior = firstSeen.get(key);
+
+    if (!prior) {
+      firstSeen.set(key, { rowNum: row.rowNum, invoiceNumber: row.invoiceNumber });
+      if (!row.invoiceNumber) {
+        row.status = 'miss-inv';
+        row.statusReason = "No invoice number — we'll search by container instead";
+        row.selected = true;
+      } else {
+        row.status = 'ok';
+        row.statusReason = '';
+        row.selected = true;
+      }
+      continue;
+    }
+
+    // This row's container was seen earlier.
+    // If both invoices match (case/whitespace-insensitive), it's an exact dup.
+    const sameInv =
+      row.invoiceNumber &&
+      prior.invoiceNumber &&
+      row.invoiceNumber.trim().toLowerCase() === prior.invoiceNumber.trim().toLowerCase();
+
+    if (sameInv) {
+      row.status = 'dup-same-inv';
+      row.statusReason = `Exact duplicate of row ${prior.rowNum} — will be skipped`;
+    } else {
+      row.status = 'dup-diff-inv';
+      row.statusReason = `Same container as row ${prior.rowNum}, but different invoice number`;
+    }
+    row.selected = false;          // duplicates default to unchecked; user can opt back in
+  }
+  return rows;
 }
 
 // ── State renderers ──
