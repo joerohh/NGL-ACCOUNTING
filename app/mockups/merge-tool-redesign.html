@@ -96,6 +96,16 @@
     background: #fff; cursor: pointer; font-size: 0.82rem; font-weight: 500;
     color: #475569; font-family: inherit;
   }
+  .header-action-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px;
+    background: #fff; border: 1px solid #e2e8f0;
+    font-size: 0.82rem; font-weight: 500; color: #475569;
+    cursor: pointer; font-family: inherit;
+  }
+  .header-action-btn:hover { border-color: #cbd5e1; color: #1e293b; }
+  .header-action-btn.new-merge-btn { color: #ea580c; border-color: #fed7aa; }
+  .header-action-btn.new-merge-btn:hover { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
   .agent-indicator {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 12px; border-radius: 999px;
@@ -457,13 +467,29 @@
     display: inline-flex; align-items: center; gap: 4px;
   }
   .ds-footer .nav-btn:hover { border-color: #ea580c; color: #ea580c; }
-  .ds-footer .save-btn {
+  /* Promoted Next-issue button — replaces the old Save & Resolve.
+     Auto-save fires when a PDF is dropped or Retry succeeds; this button
+     just advances to the next error (or closes when none remain). */
+  .ds-footer .next-issue-btn {
+    margin-left: auto;
     background: #ea580c; color: white; border: none;
-    padding: 9px 18px; border-radius: 7px;
-    font-size: 0.84rem; font-weight: 700; cursor: pointer;
-    font-family: inherit; margin-left: auto;
+    padding: 11px 22px; border-radius: 8px;
+    font-size: 0.92rem; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+    display: inline-flex; align-items: center; gap: 8px;
+    box-shadow: 0 2px 6px rgba(234,88,12,0.25);
   }
-  .ds-footer .save-btn:hover { background: #c2410c; }
+  .ds-footer .next-issue-btn:hover { background: #c2410c; box-shadow: 0 2px 8px rgba(234,88,12,0.35); }
+  .ds-footer .next-issue-btn.done {
+    background: #16a34a;
+    box-shadow: 0 2px 6px rgba(22,163,74,0.25);
+  }
+  .ds-footer .next-issue-btn.done:hover { background: #15803d; }
+  .ds-footer .next-issue-btn .count-badge {
+    background: rgba(255,255,255,0.22);
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 0.74rem; font-weight: 700;
+  }
 
   /* Failed rows in Ready state are clickable */
   .merge-table tbody tr.row-clickable { cursor: pointer; }
@@ -595,12 +621,12 @@
     display: flex; align-items: center; gap: 10px;
     padding: 10px 14px; background: #fff;
     border: 1px solid #e2e8f0; border-top: none;
-    font-size: 0.82rem; color: #64748b;
+    font-size: 0.86rem; color: #64748b;
   }
   .toolbar input.search {
-    flex: 0 1 320px;
-    padding: 6px 11px; border: 1px solid #cbd5e1; border-radius: 6px;
-    font-size: 0.84rem; font-family: inherit; color: #334155;
+    flex: 1; min-width: 240px;
+    padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+    font-size: 0.92rem; font-family: inherit; color: #334155;
     background: #fff;
   }
   .toolbar input.search:focus { outline: none; border-color: #ea580c; }
@@ -729,6 +755,12 @@
   }
   .merge-btn:hover { background: #c2410c; }
   .merge-btn:disabled { background: #fed7aa; cursor: not-allowed; }
+  .merge-btn .count-badge {
+    background: rgba(255,255,255,0.22);
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 0.74rem; font-weight: 700;
+  }
+  .merge-btn .count-badge #selectedCount { font-weight: 800; }
 
   /* ════════════════════════════════════════════════
      TABLE
@@ -752,6 +784,13 @@
   .merge-table td input[type="checkbox"] {
     width: 15px; height: 15px; accent-color: #ea580c; cursor: pointer;
   }
+  .merge-table .check-col {
+    width: 36px; padding-left: 14px; padding-right: 6px;
+    text-align: center;
+  }
+  .merge-table td input.row-check:disabled {
+    opacity: 0.35; cursor: not-allowed;
+  }
   .merge-table td {
     padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
     color: #334155; vertical-align: middle;
@@ -768,20 +807,18 @@
   }
   .mono-sub { color: #475569; font-weight: 500; }
 
-  /* Doc indicator — minimalist (just dots, no chips) */
-  .doc-row { display: flex; gap: 10px; align-items: center; font-size: 0.78rem; }
-  .doc-pair {
-    display: inline-flex; align-items: center; gap: 5px;
-    color: #475569;
+  /* Doc indicator — filled pills, label-only (no dots) */
+  .doc-row { display: flex; gap: 6px; align-items: center; }
+  .doc-pill {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 700;
+    letter-spacing: 0.04em;
   }
-  .doc-pair .dot {
-    width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1;
-  }
-  .doc-pair.ok .dot { background: #22c55e; }
-  .doc-pair.fallback .dot { background: #f59e0b; }
-  .doc-pair.miss .dot { background: #cbd5e1; }
-  .doc-pair.miss { color: #94a3b8; }
-  .doc-pair .label { font-weight: 600; }
+  .doc-pill.ok       { background: #dcfce7; color: #15803d; }
+  .doc-pill.fallback { background: #fef3c7; color: #92400e; }
+  .doc-pill.miss     { background: #fee2e2; color: #b91c1c; }   /* searched + not found */
+  .doc-pill.queued   { background: #f1f5f9; color: #94a3b8; }   /* not searched yet */
 
   /* Status — minimalist text indicators, not bordered badges */
   .status-text {
@@ -810,6 +847,17 @@
     color: #475569; font-family: inherit;
   }
   .row-action:hover { border-color: #ea580c; color: #ea580c; }
+
+  /* Fix Error button — matches the error pill palette (light red bg, dark red text) */
+  .fix-error-btn {
+    background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;
+    padding: 6px 14px; border-radius: 6px;
+    font-size: 0.78rem; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+    display: inline-flex; align-items: center; gap: 5px;
+    white-space: nowrap;
+  }
+  .fix-error-btn:hover { background: #fecaca; border-color: #f87171; color: #991b1b; }
 
   /* ════════════════════════════════════════════════
      PROCESSING progress bar — compact, no timer stats
@@ -871,14 +919,51 @@
   .util-arrow { transition: transform 0.2s; color: #94a3b8; }
 
   /* ════════════════════════════════════════════════
-     OUTPUTS card (Done state) — list of merge outputs,
-     each row: name, status, view/run actions.
+     OUTPUTS card (Done state) — split into Completed + Run another groups,
+     each with its own header/divider so done-vs-available is obvious.
      ════════════════════════════════════════════════ */
   .outputs-card {
     background: #fff; border: 1px solid #e2e8f0;
     border-radius: 10px; padding: 16px 18px;
     margin-bottom: 14px;
   }
+  .output-group { margin-bottom: 18px; }
+  .output-group:last-child { margin-bottom: 0; }
+  .output-group-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 10px;
+  }
+  .output-group-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.78rem; font-weight: 700; color: #475569;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .output-group-completed .output-group-head { border-bottom-color: #bbf7d0; }
+  .output-group-completed .output-group-title { color: #15803d; }
+  .output-group-completed .group-check {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #16a34a; color: white; font-size: 0.72rem; font-weight: 700;
+  }
+  .output-group-count {
+    background: #f1f5f9; color: #64748b;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0;
+    text-transform: none;
+  }
+  .output-group-completed .output-group-count {
+    background: #dcfce7; color: #15803d;
+  }
+  .output-group-action {
+    background: #fff; border: 1px solid #bbf7d0;
+    border-radius: 6px; padding: 4px 10px;
+    font-size: 0.74rem; font-weight: 600; cursor: pointer;
+    color: #15803d; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .output-group-action:hover { background: #f0fdf4; border-color: #86efac; }
   .output-row {
     display: flex; align-items: center; gap: 12px;
     padding: 12px 14px;
@@ -890,6 +975,17 @@
   .output-row.done { background: #f0fdf4; border-color: #bbf7d0; }
   .output-row.pending { cursor: pointer; }
   .output-row.pending:hover { border-color: #ea580c; background: #fff7ed; }
+  .output-run-hint {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.78rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    flex-shrink: 0;
+    transition: color 0.15s, transform 0.15s;
+  }
+  .output-row.pending:hover .output-run-hint {
+    color: #ea580c;
+    transform: translateX(3px);
+  }
   .output-info { flex: 1; min-width: 0; }
   .output-name {
     font-size: 0.92rem; font-weight: 700; color: #0f172a;
@@ -1004,6 +1100,14 @@
         </div>
       </div>
       <div class="tool-actions">
+        <button class="header-action-btn back-to-ready-btn" id="btnBackToReady" style="display:none;" onclick="setState('ready')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Ready
+        </button>
+        <button class="header-action-btn new-merge-btn" id="btnNewMerge" style="display:none;" onclick="setState('empty')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Merge
+        </button>
         <div class="agent-indicator"><span class="agent-dot"></span> Agent online</div>
         <button class="tool-switcher-btn">
           Switch Tool
@@ -1179,7 +1283,7 @@ function renderFetching() {
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th style="width:36px;"></th><th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Container</th><th>Invoice #</th><th>Customer</th>
           <th>Documents</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>
@@ -1205,7 +1309,9 @@ function renderReady() {
     ${topBarWithDrop({ pdfCount: 38, hasFailures: true, helpText: 'Or drop PDFs in bulk — sidebar lets you fix one row at a time' })}
 
     <!-- Single primary action: review errors, then run the merge.
-         Output mode picker lives in Done state for additional outputs. -->
+         Output mode picker lives in Done state for additional outputs.
+         UX rule (real app): default to Errors tab when errors exist; otherwise All.
+         This mockup shows the All view so the checkbox interaction is visible. -->
     <div class="ready-action-bar">
       <div class="ready-status">
         <span style="color:#16a34a;">●</span> <strong>38 of 40</strong> ready to merge
@@ -1219,9 +1325,10 @@ function renderReady() {
           <option>Container #</option>
           <option>Invoice #</option>
         </select>
-        <button class="merge-btn primary-merge" onclick="completedModes = []; lastCompletedMode = null; startMerge('per-container')">
+        <button class="merge-btn primary-merge" id="btnRunMerge" onclick="completedModes = []; lastCompletedMode = null; startMerge('per-container')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
           Run Merge
+          <span class="count-badge"><span id="selectedCount">38</span> selected</span>
         </button>
       </div>
     </div>
@@ -1239,30 +1346,30 @@ function renderReady() {
         <option>Sort: Container #</option>
         <option>Sort: Issues first</option>
       </select>
-      <span class="filter-meta">40 containers · 2 need PDFs</span>
+      <span class="filter-meta">40 containers · 38 selected · 2 need fixing</span>
     </div>
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th style="width:36px;"><input type="checkbox" checked /></th>
+          <th class="check-col"><input type="checkbox" id="selectAll" checked onclick="toggleSelectAll(this)" title="Select / deselect all" /></th>
           <th>Container</th><th>Invoice #</th><th>Customer</th>
           <th>Documents</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>
-          ${rowFetched('KMTU3920184', '24-13888', 'OOCL')}
-          ${rowFetched('TCNU5839271', '24-13889', 'COSCO')}
-          ${rowFetched('GLDU9182435', '24-13890', 'KMTC LINE')}
-          ${rowFetched('KKFU7654819', '24-13892', 'KMTC LINE')}
-          ${rowFetched('NYKU8273619', '24-13891', 'ONE LINE')}
-          ${rowFetched('MAGU5764069', '24-13893', 'KMTC LINE')}
-          ${rowFetched('TGBU5948072', '24-13894', 'YANG MING LINES')}
+          ${rowFetched('KMTU3920184', '24-13888', 'OOCL', true)}
+          ${rowFetched('TCNU5839271', '24-13889', 'COSCO', true)}
+          ${rowFetched('GLDU9182435', '24-13890', 'KMTC LINE', true)}
+          ${rowFetched('KKFU7654819', '24-13892', 'KMTC LINE', true)}
+          ${rowFetched('NYKU8273619', '24-13891', 'ONE LINE', true)}
+          ${rowFetched('MAGU5764069', '24-13893', 'KMTC LINE', true)}
+          ${rowFetched('TGBU5948072', '24-13894', 'YANG MING LINES', true)}
           ${rowFailedClickable('TCLU8830712', '24-13895', 'EVERGREEN', 'POD not in TMS', true)}
-          ${rowFetched('OOLU9931842', '24-13896', 'OOCL')}
-          ${rowFetched('CSLU6072281', '24-13897', 'COSCO')}
+          ${rowFetched('OOLU9931842', '24-13896', 'OOCL', true)}
+          ${rowFetched('CSLU6072281', '24-13897', 'COSCO', true)}
           ${rowFailedClickable('FCIU8127539', '24-13898', 'CMA-CGM', 'TMS API timeout', false)}
-          ${rowFetched('TLLU8847203', '24-13900', 'YANG MING LINES')}
-          ${rowFetched('GESU9382014', '24-13901', 'KMTC LINE')}
-          ${rowFetched('NYKU3842910', '24-13902', 'ONE LINE')}
+          ${rowFetched('TLLU8847203', '24-13900', 'YANG MING LINES', true)}
+          ${rowFetched('GESU9382014', '24-13901', 'KMTC LINE', true)}
+          ${rowFetched('NYKU3842910', '24-13902', 'ONE LINE', true)}
         </tbody>
       </table>
     </div>
@@ -1292,7 +1399,7 @@ function renderMerging() {
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th style="width:36px;"></th><th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Container</th><th>Invoice #</th><th>Customer</th>
           <th>Documents</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>
@@ -1311,24 +1418,8 @@ function renderMerging() {
 }
 
 function renderDone() {
-  const last = lastCompletedMode ? MODE_INFO[lastCompletedMode] : null;
-  const banner = last ? `
-    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px 18px; margin-bottom:18px; display:flex; align-items:center; gap:14px;">
-      <div style="width:36px; height:36px; border-radius:50%; background:#16a34a; color:white; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">✓</div>
-      <div style="flex:1;">
-        <div style="font-weight:700; color:#15803d; font-size:0.92rem;">${last.name} merge complete · 38 of 38</div>
-        <div style="color:#166534; font-size:0.82rem; margin-top:2px;">
-          Saved to <span style="font-family:'SF Mono',Consolas,monospace;">NGL_Merged_2026-05-05${last.folder}</span>
-          <span style="color:#16a34a; margin-left:6px;">·</span>
-          <span style="color:#16a34a; font-weight:600;">📂 Folder opened in Explorer</span>
-        </div>
-      </div>
-    </div>
-  ` : '';
-
   return `
     ${topBarWithDrop({ pdfCount: 38, hasFailures: false, helpText: 'Drop more PDFs to add to a future merge' })}
-    ${banner}
     ${outputsMarkup()}
   `;
 }
@@ -1375,7 +1466,7 @@ function topBarWithDrop({ pdfCount, hasFailures, helpText }) {
 }
 
 function docPair(label, state) {
-  return `<span class="doc-pair ${state}"><span class="dot"></span><span class="label">${label}</span></span>`;
+  return `<span class="doc-pill ${state}">${label}</span>`;
 }
 function docs(invState, podState) {
   return `<div class="doc-row">${docPair('INV', invState)}${docPair('POD', podState)}</div>`;
@@ -1420,9 +1511,10 @@ function rowPreFetchMiss(n, c, i, cu, r) {
 }
 
 // Fetching/Ready rows
-function rowFetched(c, i, cu) {
+function rowFetched(c, i, cu, withCheck = false) {
+  const checkCell = withCheck ? `<td class="check-col"><input type="checkbox" class="row-check" checked onchange="updateSelectionCount()" /></td>` : '';
   return `<tr>
-    <td>✓</td>
+    ${checkCell}
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
@@ -1433,18 +1525,16 @@ function rowFetched(c, i, cu) {
 }
 function rowFetching(c, i, cu, lbl) {
   return `<tr class="row-processing">
-    <td><div class="small-spinner" style="color:#1e40af;"></div></td>
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
     <td><span style="color:#1e40af; font-size:0.8rem;">${lbl}</span></td>
-    <td><span class="status-text proc">Fetching…</span></td>
+    <td><span class="status-text proc"><div class="small-spinner"></div> Fetching…</span></td>
     <td></td>
   </tr>`;
 }
 function rowFetchFailed(c, i, cu, r) {
   return `<tr class="row-issue row-clickable" onclick="openSidebar('${c}')">
-    <td onclick="event.stopPropagation()">✗</td>
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
@@ -1453,12 +1543,15 @@ function rowFetchFailed(c, i, cu, r) {
       <div style="font-size:0.72rem; color:#b45309; margin-top:3px;">${r}</div>
     </td>
     <td><span class="status-text issue">API failed</span></td>
-    <td><button class="row-action" onclick="event.stopPropagation(); openSidebar('${c}')">Fix Error</button></td>
+    <td><button class="fix-error-btn" onclick="event.stopPropagation(); openSidebar('${c}')">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+      Fix Error
+    </button></td>
   </tr>`;
 }
 function rowFailedClickable(c, i, cu, r, isOpen) {
   return `<tr class="row-issue row-clickable" onclick="openSidebar('${c}')" style="${isOpen ? 'background:#fff7ed; box-shadow: inset 3px 0 0 #ea580c;' : ''}">
-    <td onclick="event.stopPropagation()"><input type="checkbox" /></td>
+    <td class="check-col" onclick="event.stopPropagation()"><input type="checkbox" class="row-check" disabled title="Fix the error before this can be merged" /></td>
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
@@ -1467,14 +1560,16 @@ function rowFailedClickable(c, i, cu, r, isOpen) {
       <div style="font-size:0.72rem; color:#b45309; margin-top:3px;">${r}</div>
     </td>
     <td><span class="status-text issue">Needs PDF</span></td>
-    <td><button class="row-action" onclick="event.stopPropagation(); openSidebar('${c}')">Fix Error</button></td>
+    <td><button class="fix-error-btn" onclick="event.stopPropagation(); openSidebar('${c}')">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+      Fix Error
+    </button></td>
   </tr>`;
 }
 
 // Merging/Done rows
 function rowMerged(c, i, cu) {
   return `<tr class="row-merged">
-    <td>✓</td>
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
@@ -1485,22 +1580,20 @@ function rowMerged(c, i, cu) {
 }
 function rowProcessing(c, i, cu) {
   return `<tr class="row-processing">
-    <td><div class="small-spinner" style="color:#1e40af;"></div></td>
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
     <td>${docs('ok','ok')}</td>
-    <td><span class="status-text proc"><div class="small-spinner"></div>Merging…</span></td>
+    <td><span class="status-text proc"><div class="small-spinner"></div> Merging…</span></td>
     <td></td>
   </tr>`;
 }
 function rowQueued(c, i, cu) {
   return `<tr style="opacity:0.6;">
-    <td>—</td>
     <td><span class="mono">${c}</span></td>
     <td><span class="mono mono-sub">${i}</span></td>
     <td>${cu}</td>
-    <td>${docs('ok','ok')}</td>
+    <td>${docs('queued','queued')}</td>
     <td><span class="status-text queued">Queued</span></td>
     <td></td>
   </tr>`;
@@ -1566,16 +1659,16 @@ function sidebarMarkup() {
       </div>
 
       <div class="ds-footer">
-        <button class="skip-link">Skip this container</button>
-        <button class="nav-btn">
+        <button class="skip-link">Skip this one</button>
+        <button class="nav-btn" title="Previous error">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           Prev
         </button>
-        <button class="nav-btn">
-          Next
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        <button class="next-issue-btn">
+          Next Error
+          <span class="count-badge">1 left</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
-        <button class="save-btn">Save & Resolve</button>
       </div>
     </div>
   `;
@@ -1587,6 +1680,25 @@ function openSidebar(c) {
   if (sb) sb.classList.add('open');
   if (bd) bd.classList.add('open');
 }
+
+// Master "select all" — toggles every non-disabled row checkbox
+function toggleSelectAll(master) {
+  document.querySelectorAll('.merge-table tbody input.row-check').forEach(cb => {
+    if (!cb.disabled) cb.checked = master.checked;
+  });
+  updateSelectionCount();
+}
+function updateSelectionCount() {
+  const checked = document.querySelectorAll('.merge-table tbody input.row-check:checked').length;
+  const tag = document.getElementById('selectedCount');
+  if (tag) tag.textContent = checked;
+  // Sync master checkbox to "all checked" state of selectable rows
+  const master = document.getElementById('selectAll');
+  if (master) {
+    const selectable = document.querySelectorAll('.merge-table tbody input.row-check:not(:disabled)');
+    master.checked = selectable.length > 0 && checked === selectable.length;
+  }
+}
 function closeSidebar() {
   const sb = document.getElementById('detailSidebar');
   const bd = document.querySelector('.sidebar-backdrop');
@@ -1594,47 +1706,72 @@ function closeSidebar() {
   if (bd) bd.classList.remove('open');
 }
 
-// Outputs viewer (Done state) — dynamic based on completedModes
+// Outputs viewer (Done state) — split into Completed + Run another groups
 function outputsMarkup() {
-  const rows = Object.entries(MODE_INFO).map(([key, info]) => {
-    const isDone = completedModes.includes(key);
-    if (isDone) {
-      return `
-        <div class="output-row done">
-          <div class="output-info">
-            <div class="output-name">${info.name}</div>
-            <div class="output-meta">${info.mDone} · saved to <span style="font-family:'SF Mono',Consolas,monospace;">${info.folder}</span></div>
-          </div>
-          <div class="output-actions">
-            <button class="output-action" title="Reopen output folder in Explorer">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              Open Folder
-            </button>
-            <button class="output-action">${key === 'per-container' ? 'View List (38)' : 'View'}</button>
-          </div>
-        </div>`;
-    }
-    return `
-      <div class="output-row pending" onclick="startMerge('${key}')">
-        <div class="output-info">
-          <div class="output-name">${info.name}</div>
-          <div class="output-meta">${info.mTeaser}</div>
-        </div>
-        <button class="output-action primary" onclick="event.stopPropagation(); startMerge('${key}')">Run This Merge</button>
-      </div>`;
-  }).join('');
+  const completed = [];
+  const pending = [];
+  Object.entries(MODE_INFO).forEach(([key, info]) => {
+    (completedModes.includes(key) ? completed : pending).push({ key, info });
+  });
 
-  const help = completedModes.length === 0
-    ? 'No merges run yet. Click any output to produce one — run as many as you want.'
-    : completedModes.length === 5
-      ? 'All 5 outputs produced. Open any folder above or use the top-bar drop card to add more PDFs and re-run.'
-      : `${completedModes.length} of 5 outputs produced. Run another mode to add a new output — each saves separately.`;
+  const completedRow = ({ key, info }) => `
+    <div class="output-row done">
+      <div class="output-info">
+        <div class="output-name">${info.name}</div>
+        <div class="output-meta">${info.mDone}</div>
+      </div>
+      <div class="output-actions">
+        <button class="output-action" title="${info.folder} — opens in Explorer">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Open Folder
+        </button>
+        <button class="output-action">${key === 'per-container' ? 'View List (38)' : 'View'}</button>
+      </div>
+    </div>`;
+
+  const pendingRow = ({ key, info }) => `
+    <div class="output-row pending" onclick="startMerge('${key}')">
+      <div class="output-info">
+        <div class="output-name">${info.name}</div>
+        <div class="output-meta">${info.mTeaser}</div>
+      </div>
+      <span class="output-run-hint">
+        Run
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </span>
+    </div>`;
+
+  const completedGroup = completed.length === 0 ? '' : `
+    <div class="output-group output-group-completed">
+      <div class="output-group-head">
+        <div class="output-group-title">
+          <span class="group-check">✓</span>
+          <span>Completed</span>
+          <span class="output-group-count">${completed.length}</span>
+        </div>
+        <button class="output-group-action" title="Open the parent folder containing all completed merges">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Open all
+        </button>
+      </div>
+      ${completed.map(completedRow).join('')}
+    </div>`;
+
+  const pendingGroup = pending.length === 0 ? '' : `
+    <div class="output-group output-group-pending">
+      <div class="output-group-head">
+        <div class="output-group-title">
+          <span>Run another format</span>
+          <span class="output-group-count">${pending.length} available</span>
+        </div>
+      </div>
+      ${pending.map(pendingRow).join('')}
+    </div>`;
 
   return `
     <div class="outputs-card">
-      <div class="section-label" style="margin-bottom:6px;">Outputs</div>
-      <p class="merge-modes-help">${help}</p>
-      ${rows}
+      ${completedGroup}
+      ${pendingGroup}
     </div>
   `;
 }
@@ -1649,11 +1786,21 @@ function setState(name) {
     lastCompletedMode = pendingMode;
     pendingMode = null;
   }
+  // When starting a new merge from the header button, clear prior outputs
+  if (name === 'empty') {
+    completedModes = [];
+    lastCompletedMode = null;
+  }
   subMode = name;
   const group = STATE_GROUP[name] || name;
   document.querySelectorAll('.state-toggle button').forEach(b => {
     b.classList.toggle('active', b.dataset.state === group);
   });
+  // Header action buttons: only show when relevant
+  const back = document.getElementById('btnBackToReady');
+  const fresh = document.getElementById('btnNewMerge');
+  if (back)  back.style.display  = (group === 's4') ? '' : 'none';
+  if (fresh) fresh.style.display = (group === 's2' || group === 's3' || group === 's4') ? '' : 'none';
   document.getElementById('workArea').innerHTML = STATES[group]();
 }
 
