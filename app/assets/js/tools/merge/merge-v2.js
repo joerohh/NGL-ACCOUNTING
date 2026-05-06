@@ -353,6 +353,82 @@ function sortRows(rows, mode) {
 function selectedCount()        { return v2State.rows.filter(r => r.selected).length; }
 function issuesCount()          { return v2State.rows.filter(r => r.status !== 'ok').length; }
 
+function rowMarkup(row) {
+  const checkAttr = row.selected ? 'checked' : '';
+  const trClass = row.status === 'ok' ? '' : 'row-issue';
+  const invDisplay = row.invoiceNumber
+    ? `<span class="mono mono-sub">${escHtml(row.invoiceNumber)}</span>`
+    : `<span class="mono mono-sub" style="color:#dc2626;">— missing —</span>`;
+  const customerDisplay = row.customer
+    ? escHtml(row.customer)
+    : `<span style="color:#cbd5e1;">—</span>`;
+
+  let badge = '';
+  if (row.status === 'miss-inv') {
+    badge = `<span class="val-badge miss"><span class="dot"></span>Missing Inv #</span>`;
+  } else if (row.status === 'dup-same-inv' || row.status === 'dup-diff-inv') {
+    badge = `<span class="val-badge dup"><span class="dot"></span>Duplicate</span>`;
+  }
+  const reasonLine = row.statusReason
+    ? `<div style="font-size:0.72rem; color:${row.status === 'miss-inv' ? '#b91c1c' : '#92400e'}; margin-top:3px;">${escHtml(row.statusReason)}</div>`
+    : '';
+
+  return `<tr class="${trClass}" data-row-num="${row.rowNum}">
+    <td class="check-col"><input type="checkbox" class="row-check" ${checkAttr} onchange="window.v2ToggleRow(${row.rowNum}, this.checked)" /></td>
+    <td style="color:#94a3b8; font-size:0.8rem;">${row.rowNum}</td>
+    <td><span class="mono">${escHtml(row.containerNumber)}</span></td>
+    <td>${invDisplay}</td>
+    <td>${customerDisplay}</td>
+    <td>${badge}${reasonLine}</td>
+  </tr>`;
+}
+
+function renderTbodyHTML() {
+  const rows = getVisibleRows();
+  if (rows.length === 0) {
+    return `<tr><td colspan="6" style="padding:20px; text-align:center; color:#94a3b8;">No rows match.</td></tr>`;
+  }
+  return rows.map(rowMarkup).join('');
+}
+
+function rerenderTbody() {
+  const tbody = document.getElementById('v2ReviewTbody');
+  if (!tbody) return;
+  tbody.innerHTML = renderTbodyHTML();
+  updateMasterCheckbox();
+  updateFilterMeta();
+}
+
+function updateFilterMeta() {
+  const el = document.getElementById('v2FilterMeta');
+  if (!el) return;
+  const visible = getVisibleRows().length;
+  const total = v2State.rows.length;
+  const issues = issuesCount();
+  if (v2State.searchQuery) {
+    el.textContent = `${visible} of ${total} match · ${issues} issue${issues !== 1 ? 's' : ''}`;
+  } else {
+    el.textContent = `${total} unique · ${issues} issue${issues !== 1 ? 's' : ''}`;
+  }
+}
+
+function updateMasterCheckbox() {
+  const master = document.getElementById('v2MasterCheck');
+  if (!master) return;
+  const visible = getVisibleRows();
+  if (visible.length === 0) {
+    master.checked = false; master.indeterminate = false; return;
+  }
+  const checkedCount = visible.filter(r => r.selected).length;
+  if (checkedCount === 0) {
+    master.checked = false; master.indeterminate = false;
+  } else if (checkedCount === visible.length) {
+    master.checked = true;  master.indeterminate = false;
+  } else {
+    master.checked = false; master.indeterminate = true;
+  }
+}
+
 function renderReview() {
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   return hasIssues
@@ -454,9 +530,7 @@ function renderReviewWithIssues() {
             <th>Validation</th>
           </tr>
         </thead>
-        <tbody id="v2ReviewTbody">
-          <tr><td colspan="6" style="padding:20px; text-align:center; color:#94a3b8;">(Table body — wired in Task 7)</td></tr>
-        </tbody>
+        <tbody id="v2ReviewTbody">${renderTbodyHTML()}</tbody>
       </table>
     </div>
   `;
@@ -480,15 +554,16 @@ window.v2ClickFetch = v2ClickFetch;
 window.v2ToggleShowAll = v2ToggleShowAll;
 function v2HandleTabClick(tab) {
   v2State.activeTab = tab;
-  setStateV2('review');         // simple full re-render for now; tbody-only re-render is wired in Task 7
+  // Re-render the full pane so the active-tab visual updates.
+  setStateV2('review');
 }
 function v2HandleSearch(value) {
   v2State.searchQuery = value;
-  // tbody-only re-render comes in Task 7; for now, do nothing visible
+  rerenderTbody();
 }
 function v2HandleSort(mode) {
   v2State.sortMode = mode;
-  // tbody-only re-render comes in Task 7
+  rerenderTbody();
 }
 function v2ToggleAll(_checked) {
   // wired in Task 9 (Task 8 actually — see plan; either way, stub for now)
