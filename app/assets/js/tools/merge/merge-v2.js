@@ -233,6 +233,10 @@ function validateRows(rows) {
   return rows;
 }
 
+function hasAnyWO() {
+  return v2State.rows.some(r => (r.workOrderNumber || '').trim() !== '');
+}
+
 // ── State renderers ──
 
 function renderEmpty() {
@@ -369,11 +373,16 @@ function rowMarkup(row) {
     ? `<div style="font-size:0.72rem; color:#92400e; margin-top:3px;">${escHtml(row.statusReason)}</div>`
     : '';
 
+  const woCell = hasAnyWO()
+    ? `<td>${row.workOrderNumber ? `<span class="mono">${escHtml(row.workOrderNumber)}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>`
+    : '';
+
   return `<tr class="${trClass}" data-row-num="${row.rowNum}">
     <td class="check-col"><input type="checkbox" class="row-check" ${checkAttr} onchange="window.v2ToggleRow(${row.rowNum}, this.checked)" /></td>
     <td style="color:#94a3b8; font-size:0.8rem;">${row.rowNum}</td>
     <td><span class="mono">${escHtml(row.containerNumber)}</span></td>
     <td>${invDisplay}</td>
+    ${woCell}
     <td>${customerDisplay}</td>
     <td>${badge}${reasonLine}</td>
   </tr>`;
@@ -382,7 +391,8 @@ function rowMarkup(row) {
 function renderTbodyHTML() {
   const rows = getVisibleRows();
   if (rows.length === 0) {
-    return `<tr><td colspan="6" style="padding:20px; text-align:center; color:#94a3b8;">No rows match.</td></tr>`;
+    const cols = hasAnyWO() ? 7 : 6;
+    return `<tr><td colspan="${cols}" style="padding:20px; text-align:center; color:#94a3b8;">No rows match.</td></tr>`;
   }
   return rows.map(rowMarkup).join('');
 }
@@ -482,6 +492,7 @@ function renderReviewSuccess() {
                 <th>Row</th>
                 <th>Container</th>
                 <th>Invoice #</th>
+                ${hasAnyWO() ? '<th>WO #</th>' : ''}
                 <th>Customer</th>
                 <th>Validation</th>
               </tr>
@@ -574,6 +585,7 @@ function renderReviewWithIssues() {
             <th>Row</th>
             <th>Container</th>
             <th>Invoice #</th>
+            ${hasAnyWO() ? '<th>WO #</th>' : ''}
             <th>Customer</th>
             <th>Validation</th>
           </tr>
