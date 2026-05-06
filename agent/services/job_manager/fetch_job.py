@@ -67,8 +67,11 @@ class FetchJobMixin:
     ):
         """Fetch a proof-of-delivery doc from TMS when QBO has none.
 
-        Tries POD → BOL → POL in order. Imports normally have POD; exports
-        (LE/PE/HE… prefix WOs) store the same logical doc as BOL or POL.
+        Routes by WO# letter:
+          - 'X' in WO# → export → try BOL, then POL
+          - 'M' in WO# → import → try POD
+          - neither   → unknown → try POD, BOL, POL (safety chain)
+
         Returns the doc_type that succeeded, or None if TMS has nothing.
         Writes the file to dest_path on success.
         """
@@ -79,9 +82,25 @@ class FetchJobMixin:
             )
             return None
 
+        from services.tms_data.extractors import extract_wo_from_qbo
+        wo_no = (extract_wo_from_qbo(invoice_data) or "").upper()
+        if "X" in wo_no:
+            doc_types = ("BOL", "POL")
+            wo_kind = "export"
+        elif "M" in wo_no:
+            doc_types = ("POD",)
+            wo_kind = "import"
+        else:
+            doc_types = ("POD", "BOL", "POL")
+            wo_kind = "unknown"
+        logger.info(
+            "TMS POD fallback for %s: WO=%s kind=%s trying=%s",
+            container.container_number, wo_no or "<none>", wo_kind, doc_types,
+        )
+
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_fb_"))
         try:
-            for doc_type in ("POD", "BOL", "POL"):
+            for doc_type in doc_types:
                 try:
                     path = await asyncio.wait_for(
                         self._tms_data.get_document(
