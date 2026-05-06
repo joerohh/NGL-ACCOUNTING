@@ -5,6 +5,7 @@ import { state } from '../../shared/state.js';
 import {
   uid, fmtSize, escHtml, readAsArrayBuffer, triggerDownload,
   normalizeHeader, findColumnKey, CONTAINER_ALIASES, INVOICE_ALIASES, WO_ALIASES,
+  getDatePrefix, buildMergedFilename,
 } from '../../shared/utils.js';
 import { addLog, setProgress } from '../../shared/log.js';
 import { agentBridge } from '../../shared/agent-client.js';
@@ -542,7 +543,7 @@ async function mergePerContainerSequential(rows, failures, bufferMap, matchIndex
         addDefaultPage: false,
       });
       const ms = Math.round(performance.now() - t0);
-      const filename = `${datePrefix}_${row.containerNumber}_merged.pdf`;
+      const filename = buildMergedFilename(row, datePrefix);
       state.mergeResults.push({ containerNumber: row.containerNumber, bytes, filename, subfolder });
       addLog('success', `  → ${filename} (${fmtSize(bytes.length)}) [${ms}ms]`);
     } catch (err) {
@@ -556,11 +557,6 @@ async function mergePerContainerSequential(rows, failures, bufferMap, matchIndex
 
 
 // ── Merge Helpers ──
-function getDatePrefix() {
-  const d = new Date();
-  return String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
-}
-
 function getSortedRows() {
   const rows = [...state.excelRows];
   if (state.sortOrder === 'container') {
@@ -621,7 +617,7 @@ async function mergePerContainer(rows, failures, bufferMap, matchIndex) {
 
       const pdfBuffers = ordered.map(p => bufferMap.get(p.id));
       const pdfNames = ordered.map(p => p.name);
-      const filename = `${datePrefix}_${row.containerNumber}_merged.pdf`;
+      const filename = buildMergedFilename(row, datePrefix);
 
       const task = pool.submit({
         containerNumber: row.containerNumber,
