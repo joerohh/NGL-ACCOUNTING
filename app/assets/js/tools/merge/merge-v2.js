@@ -7,7 +7,7 @@
 //  M1 (Foundation): Empty + Loading states render; Review is a stub
 //  showing the loaded file name. Real Excel parsing comes in M2.
 // ══════════════════════════════════════════════════════════
-import { escHtml } from '../../shared/utils.js';
+import { escHtml, readAsArrayBuffer, findColumnKey, CSV_ALIASES } from '../../shared/utils.js';
 
 // ── Module-local state ──
 const v2State = {
@@ -93,17 +93,96 @@ function triggerExcel() {
   if (xinput) xinput.click();
 }
 
-function handleExcelChange(e) {
+async function handleExcelChange(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
   v2State.excelFile = file;
+  v2State.loadingError = null;
   setStateV2('loading');
-  // M1: simulated transition. M2 will parse the workbook here and only
-  // transition to 'review' once parsing finishes (success) or surface
-  // an error inline (failure).
-  setTimeout(() => {
-    if (v2State.subMode === 'loading') setStateV2('review');
-  }, 1200);
+
+  const result = await parseExcelFile(file);
+
+  if (result.error) {
+    v2State.loadingError = result.error;
+    setStateV2('loading');     // re-render with error state (renderLoading uses this field)
+    return;
+  }
+
+  v2State.rows = result.rows;          // validation will tag these in Task 3
+  v2State.excelHeaders = result.headers;
+  v2State.activeTab = 'all';           // Task 3 will switch to issues-when-issues-exist
+  v2State.searchQuery = '';
+  v2State.sortMode = 'excel';
+  v2State.showAllInSuccess = false;
+  setStateV2('review');
+}
+
+// ── Excel parsing + column detection ──
+function findCustomerColumn(headers) {
+  // Friendly name first (e.g. "NAME" → "FREIGHT FLEX LLC")
+  const byName = findColumnKey(headers, CSV_ALIASES.customerName);
+  if (byName) return byName;
+  // Fall back to a code column (e.g. "BILLTO" → "IDEANU01")
+  return findColumnKey(headers, CSV_ALIASES.customerCode);
+}
+
+async function parseExcelFile(file) {
+  let buf;
+  try {
+    buf = await readAsArrayBuffer(file);
+  } catch (err) {
+    return { error: 'Could not read the file. Try saving and re-uploading.' };
+  }
+
+  let wb;
+  try {
+    wb = XLSX.read(buf, { type: 'array' });
+  } catch (err) {
+    return { error: `Couldn't parse this file as Excel: ${err.message}` };
+  }
+
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return { error: 'This Excel file has no sheets.' };
+  const ws = wb.Sheets[sheetName];
+  const sheetRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+  if (sheetRows.length === 0) {
+    return { error: 'The first sheet has no data rows. Make sure the first row is a header row and there is at least one data row below.' };
+  }
+
+  const headers = Object.keys(sheetRows[0]);
+  const containerKey = findColumnKey(headers, CSV_ALIASES.containerNumber);
+  const invoiceKey   = findColumnKey(headers, CSV_ALIASES.invoiceNumber);
+  const customerKey  = findCustomerColumn(headers);
+
+  if (!containerKey) {
+    return {
+      error: `Couldn't find a Container column. Looked at: ${headers.join(', ')}. Expected something like "Container Number", "CONT NO", or "Equipment".`,
+    };
+  }
+
+  const rows = [];
+  for (let i = 0; i < sheetRows.length; i++) {
+    const r = sheetRows[i];
+    const cn = String(r[containerKey] || '').trim();
+    if (!cn) continue;          // skip blank container rows entirely
+    rows.push({
+      rowNum: i + 2,            // sheet row 1 is headers, so first data row → 2
+      containerNumber: cn,
+      invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
+      customer: customerKey ? String(r[customerKey] || '').trim() : '',
+      // selected/status/statusReason filled in by validateRows()
+      selected: false,
+      status: 'ok',
+      statusReason: '',
+    });
+  }
+
+  if (rows.length === 0) {
+    return { error: 'No usable rows — every row had an empty Container cell.' };
+  }
+
+  return { rows, headers, containerKey, invoiceKey, customerKey };
 }
 
 // ── State renderers ──
@@ -129,6 +208,24 @@ function renderEmpty() {
 }
 
 function renderLoading() {
+  if (v2State.loadingError) {
+    return `
+      <div class="centered-stage">
+        <h1>Couldn't read this file</h1>
+        <p class="subtitle">${escHtml(v2State.loadingError)}</p>
+        <div class="big-drop kind-excel" onclick="window.v2TriggerExcel()">
+          <div class="drop-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
+            </svg>
+          </div>
+          <div class="drop-title">Try a different file</div>
+          <div class="drop-help">Drop or pick another Excel manifest</div>
+          <div class="drop-types">.xlsx · .xls · .csv</div>
+        </div>
+      </div>
+    `;
+  }
   return `
     <div class="centered-stage">
       <h1>Start a new merge</h1>
