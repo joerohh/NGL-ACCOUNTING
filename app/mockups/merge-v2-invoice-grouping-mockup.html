@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Merge Tool v2 — Invoice-Grouping Fix (Mockup)</title>
+<style>
+  :root {
+    --orange: #ea580c;
+    --orange-soft: #fff7ed;
+    --green: #16a34a;
+    --green-soft: #f0fdf4;
+    --yellow: #f59e0b;
+    --yellow-soft: #fefce8;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-400: #94a3b8;
+    --gray-600: #475569;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fafbfc;
+    color: var(--gray-900);
+    padding: 32px;
+    line-height: 1.5;
+  }
+
+  .page-head { max-width: 1200px; margin: 0 auto 24px; }
+  .page-head h1 {
+    font-size: 1.6rem; font-weight: 700; color: var(--gray-900); margin-bottom: 6px;
+  }
+  .page-head p {
+    font-size: 0.95rem; color: var(--gray-600);
+  }
+  .page-head .meta {
+    margin-top: 10px; font-size: 0.8rem; color: var(--gray-400);
+  }
+
+  .section { max-width: 1200px; margin: 0 auto 32px; }
+  .section-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--gray-200);
+  }
+  .section-head h2 {
+    font-size: 1.05rem; font-weight: 700;
+  }
+  .section-head .pill {
+    font-size: 0.7rem; font-weight: 700;
+    padding: 3px 8px; border-radius: 999px; letter-spacing: 0.04em;
+  }
+  .pill-before { background: #fee2e2; color: #b91c1c; }
+  .pill-after  { background: #dcfce7; color: #166534; }
+
+  .table-wrap {
+    background: #fff; border: 1px solid var(--gray-200); border-radius: 10px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  thead { background: var(--gray-50); }
+  th {
+    text-align: left; padding: 10px 14px; font-weight: 600; color: var(--gray-600);
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  td {
+    padding: 12px 14px; border-bottom: 1px solid var(--gray-100); vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fafafa; }
+
+  .check-col { width: 36px; }
+  .check-col input { width: 16px; height: 16px; accent-color: var(--orange); }
+
+  .container, .invoice {
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-weight: 600; color: var(--gray-900);
+  }
+  .invoice-blank { color: var(--gray-400); font-style: italic; font-family: inherit; font-weight: 400; }
+  .customer { color: var(--gray-600); font-size: 0.82rem; }
+
+  .row-warn { background: var(--yellow-soft); }
+  .row-warn:hover { background: #fef9c3; }
+  .row-skip { background: #f9fafb; opacity: 0.65; }
+  .row-skip td:not(.check-col) { text-decoration: line-through; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.72rem; font-weight: 600;
+  }
+  .badge-warn { background: var(--yellow); color: #fff; }
+  .badge-skip { background: var(--gray-400); color: #fff; }
+  .badge-ok   { background: var(--green); color: #fff; }
+  .badge-info { background: #e0e7ff; color: #3730a3; }
+
+  .note {
+    font-size: 0.78rem; color: var(--gray-600); margin-top: 4px;
+  }
+  .note-warn { color: #92400e; }
+
+  .legend {
+    background: #fff; border: 1px solid var(--gray-200); border-radius: 10px;
+    padding: 18px 22px; margin-top: 16px;
+    font-size: 0.85rem; color: var(--gray-800);
+  }
+  .legend strong { color: var(--gray-900); }
+  .legend .filename {
+    display: inline-block;
+    font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem;
+    background: var(--gray-100); padding: 2px 8px; border-radius: 4px;
+    color: var(--gray-900);
+  }
+  .legend ul { margin: 10px 0 0 20px; }
+  .legend li { margin: 4px 0; }
+  .legend li code {
+    font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem;
+    background: var(--gray-100); padding: 1px 6px; border-radius: 3px;
+  }
+
+  .summary-bar {
+    display: flex; gap: 16px; padding: 14px 18px;
+    background: var(--orange-soft); border-bottom: 1px solid #fed7aa;
+    font-size: 0.85rem; color: #9a3412;
+  }
+  .summary-bar strong { color: #7c2d12; font-weight: 700; }
+  .summary-bar .sep { color: #fed7aa; }
+
+  .change-callout {
+    background: var(--green-soft); border-left: 3px solid var(--green);
+    padding: 8px 12px; margin-bottom: 8px;
+    font-size: 0.85rem; color: #166534;
+  }
+  .change-callout strong { color: #14532d; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Merge Tool v2 — Invoice-Grouping Fix</h1>
+  <p>How the Review-state table changes when we switch from container-grouping to invoice-grouping.</p>
+  <div class="meta">Mockup uses real rows from <code>docs/no sav.xlsx</code> (the 05.05.2026 batch).</div>
+</div>
+
+<!-- ─────────── BEFORE ─────────── -->
+<div class="section">
+  <div class="section-head">
+    <span class="pill pill-before">BEFORE</span>
+    <h2>Today's behavior — second invoice gets flagged as a duplicate (defaulted off)</h2>
+  </div>
+
+  <div class="table-wrap">
+    <div class="summary-bar">
+      <span><strong>10 rows</strong> shown</span>
+      <span class="sep">·</span>
+      <span>2 flagged as duplicates</span>
+      <span class="sep">·</span>
+      <span><strong>8 selected</strong> for merge</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="check-col"><input type="checkbox" checked /></th>
+          <th>Row</th>
+          <th>Container</th>
+          <th>Invoice #</th>
+          <th>Customer</th>
+          <th>Validation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>1</td>
+          <td><span class="container">CAAU7378645</span></td>
+          <td><span class="invoice">PM26050062F</span></td>
+          <td class="customer">MSC MEDITERRANEAN SHIPPING</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr class="row-warn">
+          <td class="check-col"><input type="checkbox" /></td>
+          <td>2</td>
+          <td><span class="container">CAAU7378645</span></td>
+          <td><span class="invoice">PM26050063F</span></td>
+          <td class="customer">CONAIR CORP – DRAYAGE</td>
+          <td>
+            <span class="badge badge-warn">DUPLICATE?</span>
+            <div class="note note-warn">Same container as row 1 — defaulted unchecked, manually opt back in</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>3</td>
+          <td><span class="container">DRYU9802611</span></td>
+          <td><span class="invoice">LM26050106F</span></td>
+          <td class="customer">EVERGREEN SHIPPING AGENCY</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr class="row-warn">
+          <td class="check-col"><input type="checkbox" /></td>
+          <td>4</td>
+          <td><span class="container">DRYU9802611</span></td>
+          <td><span class="invoice">LM26050107F</span></td>
+          <td class="customer">TRUE VALUE CO</td>
+          <td>
+            <span class="badge badge-warn">DUPLICATE?</span>
+            <div class="note note-warn">Same container as row 3 — defaulted unchecked, manually opt back in</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>5</td>
+          <td><span class="container">KKFU8155100</span></td>
+          <td><span class="invoice">LM26050143F</span></td>
+          <td class="customer">AMNEX SOLUTIONS CORP</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ─────────── AFTER ─────────── -->
+<div class="section">
+  <div class="section-head">
+    <span class="pill pill-after">AFTER</span>
+    <h2>Proposed behavior — every invoice is its own normal row</h2>
+  </div>
+
+  <div class="change-callout">
+    <strong>Key change:</strong> different INV# = different invoice line = its own merged PDF, no warning, checked by default. Only true exact INV# repeats are flagged.
+  </div>
+
+  <div class="table-wrap">
+    <div class="summary-bar">
+      <span><strong>11 rows</strong> shown</span>
+      <span class="sep">·</span>
+      <span>1 needs review · 1 will be skipped</span>
+      <span class="sep">·</span>
+      <span><strong>10 selected</strong> for merge</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="check-col"><input type="checkbox" checked /></th>
+          <th>Row</th>
+          <th>Container</th>
+          <th>Invoice #</th>
+          <th>WO #</th>
+          <th>Customer</th>
+          <th>Validation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>1</td>
+          <td><span class="container">CAAU7378645</span></td>
+          <td><span class="invoice">PM26050062F</span></td>
+          <td><span class="invoice">PM2604260005</span></td>
+          <td class="customer">MSC MEDITERRANEAN SHIPPING</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>2</td>
+          <td><span class="container">CAAU7378645</span></td>
+          <td><span class="invoice">PM26050063F</span></td>
+          <td><span class="invoice">PM2604260005</span></td>
+          <td class="customer">CONAIR CORP – DRAYAGE</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>3</td>
+          <td><span class="container">DRYU9802611</span></td>
+          <td><span class="invoice">LM26050106F</span></td>
+          <td><span class="invoice">LM2604150031</span></td>
+          <td class="customer">EVERGREEN SHIPPING AGENCY</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>4</td>
+          <td><span class="container">DRYU9802611</span></td>
+          <td><span class="invoice">LM26050107F</span></td>
+          <td><span class="invoice">LM2604150031</span></td>
+          <td class="customer">TRUE VALUE CO</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr>
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>5</td>
+          <td><span class="container">KKFU8155100</span></td>
+          <td><span class="invoice">LM26050143F</span></td>
+          <td><span class="invoice">LM2604220019</span></td>
+          <td class="customer">AMNEX SOLUTIONS CORP</td>
+          <td><span class="badge badge-ok">OK</span></td>
+        </tr>
+        <tr class="row-warn">
+          <td class="check-col"><input type="checkbox" checked /></td>
+          <td>6</td>
+          <td><span class="container">TGBU5948072</span></td>
+          <td><span class="invoice-blank">— blank —</span></td>
+          <td><span class="invoice">PM2604280001</span></td>
+          <td class="customer">YANG MING</td>
+          <td>
+            <span class="badge badge-warn">VERIFY</span>
+            <div class="note note-warn">No invoice # — please check before sending. Will merge with WO# as filename key.</div>
+          </td>
+        </tr>
+        <tr class="row-skip">
+          <td class="check-col"><input type="checkbox" disabled /></td>
+          <td>7</td>
+          <td><span class="container">MAGU2476813</span></td>
+          <td><span class="invoice">LM26050125F</span></td>
+          <td><span class="invoice">LM2604220018</span></td>
+          <td class="customer">AMNEX SOLUTIONS CORP</td>
+          <td>
+            <span class="badge badge-skip">EXACT DUP</span>
+            <div class="note">Same INV# as row above — accidental Excel repeat, will be skipped</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ─────────── LEGEND ─────────── -->
+<div class="section">
+  <div class="legend">
+    <strong>What ends up in the output folder</strong> — using the new naming pattern <span class="filename">{date}_{INV# or WO# or container}_{container}_merged.pdf</span>:
+    <ul>
+      <li>Row 1 → <code>05.05_PM26050062F_CAAU7378645_merged.pdf</code></li>
+      <li>Row 2 → <code>05.05_PM26050063F_CAAU7378645_merged.pdf</code> (same content as row 1)</li>
+      <li>Row 3 → <code>05.05_LM26050106F_DRYU9802611_merged.pdf</code></li>
+      <li>Row 4 → <code>05.05_LM26050107F_DRYU9802611_merged.pdf</code> (same content as row 3)</li>
+      <li>Row 5 → <code>05.05_LM26050143F_KKFU8155100_merged.pdf</code></li>
+      <li>Row 6 → <code>05.05_PM2604280001_TGBU5948072_merged.pdf</code> (WO# used as fallback — yellow-flag still on)</li>
+      <li>Row 7 → <em>nothing produced</em> (skipped as exact INV# duplicate)</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>
