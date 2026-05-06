@@ -361,12 +361,12 @@ function rowMarkup(row) {
 
   let badge = '';
   if (row.status === 'miss-inv') {
-    badge = `<span class="val-badge miss"><span class="dot"></span>Missing Inv #</span>`;
-  } else if (row.status === 'dup-same-inv' || row.status === 'dup-diff-inv') {
-    badge = `<span class="val-badge dup"><span class="dot"></span>Duplicate</span>`;
+    badge = `<span class="val-badge warn"><span class="dot"></span>Verify</span>`;
+  } else if (row.status === 'dup-same-inv') {
+    badge = `<span class="val-badge dup"><span class="dot"></span>Exact dup</span>`;
   }
   const reasonLine = row.statusReason
-    ? `<div style="font-size:0.72rem; color:${row.status === 'miss-inv' ? '#b91c1c' : '#92400e'}; margin-top:3px;">${escHtml(row.statusReason)}</div>`
+    ? `<div style="font-size:0.72rem; color:#92400e; margin-top:3px;">${escHtml(row.statusReason)}</div>`
     : '';
 
   return `<tr class="${trClass}" data-row-num="${row.rowNum}">

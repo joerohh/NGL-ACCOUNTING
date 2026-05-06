@@ -981,10 +981,12 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .val-badge.ok    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
 #mergeToolViewV2 .val-badge.dup   { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 #mergeToolViewV2 .val-badge.miss  { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+#mergeToolViewV2 .val-badge.warn  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 #mergeToolViewV2 .val-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
 #mergeToolViewV2 .val-badge.ok .dot { background: #16a34a; }
 #mergeToolViewV2 .val-badge.dup .dot { background: #f59e0b; }
 #mergeToolViewV2 .val-badge.miss .dot { background: #dc2626; }
+#mergeToolViewV2 .val-badge.warn .dot { background: #f59e0b; }
 
 /* ── Top action button (Fetch / Run) ── */
 #mergeToolViewV2 .top-action-btn {
