@@ -214,15 +214,20 @@ function validateRows(rows) {
     }
 
     // This row's container was seen earlier.
-    // If both invoices match (case/whitespace-insensitive), it's an exact dup.
-    const sameInv =
+    // It's a same-content dup if either: both rows have the same invoice (case/whitespace-insensitive)
+    // OR both rows have no invoice number at all (truly identical content).
+    const bothMissing = !row.invoiceNumber && !prior.invoiceNumber;
+    const sameInv = bothMissing || (
       row.invoiceNumber &&
       prior.invoiceNumber &&
-      row.invoiceNumber.trim().toLowerCase() === prior.invoiceNumber.trim().toLowerCase();
+      row.invoiceNumber.trim().toLowerCase() === prior.invoiceNumber.trim().toLowerCase()
+    );
 
     if (sameInv) {
       row.status = 'dup-same-inv';
-      row.statusReason = `Exact duplicate of row ${prior.rowNum} — will be skipped`;
+      row.statusReason = bothMissing
+        ? `Same container as row ${prior.rowNum} — both have no invoice number, will be skipped`
+        : `Exact duplicate of row ${prior.rowNum} — will be skipped`;
     } else {
       row.status = 'dup-diff-inv';
       row.statusReason = `Same container as row ${prior.rowNum}, but different invoice number`;
