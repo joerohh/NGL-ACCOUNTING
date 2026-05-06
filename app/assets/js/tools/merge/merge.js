@@ -4,7 +4,7 @@
 import { state } from '../../shared/state.js';
 import {
   uid, fmtSize, escHtml, readAsArrayBuffer, triggerDownload,
-  normalizeHeader, findColumnKey, CONTAINER_ALIASES, INVOICE_ALIASES,
+  normalizeHeader, findColumnKey, CONTAINER_ALIASES, INVOICE_ALIASES, WO_ALIASES,
 } from '../../shared/utils.js';
 import { addLog, setProgress } from '../../shared/log.js';
 import { agentBridge } from '../../shared/agent-client.js';
@@ -147,6 +147,7 @@ export async function handleExcelFile(file) {
     // Fuzzy column detection
     const containerKey = findColumnKey(headers, CONTAINER_ALIASES);
     const invoiceKey   = findColumnKey(headers, INVOICE_ALIASES);
+    const woKey        = findColumnKey(headers, WO_ALIASES);
 
     if (!containerKey) {
       addLog('error', 'No "Container Number" column found');
@@ -162,6 +163,9 @@ export async function handleExcelFile(file) {
       addLog('warning', `No invoice number column found — agent will search by container number instead`);
       addLog('info', `Available columns: ${headers.join(', ')}`);
     }
+    if (woKey) {
+      addLog('info', `Matched work-order column: "${woKey}"`);
+    }
 
     // Parse rows — deduplicate by container number
     const seen = new Set();
@@ -173,6 +177,7 @@ export async function handleExcelFile(file) {
       parsed.push({
         containerNumber: cn,
         invoiceNumber: invoiceKey ? String(row[invoiceKey] || '').trim() : '',
+        workOrderNumber: woKey ? String(row[woKey] || '').trim() : '',
       });
     }
 
