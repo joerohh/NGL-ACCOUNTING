@@ -201,46 +201,34 @@ async function parseExcelFile(file) {
 }
 
 function validateRows(rows) {
-  // Walk in Excel order. Track first occurrence of each container.
-  const firstSeen = new Map();    // containerLower → { rowNum, invoiceNumber }
+  // Dedup by INV# only. Container/WO# are NOT used for duplicate detection.
+  // (See spec docs/superpowers/specs/2026-05-06-merge-tool-invoice-grouping-design.md §2.)
+  const seenInv = new Map();   // invLower → rowNum where it was first seen
   for (const row of rows) {
-    const key = row.containerNumber.toLowerCase();
-    const prior = firstSeen.get(key);
+    const inv = (row.invoiceNumber || '').trim();
 
-    if (!prior) {
-      firstSeen.set(key, { rowNum: row.rowNum, invoiceNumber: row.invoiceNumber });
-      if (!row.invoiceNumber) {
-        row.status = 'miss-inv';
-        row.statusReason = "No invoice number — we'll search by container instead";
-        row.selected = true;
-      } else {
-        row.status = 'ok';
-        row.statusReason = '';
-        row.selected = true;
-      }
+    if (!inv) {
+      // Soft-flag: keep the row, default-checked, yellow VERIFY badge.
+      row.status = 'miss-inv';
+      row.statusReason = 'No invoice number — please check before sending. Will merge with WO# as filename key.';
+      row.selected = true;
       continue;
     }
 
-    // This row's container was seen earlier.
-    // It's a same-content dup if either: both rows have the same invoice (case/whitespace-insensitive)
-    // OR both rows have no invoice number at all (truly identical content).
-    const bothMissing = !row.invoiceNumber && !prior.invoiceNumber;
-    const sameInv = bothMissing || (
-      row.invoiceNumber &&
-      prior.invoiceNumber &&
-      row.invoiceNumber.trim().toLowerCase() === prior.invoiceNumber.trim().toLowerCase()
-    );
-
-    if (sameInv) {
+    const invLower = inv.toLowerCase();
+    const priorRowNum = seenInv.get(invLower);
+    if (priorRowNum !== undefined) {
+      // True duplicate: same INV# as a previous row.
       row.status = 'dup-same-inv';
-      row.statusReason = bothMissing
-        ? `Same container as row ${prior.rowNum} — both have no invoice number, will be skipped`
-        : `Exact duplicate of row ${prior.rowNum} — will be skipped`;
-    } else {
-      row.status = 'dup-diff-inv';
-      row.statusReason = `Same container as row ${prior.rowNum}, but different invoice number`;
+      row.statusReason = `Exact duplicate of row ${priorRowNum} (same INV# ${inv}) — will be skipped`;
+      row.selected = false;
+      continue;
     }
-    row.selected = false;          // duplicates default to unchecked; user can opt back in
+
+    seenInv.set(invLower, row.rowNum);
+    row.status = 'ok';
+    row.statusReason = '';
+    row.selected = true;
   }
   return rows;
 }
