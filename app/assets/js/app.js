@@ -9,6 +9,8 @@ import { LS_CUSTOMERS } from './shared/constants.js';
 import { agentBridge } from './shared/agent-client.js';
 import { agentHealthCheck } from './agent-ui.js';
 import { renderPdfQueue, updateUI, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
+// Side-effect import: registers window.initMergeV2 / v2SetState / v2TriggerExcel for Settings toggle.
+import './tools/merge/merge-v2.js';
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
