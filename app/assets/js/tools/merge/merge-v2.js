@@ -11,11 +11,18 @@ import { escHtml } from '../../shared/utils.js';
 
 // ── Module-local state ──
 const v2State = {
-  subMode: 'empty',        // empty | loading | review | fetching | ready | merging | done
-  excelFile: null,         // File handle (M2 will parse it)
-  pendingMode: null,       // mode about to run (M4)
-  completedModes: [],      // mode keys that produced output this session (M4)
-  lastCompletedMode: null, // for the Done banner / focus (M4)
+  subMode: 'empty',          // empty | loading | review | fetching | ready | merging | done
+  excelFile: null,           // File handle
+  excelHeaders: [],          // Captured for diagnostics when alias matching fails
+  rows: [],                  // Array<{rowNum, containerNumber, invoiceNumber, customer, selected, status, statusReason}>
+  loadingError: null,        // Inline error shown on the loading state when parse fails
+  searchQuery: '',           // Live search box value
+  sortMode: 'excel',         // 'excel' | 'container' | 'invoice' | 'issues-first'
+  activeTab: 'all',          // 'all' | 'issues'
+  showAllInSuccess: false,   // Success-card "Show all rows" expander toggle
+  pendingMode: null,         // mode about to run (M4)
+  completedModes: [],        // mode keys that produced output this session (M4)
+  lastCompletedMode: null,   // for the Done banner / focus (M4)
 };
 
 // State group is what the header/toggle buttons key off.
@@ -57,7 +64,13 @@ export function setStateV2(name) {
     v2State.completedModes = [];
     v2State.lastCompletedMode = null;
     v2State.excelFile = null;
-    // Reset the file input value so a re-pick of the same file fires `change` again
+    v2State.excelHeaders = [];
+    v2State.rows = [];
+    v2State.loadingError = null;
+    v2State.searchQuery = '';
+    v2State.sortMode = 'excel';
+    v2State.activeTab = 'all';
+    v2State.showAllInSuccess = false;
     const xinput = document.getElementById('v2ExcelInput');
     if (xinput) xinput.value = '';
   }
