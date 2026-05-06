@@ -1542,6 +1542,21 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   content: ''; width: 14px; height: 14px; border-radius: 50%;
   background: transparent; border: 1.5px solid #cbd5e1; flex-shrink: 0;
 }
+
+/* Merge Tool v1 — Invoice-Grouping Fix (2026-05-06) */
+.container-group.miss-inv {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+}
+.container-group .verify-banner {
+  background: #fde68a;
+  color: #78350f;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 1px solid #fcd34d;
+}
 #mergeToolViewV2 .output-meta { font-size: 0.78rem; color: #64748b; margin-top: 3px; }
 #mergeToolViewV2 .output-actions { display: flex; gap: 6px; flex-shrink: 0; }
 #mergeToolViewV2 .output-action {

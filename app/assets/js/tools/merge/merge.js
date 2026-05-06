@@ -361,10 +361,19 @@ export function renderContainerGroups() {
     for (const dt of DOC_TYPES) byType[dt.key] = matched.filter(p => classifyPdf(p.name) === dt.key);
     const otherFiles = matched.filter(p => classifyPdf(p.name) === 'other');
 
+    const missInv = !row.invoiceNumber;
+    const cardClasses = ['container-group'];
+    if (isMatch) cardClasses.push('matched'); else cardClasses.push('unmatched');
+    if (missInv) cardClasses.push('miss-inv');
+
     return `
-      <div class="container-group ${isMatch ? 'matched' : 'unmatched'}">
+      <div class="${cardClasses.join(' ')}">
+        ${missInv ? `<div class="verify-banner">⚠ No invoice number — please check before sending. Will merge with WO# as filename key.</div>` : ''}
         <div class="container-group-header">
           <span style="font-size:0.95rem; font-weight:700; color:#0f172a; font-family:monospace; letter-spacing:0.02em;">${escHtml(row.containerNumber)}</span>
+          ${row.invoiceNumber
+            ? `<span style="font-size:0.8rem; font-weight:600; color:#475569; margin-left:10px;">INV ${escHtml(row.invoiceNumber)}</span>`
+            : ''}
           <span style="margin-left:auto; font-size:0.8rem; font-weight:600; color:${isMatch ? '#16a34a' : '#d97706'};">
             ${isMatch ? `${matched.length} file${matched.length !== 1 ? 's' : ''}` : 'No match'}
           </span>
@@ -391,7 +400,6 @@ export function renderContainerGroups() {
           </div>`).join('') : ''}
 
         ${!isMatch ? `<div style="font-size:0.8rem; color:#94a3b8; padding:4px 6px; margin-top:2px;">Upload a PDF with "${escHtml(row.containerNumber)}" in the filename</div>` : ''}
-        ${row.invoiceNumber ? `<div style="font-size:0.75rem; color:#94a3b8; padding:2px 6px;">Invoice #: ${escHtml(row.invoiceNumber)}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -807,8 +815,8 @@ async function runAutoMerge() {
   addLog('info', '──────────────────────────');
   addLog('success', `Complete: ${state.mergeResults.length} merged · ${failures.length} failed · ${(elapsed / 1000).toFixed(1)}s total`);
 
-  if (failures.length > 0) {
-    addLog('warning', `Failures: ${failures.map(f => f.containerNumber).join(', ')}`);
+  if (failures.length > 0 || (state.skippedRows && state.skippedRows.length > 0)) {
+    if (failures.length > 0) addLog('warning', `Failures: ${failures.map(f => f.containerNumber).join(', ')}`);
     renderFailureReport(failures);
   }
 
@@ -827,13 +835,21 @@ async function runAutoMerge() {
 function renderFailureReport(failures) {
   const rpt = document.getElementById('failureReport');
   const lst = document.getElementById('failureList');
-  lst.innerHTML = failures.map(f => `
+  const failureRows = failures.map(f => `
     <div class="failure-row">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       <span style="font-family:monospace; color:#dc2626; font-weight:600;">${escHtml(f.containerNumber)}</span>
       <span style="color:#94a3b8; font-size:0.8rem; margin-left:auto;">${escHtml(f.reason)}</span>
     </div>`).join('');
-  rpt.style.display = 'block';
+  const skippedRows = (state.skippedRows || []).map(s => `
+    <div class="failure-row" style="background:#fffbeb;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span style="font-family:monospace; color:#92400e; font-weight:600;">Excel row ${s.excelRow}</span>
+      <span style="color:#92400e; font-size:0.8rem; margin-left:8px;">${escHtml(s.containerNumber)}</span>
+      <span style="color:#92400e; font-size:0.8rem; margin-left:auto;">Skipped — duplicate of Excel row ${s.priorRow} (INV ${escHtml(s.invoiceNumber)})</span>
+    </div>`).join('');
+  lst.innerHTML = failureRows + skippedRows;
+  rpt.style.display = (failureRows || skippedRows) ? 'block' : 'none';
 }
 
 
