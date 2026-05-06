@@ -48,6 +48,7 @@ export function normalizeHeader(raw) {
 export const CSV_ALIASES = {
   invoiceNumber:   ['invoicenumber', 'invoice', 'invoiceid', 'invoiceno', 'inv', 'invno', 'invnumber', 'invnum', 'invid', 'docnumber', 'docno', 'invoicenum'],
   containerNumber: ['containernumber', 'container', 'containerid', 'containerno', 'cont', 'contno', 'contnumber', 'cntr', 'cntrnumber', 'cntrno', 'cntrid', 'ctr', 'ctrno', 'ctrnumber', 'equipment', 'equipmentnumber', 'equipmentno', 'equipmentid', 'eqno', 'eqnumber'],
+  workOrderNumber: ['workordernumber', 'workorder', 'workorderno', 'workorderid', 'wo', 'wono', 'wonumber', 'woid', 'wonum'],
   customerName:    ['customername', 'customer', 'name', 'client', 'clientname', 'companyname', 'company'],
   invoiceDate:     ['invoicedate', 'date', 'invdate', 'docdate', 'createdate', 'txndate', 'transactiondate'],
   dueDate:         ['duedate', 'due', 'paymentdue', 'dueby', 'paydate'],
@@ -63,6 +64,7 @@ export const CSV_ALIASES = {
 // Convenience shortcuts used by the Merge Tool
 export const CONTAINER_ALIASES = CSV_ALIASES.containerNumber;
 export const INVOICE_ALIASES   = CSV_ALIASES.invoiceNumber;
+export const WO_ALIASES        = CSV_ALIASES.workOrderNumber;
 
 export function findColumnKey(headers, aliases) {
   // Try exact normalized match first
@@ -78,4 +80,33 @@ export function findColumnKey(headers, aliases) {
     if (aliases.some(a => norm.includes(a))) return header;
   }
   return null;
+}
+
+// ── Merge filename helpers — shared between merge.js (v1) and merge-v2.js (v2 in M4) ──
+
+/** Returns "MM.DD" for today (e.g., "05.06"). */
+export function getDatePrefix() {
+  const d = new Date();
+  return String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
+}
+
+/**
+ * Build the filename for a merged-output PDF.
+ * Pattern: {datePrefix}_{key}_{container}_merged.pdf
+ *   - key = INV# if present
+ *   - else WO# if present
+ *   - else (omitted entirely — collapses to {datePrefix}_{container}_merged.pdf)
+ *
+ * Both INV# and WO# are trimmed; empty strings count as "missing".
+ *
+ * @param {{containerNumber: string, invoiceNumber?: string, workOrderNumber?: string}} row
+ * @param {string} datePrefix - typically from getDatePrefix()
+ * @returns {string}
+ */
+export function buildMergedFilename(row, datePrefix) {
+  const inv = (row.invoiceNumber || '').trim();
+  const wo  = (row.workOrderNumber || '').trim();
+  const key = inv || wo;
+  if (key) return `${datePrefix}_${key}_${row.containerNumber}_merged.pdf`;
+  return `${datePrefix}_${row.containerNumber}_merged.pdf`;
 }
