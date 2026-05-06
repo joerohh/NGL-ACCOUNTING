@@ -14,7 +14,7 @@ const v2State = {
   subMode: 'empty',          // empty | loading | review | fetching | ready | merging | done
   excelFile: null,           // File handle
   excelHeaders: [],          // Captured for diagnostics when alias matching fails
-  rows: [],                  // Array<{rowNum, containerNumber, invoiceNumber, customer, selected, status, statusReason}>
+  rows: [],                  // Array<{rowNum, containerNumber, invoiceNumber, workOrderNumber, customer, selected, status, statusReason}>
   loadingError: null,        // Inline error shown on the loading state when parse fails
   searchQuery: '',           // Live search box value
   sortMode: 'excel',         // 'excel' | 'container' | 'invoice' | 'issues-first'
@@ -166,6 +166,7 @@ async function parseExcelFile(file) {
   const headers = Object.keys(sheetRows[0]);
   const containerKey = findColumnKey(headers, CSV_ALIASES.containerNumber);
   const invoiceKey   = findColumnKey(headers, CSV_ALIASES.invoiceNumber);
+  const woKey        = findColumnKey(headers, CSV_ALIASES.workOrderNumber);
   const customerKey  = findCustomerColumn(headers);
 
   if (!containerKey) {
@@ -183,6 +184,7 @@ async function parseExcelFile(file) {
       rowNum: i + 2,            // sheet row 1 is headers, so first data row → 2
       containerNumber: cn,
       invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
+      workOrderNumber: woKey ? String(r[woKey] || '').trim() : '',
       customer: customerKey ? String(r[customerKey] || '').trim() : '',
       // selected/status/statusReason filled in by validateRows()
       selected: false,
@@ -195,7 +197,7 @@ async function parseExcelFile(file) {
     return { error: 'No usable rows — every row had an empty Container cell.' };
   }
 
-  return { rows, headers, containerKey, invoiceKey, customerKey };
+  return { rows, headers, containerKey, invoiceKey, woKey, customerKey };
 }
 
 function validateRows(rows) {
