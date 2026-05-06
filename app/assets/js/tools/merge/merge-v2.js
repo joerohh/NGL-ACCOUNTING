@@ -105,6 +105,8 @@ async function handleExcelChange(e) {
   if (result.error) {
     v2State.loadingError = result.error;
     setStateV2('loading');     // re-render with error state (renderLoading uses this field)
+    const xinput = document.getElementById('v2ExcelInput');
+    if (xinput) xinput.value = '';
     return;
   }
 
@@ -138,9 +140,12 @@ async function parseExcelFile(file) {
   try {
     wb = XLSX.read(buf, { type: 'array' });
   } catch (err) {
-    return { error: `Couldn't parse this file as Excel: ${err.message}` };
+    return { error: `Couldn't read this file as Excel — it may be corrupted or in an old format. Try saving as .xlsx in Excel and re-uploading. (Details: ${err.message})` };
   }
 
+  if (!wb || !wb.SheetNames) {
+    return { error: "Couldn't read this file as an Excel workbook." };
+  }
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return { error: 'This Excel file has no sheets.' };
   const ws = wb.Sheets[sheetName];
