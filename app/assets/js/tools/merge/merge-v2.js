@@ -85,6 +85,12 @@ export function setStateV2(name) {
   const renderer = STATES[group];
   const wa = document.getElementById('v2WorkArea');
   if (renderer && wa) wa.innerHTML = renderer();
+  // After any full re-render of the review pane, sync the visuals that depend on
+  // imperative DOM state (indeterminate checkbox, dynamic fetch count).
+  if (v2State.subMode === 'review' && v2State.rows.some(r => r.status !== 'ok')) {
+    updateMasterCheckbox();
+    updateFetchButton();
+  }
 }
 
 // ── Excel drop / pick ──
@@ -429,6 +435,28 @@ function updateMasterCheckbox() {
   }
 }
 
+function updateFetchButton() {
+  const btn = document.getElementById('v2BtnFetch');
+  if (!btn) return;
+  const sel = selectedCount();
+  const countSpan = btn.querySelector('.fetch-count');
+  if (countSpan) {
+    countSpan.textContent = sel;
+    // Rebuild button label entirely so the "Document(s)" pluralization stays in sync.
+    btn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Fetch <span class="fetch-count">${sel}</span> Document${sel !== 1 ? 's' : ''}
+    `;
+  }
+  if (sel === 0) {
+    btn.setAttribute('disabled', '');
+    btn.title = 'Check at least one row to fetch';
+  } else {
+    btn.removeAttribute('disabled');
+    btn.removeAttribute('title');
+  }
+}
+
 function renderReview() {
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   return hasIssues
@@ -565,11 +593,25 @@ function v2HandleSort(mode) {
   v2State.sortMode = mode;
   rerenderTbody();
 }
-function v2ToggleAll(_checked) {
-  // wired in Task 9 (Task 8 actually — see plan; either way, stub for now)
+function v2ToggleRow(rowNum, checked) {
+  const row = v2State.rows.find(r => r.rowNum === rowNum);
+  if (!row) return;
+  row.selected = !!checked;
+  updateMasterCheckbox();
+  updateFetchButton();
+}
+
+function v2ToggleAll(checked) {
+  const visibleRowNums = new Set(getVisibleRows().map(r => r.rowNum));
+  for (const row of v2State.rows) {
+    if (visibleRowNums.has(row.rowNum)) row.selected = !!checked;
+  }
+  rerenderTbody();
+  updateFetchButton();
 }
 window.v2HandleTabClick = v2HandleTabClick;
 window.v2HandleSearch   = v2HandleSearch;
 window.v2HandleSort     = v2HandleSort;
+window.v2ToggleRow      = v2ToggleRow;
 window.v2ToggleAll      = v2ToggleAll;
 window.initMergeV2 = initMergeV2;
