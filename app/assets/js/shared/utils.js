@@ -104,9 +104,12 @@ export function getDatePrefix() {
  * @returns {string}
  */
 export function buildMergedFilename(row, datePrefix) {
+  if (!row.containerNumber) throw new Error('buildMergedFilename: row.containerNumber is required');
+  const sanitize = s => String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
   const inv = (row.invoiceNumber || '').trim();
   const wo  = (row.workOrderNumber || '').trim();
   const key = inv || wo;
-  if (key) return `${datePrefix}_${key}_${row.containerNumber}_merged.pdf`;
-  return `${datePrefix}_${row.containerNumber}_merged.pdf`;
+  const container = sanitize(row.containerNumber);
+  if (key) return `${datePrefix}_${sanitize(key)}_${container}_merged.pdf`;
+  return `${datePrefix}_${container}_merged.pdf`;
 }
