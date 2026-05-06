@@ -406,12 +406,18 @@ async function handleAgentEvent(event, jobId) {
       updateAgentStatus(event.containerNumber, 'Checking for POD...');
       break;
 
-    case 'pod_found':
-      addLog('success', `[Agent] POD found for ${event.containerNumber}`);
+    case 'pod_found': {
+      const src = event.source ? ` (via ${event.source})` : '';
+      addLog('success', `[Agent] POD found for ${event.containerNumber}${src}`);
+      break;
+    }
+
+    case 'tms_pod_searching':
+      updateAgentStatus(event.containerNumber, 'Searching TMS for POD/BOL/POL...');
       break;
 
     case 'pod_missing':
-      addLog('warning', `[Agent] POD Missing: ${event.containerNumber} — not found in QBO`);
+      addLog('warning', `[Agent] POD Missing: ${event.containerNumber} — not found in QBO or TMS`);
       markPodMissing(event.containerNumber);
       break;
 

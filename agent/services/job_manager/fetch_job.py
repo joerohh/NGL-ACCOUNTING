@@ -2,13 +2,16 @@
 
 import asyncio
 import logging
+import shutil
+import tempfile
 import time
 import uuid
+from pathlib import Path
 
 from config import (
     DOWNLOADS_DIR, DEBUG_DIR,
     MAX_BATCH_SIZE, CONTAINER_TIMEOUT_S,
-    FETCH_CONCURRENCY,
+    FETCH_CONCURRENCY, TMS_FETCH_TIMEOUT_S,
 )
 from services.qbo_api.dedup import dedupe_attachments
 from utils import strip_motw
@@ -58,6 +61,60 @@ class FetchJobMixin:
         """Push an SSE event to the job's event queue."""
         event = {"type": event_type, "timestamp": time.time(), **data}
         await job.events.put(event)
+
+    async def _tms_pod_fallback(
+        self, job, container, invoice_data: dict, dest_path: Path,
+    ):
+        """Fetch a proof-of-delivery doc from TMS when QBO has none.
+
+        Tries POD → BOL → POL in order. Imports normally have POD; exports
+        (LE/PE/HE… prefix WOs) store the same logical doc as BOL or POL.
+        Returns the doc_type that succeeded, or None if TMS has nothing.
+        Writes the file to dest_path on success.
+        """
+        if not self._tms_data:
+            logger.info(
+                "TMSDataLayer not configured — skipping TMS POD fallback for %s",
+                container.container_number,
+            )
+            return None
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_fb_"))
+        try:
+            for doc_type in ("POD", "BOL", "POL"):
+                try:
+                    path = await asyncio.wait_for(
+                        self._tms_data.get_document(
+                            job.id, invoice_data, doc_type, temp_dir, source="api",
+                        ),
+                        timeout=TMS_FETCH_TIMEOUT_S,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "TMS get_document(%s) timed out for %s",
+                        doc_type, container.container_number,
+                    )
+                    continue
+                except Exception as e:
+                    logger.warning(
+                        "TMS get_document(%s) failed for %s: %s",
+                        doc_type, container.container_number, e,
+                    )
+                    continue
+
+                if path and path.exists():
+                    if dest_path.exists():
+                        dest_path.unlink()
+                    shutil.move(str(path), str(dest_path))
+                    logger.info(
+                        "TMS POD fallback succeeded for %s via %s",
+                        container.container_number, doc_type,
+                    )
+                    return doc_type
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        return None
 
     async def _process_one_container(self, job, container, result) -> None:
         """Process a single container via QBO API: search, download invoice, download POD."""
@@ -142,19 +199,20 @@ class FetchJobMixin:
             pod_candidates = [a for a in kept if a.get("docType") == "pod"]
             pod_att = max(pod_candidates, key=lambda a: int(a["id"])) if pod_candidates else None
 
+            pod_obtained = False
+            new_name = f"{container.container_number}_pod.pdf"
+            new_path = job.download_dir / new_name
+
             if pod_att:
                 pod_path = await api.download_attachment(
                     pod_att["id"], pod_att["fileName"], job.download_dir
                 )
                 if pod_path:
-                    new_name = f"{container.container_number}_pod.pdf"
-                    new_path = job.download_dir / new_name
                     if pod_path != new_path:
                         pod_path.rename(new_path)
                     strip_motw(new_path)
                     result.pod_file = new_name
 
-                    # Classify POD
                     pod_classification = await self._classifier.classify(new_path)
                     if pod_classification.needs_review:
                         result.needs_review = True
@@ -162,19 +220,47 @@ class FetchJobMixin:
                     await self._emit(job, "pod_found", {
                         "containerNumber": container.container_number,
                         "file": new_name,
+                        "source": "QBO",
+                    })
+                    pod_obtained = True
+                else:
+                    logger.warning(
+                        "QBO POD download failed for %s — trying TMS fallback",
+                        container.container_number,
+                    )
+
+            if not pod_obtained:
+                # Fall back to TMS Data Layer. Import WOs store the proof-of-delivery
+                # as POD; export WOs (LE/PE/HE… prefix) store it as BOL or POL.
+                # Try the chain so we don't have to special-case WO# parsing here.
+                await self._emit(job, "tms_pod_searching", {
+                    "containerNumber": container.container_number,
+                })
+                tms_doc_type = await self._tms_pod_fallback(
+                    job, container, invoice_data, new_path,
+                )
+                if tms_doc_type:
+                    strip_motw(new_path)
+                    result.pod_file = new_name
+
+                    pod_classification = await self._classifier.classify(new_path)
+                    if pod_classification.needs_review:
+                        result.needs_review = True
+
+                    await self._emit(job, "pod_found", {
+                        "containerNumber": container.container_number,
+                        "file": new_name,
+                        "source": f"TMS ({tms_doc_type})",
                     })
                 else:
                     result.pod_missing = True
                     await self._emit(job, "pod_missing", {
                         "containerNumber": container.container_number,
-                        "message": f"POD found but download failed for container {container.container_number}",
+                        "message": (
+                            f"No POD/BOL/POL found in QBO or TMS for "
+                            f"container {container.container_number}"
+                        ),
                     })
-            else:
-                result.pod_missing = True
-                await self._emit(job, "pod_missing", {
-                    "containerNumber": container.container_number,
-                    "message": f"No POD found in QBO for container {container.container_number}",
-                })
 
         # Step 4: Emit container complete
         await self._emit(job, "container_complete", {
@@ -195,6 +281,10 @@ class FetchJobMixin:
                 f.unlink()
             except Exception:
                 pass
+
+        # Clear TMS Data Layer failed-rows tracker for this job (mirrors send_job).
+        if self._tms_data:
+            self._tms_data.reset_for_new_job(job.id)
 
         # Verify QBO API connection before starting
         if not self._qbo_api or not self._qbo_api.is_connected:
