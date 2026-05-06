@@ -6,7 +6,8 @@
 export const state = {
   activeTool: 'home',  // 'home' | 'merge' | 'invoice-sender'
   pdfs: [],            // Array<{id, name, size, file}>
-  excelRows: [],       // Array<{containerNumber, invoiceNumber?}>
+  excelRows: [],       // Array<{containerNumber, invoiceNumber?, workOrderNumber?}>
+  skippedRows: [],     // Array<{excelRow, containerNumber, invoiceNumber, priorRow}>
   mergeResults: [],    // Array<{containerNumber, bytes, filename, subfolder}>
   isProcessing: false,
   logCollapsed: true,

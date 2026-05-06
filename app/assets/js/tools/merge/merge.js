@@ -169,12 +169,13 @@ export async function handleExcelFile(file) {
 
     // Parse rows — keep every row with a container number.
     // Dedup is now by INV# only (see invoice-grouping spec 2026-05-06).
-    const seenInv = new Map();   // invLower → original rowIndex (1-based for messages)
+    const seenInv = new Map();   // invLower → Excel row number (header is row 1, first data row is 2)
     const parsed = [];
     const skipped = [];
-    let rowIndex = 0;
+    let i = -1;   // becomes 0 for the first data row
     for (const row of rows) {
-      rowIndex++;
+      i++;
+      const excelRow = i + 2;  // Excel row 1 is the header
       const cn = String(row[containerKey] || '').trim();
       if (!cn) continue;          // a row without a container is unusable
       const inv = invoiceKey ? String(row[invoiceKey] || '').trim() : '';
@@ -183,12 +184,12 @@ export async function handleExcelFile(file) {
       // Same INV# as a previous row? Skip the duplicate.
       if (inv) {
         const invLower = inv.toLowerCase();
-        const priorIdx = seenInv.get(invLower);
-        if (priorIdx !== undefined) {
-          skipped.push({ rowIndex, containerNumber: cn, invoiceNumber: inv, priorIndex: priorIdx });
+        const priorRow = seenInv.get(invLower);
+        if (priorRow !== undefined) {
+          skipped.push({ excelRow, containerNumber: cn, invoiceNumber: inv, priorRow });
           continue;
         }
-        seenInv.set(invLower, rowIndex);
+        seenInv.set(invLower, excelRow);
       }
       // Rows with no INV# are never deduplicated (they get a Verify flag in the UI).
 
@@ -199,19 +200,20 @@ export async function handleExcelFile(file) {
       });
     }
 
+    state.excelRows = parsed;
+    state.skippedRows = skipped;     // surfaced in the failure report below the merge results
+
     if (parsed.length === 0) {
       addLog('error', 'No valid container numbers found in the spreadsheet');
       return;
     }
 
-    state.excelRows = parsed;
-    state.skippedRows = skipped;     // exposed for renderFailureReport in Task 5
     const uniqueContainers = new Set(parsed.map(r => r.containerNumber.toLowerCase())).size;
     const missInv = parsed.filter(r => !r.invoiceNumber).length;
     addLog('success', `Parsed ${parsed.length} invoice row${parsed.length !== 1 ? 's' : ''} (${uniqueContainers} unique container${uniqueContainers !== 1 ? 's' : ''})`);
     if (skipped.length > 0) {
       addLog('warning', `Skipped ${skipped.length} duplicate row${skipped.length !== 1 ? 's' : ''} (same INV# as another row):`);
-      skipped.forEach(s => addLog('warning', `  → row ${s.rowIndex}: INV ${s.invoiceNumber} (already seen at row ${s.priorIndex})`));
+      skipped.forEach(s => addLog('warning', `  → Excel row ${s.excelRow}: INV ${s.invoiceNumber} (already seen at Excel row ${s.priorRow})`));
     }
     if (missInv > 0) {
       addLog('warning', `${missInv} row${missInv !== 1 ? 's' : ''} missing INV# — flagged for verification`);
