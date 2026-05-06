@@ -328,6 +328,8 @@ function switchTool(tool) {
   // Hide all views
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('mergeToolView').style.display = 'none';
+  const mtV2 = document.getElementById('mergeToolViewV2');
+  if (mtV2) mtV2.style.display = 'none';
   document.getElementById('chassisFinderView').style.display = 'none';
   document.getElementById('invoiceSenderView').style.display = 'none';
   document.getElementById('customerView').style.display = 'none';
@@ -339,7 +341,12 @@ function switchTool(tool) {
     document.getElementById('homeView').style.display = '';
     refreshHomeMetrics();
   } else if (tool === 'merge') {
-    document.getElementById('mergeToolView').style.display = '';
+    if (localStorage.getItem('mergeToolV2') && document.getElementById('mergeToolViewV2')) {
+      document.getElementById('mergeToolViewV2').style.display = '';
+      if (window.initMergeV2) window.initMergeV2();
+    } else {
+      document.getElementById('mergeToolView').style.display = '';
+    }
   } else if (tool === 'chassis-finder') {
     document.getElementById('chassisFinderView').style.display = '';
     chassisInitDropZones();
