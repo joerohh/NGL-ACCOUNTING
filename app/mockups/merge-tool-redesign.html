@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Merge Tool Redesign v2</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  /* ─── Mockup banner ─── */
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .state-toggle {
+    margin-left: auto; display: flex; gap: 4px;
+    background: rgba(0,0,0,0.15); padding: 3px; border-radius: 8px;
+  }
+  .state-toggle button {
+    padding: 5px 14px; border: none; background: none;
+    color: rgba(255,255,255,0.85);
+    font-size: 0.76rem; font-weight: 600; cursor: pointer;
+    border-radius: 5px; font-family: inherit;
+  }
+  .state-toggle button:hover { color: white; }
+  .state-toggle button.active { background: white; color: #ea580c; }
+
+  /* ─── App layout ─── */
+  .app-layout { display: flex; min-height: calc(100vh - 38px); }
+
+  .sidebar {
+    width: 200px; min-width: 200px; background: #fff;
+    border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column;
+    height: calc(100vh - 38px); position: sticky; top: 38px;
+  }
+  .sidebar-logo {
+    padding: 16px 14px 14px; text-align: center;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .sidebar-logo .logo-mark {
+    width: 48px; height: 48px;
+    background: #0f172a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 6px;
+  }
+  .sidebar-logo .logo-title { font-size: 0.78rem; font-weight: 700; color: #0f172a; }
+  .sidebar-logo .logo-subtitle { font-size: 0.65rem; color: #94a3b8; margin-top: 2px; }
+  .sidebar-nav { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-section-label {
+    font-size: 0.62rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 14px 11px 5px;
+  }
+  .sidebar-nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border-radius: 7px; cursor: pointer;
+    color: #475569; font-size: 0.82rem; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .sidebar-nav-item:hover { background: #f8fafc; color: #1e293b; }
+  .sidebar-nav-item.active {
+    background: #fff7ed; color: #ea580c; font-weight: 600;
+    border-color: #fed7aa;
+  }
+  .sidebar-footer { padding: 10px 14px; border-top: 1px solid #f1f5f9; font-size: 0.7rem; color: #94a3b8; text-align: center; }
+
+  .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .tool-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid #e2e8f0; background: #fff;
+  }
+  .tool-title-group { display: flex; align-items: center; gap: 12px; }
+  .tool-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+  .tool-title-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #fff7ed; color: #ea580c;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tool-actions { display: flex; align-items: center; gap: 10px; }
+  .tool-switcher-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0;
+    background: #fff; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+    color: #475569; font-family: inherit;
+  }
+  .agent-indicator {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    font-size: 0.78rem; color: #15803d; font-weight: 500;
+  }
+  .agent-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #16a34a; box-shadow: 0 0 6px rgba(22,163,106,0.5);
+  }
+
+  .work-area { padding: 24px 28px; overflow-y: auto; flex: 1; }
+
+  /* ════════════════════════════════════════════════
+     CENTERED STAGE (used in Empty / Loading / Excel-Loaded / Done)
+     One canonical drop-zone size — never shrinks between steps.
+     ════════════════════════════════════════════════ */
+  .centered-stage {
+    display: flex; flex-direction: column; align-items: center;
+    max-width: 620px; margin: 0 auto;
+  }
+  .centered-stage h1 {
+    font-size: 1.4rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 6px; text-align: center;
+  }
+  .centered-stage .subtitle {
+    color: #64748b; font-size: 0.92rem;
+    margin-bottom: 22px; text-align: center;
+  }
+
+  /* The canonical "big drop" — same dimensions every time it appears */
+  .big-drop {
+    width: 100%; padding: 48px 32px;
+    border: 2px dashed #cbd5e1; border-radius: 14px;
+    background: #fff; text-align: center; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .big-drop:hover { border-color: #f97316; background: #fff7ed; }
+  .big-drop.kind-excel:hover .drop-icon { color: #16a34a; }
+  .big-drop.kind-pdf .drop-icon { color: #ea580c; }
+  .big-drop .drop-icon {
+    width: 56px; height: 56px; margin: 0 auto 16px;
+    color: #22c55e;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .big-drop .drop-title { font-size: 1.05rem; font-weight: 600; color: #1e293b; }
+  .big-drop .drop-help { font-size: 0.86rem; color: #64748b; margin-top: 6px; }
+  .big-drop .drop-types { font-size: 0.76rem; color: #94a3b8; margin-top: 14px; }
+
+  /* Hint chip below the drop zone (e.g., "Step 2 — drop PDFs next") */
+  .hint-chip {
+    margin-top: 18px; text-align: center;
+    color: #94a3b8; font-size: 0.84rem;
+  }
+  .hint-chip .step-num {
+    display: inline-block; width: 18px; height: 18px;
+    background: #f1f5f9; border-radius: 50%;
+    color: #64748b; font-weight: 700; font-size: 0.7rem;
+    line-height: 18px; margin-right: 6px;
+  }
+
+  /* File summary chip stacked above a centered drop zone */
+  .stage-file-summary {
+    width: 100%; margin-bottom: 16px;
+  }
+
+  /* ════════════════════════════════════════════════
+     REVIEW state — validation card after Excel parsed
+     ════════════════════════════════════════════════ */
+  .review-card {
+    width: 100%;
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 12px; padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .review-card.has-issues { border-color: #fde68a; background: #fffbeb; }
+  .review-card.all-clear  { border-color: #bbf7d0; background: #f0fdf4; }
+  .review-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px;
+  }
+  .review-head .badge {
+    width: 36px; height: 36px; border-radius: 50%;
+    color: white; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1rem;
+  }
+  .review-head .badge.warn { background: #f59e0b; }
+  .review-head .badge.ok   { background: #16a34a; }
+  .review-head h3 {
+    font-size: 1.02rem; font-weight: 700; color: #0f172a;
+  }
+  .review-head .sub {
+    font-size: 0.84rem; color: #64748b; margin-top: 2px;
+  }
+
+  .issue-group { margin-bottom: 14px; }
+  .issue-group:last-child { margin-bottom: 0; }
+  .issue-group .igh {
+    font-size: 0.74rem; font-weight: 700; color: #92400e;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .issue-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 12px; background: #fff;
+    border: 1px solid #fde68a; border-radius: 7px;
+    font-size: 0.84rem; color: #78350f;
+    margin-bottom: 5px;
+  }
+  .issue-row:last-child { margin-bottom: 0; }
+  .issue-row .ref {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.78rem; color: #92400e; font-weight: 600;
+    background: #fef3c7; padding: 2px 7px; border-radius: 4px;
+  }
+  .issue-row .where {
+    margin-left: auto; font-size: 0.76rem; color: #b45309;
+  }
+
+  .review-actions {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 18px; padding-top: 18px;
+    border-top: 1px solid #fde68a;
+  }
+  .review-card.all-clear .review-actions { border-top-color: #bbf7d0; }
+  .review-actions .secondary-btn {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 9px 16px;
+    font-size: 0.85rem; font-weight: 600; color: #475569;
+    cursor: pointer; font-family: inherit;
+  }
+  .review-actions .secondary-btn:hover { border-color: #cbd5e1; color: #1e293b; }
+
+  /* ════════════════════════════════════════════════
+     PDF drop card in top-bar (Fetching / Ready / Merging / Done)
+     Same dashed border style, sized to live in the top bar.
+     ════════════════════════════════════════════════ */
+  .pdf-drop-card {
+    background: #fff; border: 2px dashed #cbd5e1;
+    border-radius: 10px; padding: 12px 16px;
+    cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .pdf-drop-card:hover { border-color: #f97316; background: #fff7ed; }
+  .pdf-drop-card.has-failures {
+    border-color: #f59e0b; background: #fffbeb;
+  }
+  .pdf-drop-card.has-failures:hover { background: #fef3c7; }
+  .pdf-drop-card .icon-box {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: #fff7ed; color: #ea580c;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .pdf-drop-card .text { flex: 1; min-width: 0; }
+  .pdf-drop-card .label-line {
+    font-weight: 600; color: #1e293b; font-size: 0.86rem;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .pdf-drop-card .label-line .count-pill {
+    background: #ea580c; color: white;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700;
+  }
+  .pdf-drop-card .help { color: #64748b; font-size: 0.76rem; margin-top: 2px; }
+  .pdf-drop-card.has-failures .help { color: #b45309; }
+
+  /* ════════════════════════════════════════════════
+     PRE-FETCH validation badge (in Review state)
+     ════════════════════════════════════════════════ */
+  .val-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .val-badge.ok    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .val-badge.dup   { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .val-badge.miss  { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .val-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .val-badge.ok .dot { background: #16a34a; }
+  .val-badge.dup .dot { background: #f59e0b; }
+  .val-badge.miss .dot { background: #dc2626; }
+
+  /* Top-right action button next to the tabs */
+  .top-action-btn {
+    padding: 9px 18px; background: #ea580c; color: white;
+    border: none; border-radius: 8px; font-weight: 700;
+    font-size: 0.86rem; cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .top-action-btn:hover { background: #c2410c; }
+  .top-action-btn.disabled, .top-action-btn:disabled {
+    background: #fed7aa; cursor: not-allowed;
+  }
+
+  /* ════════════════════════════════════════════════
+     DETAIL SIDEBAR — slides in from right when a row is clicked.
+     Pattern matches the Invoice Sender review modal but as a sidebar.
+     ════════════════════════════════════════════════ */
+  .sidebar-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,0.35);
+    z-index: 200;
+    display: none;
+  }
+  .sidebar-backdrop.open { display: block; }
+
+  .detail-sidebar {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 520px; max-width: 90vw;
+    background: #fff;
+    border-left: 1px solid #e2e8f0;
+    box-shadow: -8px 0 24px rgba(0,0,0,0.08);
+    z-index: 201;
+    display: none;
+    flex-direction: column;
+  }
+  .detail-sidebar.open { display: flex; }
+
+  .ds-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    flex-shrink: 0;
+  }
+  .ds-header .ds-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: #fef2f2; color: #dc2626;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .ds-header .ds-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
+  .ds-header .ds-subtitle {
+    font-size: 0.8rem; color: #64748b; margin-top: 2px;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .ds-header .ds-close {
+    margin-left: auto;
+    background: none; border: none; cursor: pointer;
+    color: #94a3b8; padding: 6px; border-radius: 6px;
+  }
+  .ds-header .ds-close:hover { color: #1e293b; background: #fff; }
+
+  .ds-body {
+    flex: 1; overflow-y: auto;
+    padding: 20px;
+  }
+  .ds-section {
+    margin-bottom: 22px;
+  }
+  .ds-section:last-child { margin-bottom: 0; }
+  .ds-section-label {
+    font-size: 0.72rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  /* "What we found" doc list */
+  .ds-doc-list { display: flex; flex-direction: column; gap: 6px; }
+  .ds-doc-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    font-size: 0.84rem;
+  }
+  .ds-doc-row.found { background: #f0fdf4; border-color: #bbf7d0; }
+  .ds-doc-row.miss { background: #fef2f2; border-color: #fca5a5; }
+  .ds-doc-row .ds-doc-label { font-weight: 700; min-width: 50px; }
+  .ds-doc-row.found .ds-doc-label { color: #15803d; }
+  .ds-doc-row.miss .ds-doc-label { color: #b91c1c; }
+  .ds-doc-row .ds-doc-name {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.78rem; color: #475569;
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ds-doc-row.miss .ds-doc-name { color: #b91c1c; font-style: italic; }
+  .ds-doc-row .ds-doc-action {
+    background: #fff; border: 1px solid #e2e8f0;
+    padding: 4px 10px; border-radius: 5px;
+    font-size: 0.74rem; cursor: pointer; color: #475569;
+    font-family: inherit;
+  }
+  .ds-doc-row .ds-doc-action:hover { border-color: #ea580c; color: #ea580c; }
+
+  /* Retry API call button (sidebar primary action) */
+  .retry-api-btn {
+    width: 100%;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 16px;
+    background: #ea580c; color: white;
+    border: none; border-radius: 8px;
+    font-family: inherit; font-size: 0.88rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .retry-api-btn:hover { background: #c2410c; }
+
+  .resolve-divider {
+    text-align: center; margin: 14px 0;
+    font-size: 0.74rem; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    position: relative;
+  }
+  .resolve-divider::before, .resolve-divider::after {
+    content: ''; position: absolute; top: 50%;
+    width: calc(50% - 60px); height: 1px;
+    background: #e2e8f0;
+  }
+  .resolve-divider::before { left: 0; }
+  .resolve-divider::after { right: 0; }
+  .resolve-divider span {
+    background: #fff; padding: 0 8px;
+    position: relative;
+  }
+
+  /* Upload zone in sidebar */
+  .ds-upload {
+    border: 2px dashed #fca5a5;
+    border-radius: 10px;
+    background: #fef2f2;
+    padding: 22px 18px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ds-upload:hover { border-color: #dc2626; background: #fee2e2; }
+  .ds-upload .icon {
+    width: 36px; height: 36px; margin: 0 auto 8px;
+    color: #dc2626;
+  }
+  .ds-upload .title { font-size: 0.9rem; font-weight: 600; color: #b91c1c; }
+  .ds-upload .help { font-size: 0.78rem; color: #b91c1c; margin-top: 4px; opacity: 0.85; }
+
+  .ds-footer {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    flex-shrink: 0;
+  }
+  .ds-footer .skip-link {
+    font-size: 0.82rem; color: #64748b; cursor: pointer;
+    background: none; border: none; font-family: inherit;
+    text-decoration: underline;
+  }
+  .ds-footer .skip-link:hover { color: #dc2626; }
+  .ds-footer .nav-btn {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 7px; padding: 7px 12px;
+    font-size: 0.82rem; cursor: pointer; color: #475569;
+    font-family: inherit;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .ds-footer .nav-btn:hover { border-color: #ea580c; color: #ea580c; }
+  .ds-footer .save-btn {
+    background: #ea580c; color: white; border: none;
+    padding: 9px 18px; border-radius: 7px;
+    font-size: 0.84rem; font-weight: 700; cursor: pointer;
+    font-family: inherit; margin-left: auto;
+  }
+  .ds-footer .save-btn:hover { background: #c2410c; }
+
+  /* Failed rows in Ready state are clickable */
+  .merge-table tbody tr.row-clickable { cursor: pointer; }
+  .merge-table tbody tr.row-clickable:hover { background: #fff7ed; }
+
+  /* ════════════════════════════════════════════════
+     LOADING — spinner displayed inside the same .big-drop frame
+     so the box doesn't visually shrink between states.
+     ════════════════════════════════════════════════ */
+  .big-drop.loading { cursor: default; border-style: solid; border-color: #fed7aa; background: #fff7ed; }
+  .big-drop.loading:hover { background: #fff7ed; border-color: #fed7aa; }
+  .big-drop .big-spinner {
+    width: 56px; height: 56px; margin: 0 auto 16px;
+    border: 3px solid #fed7aa; border-top-color: #ea580c;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ════════════════════════════════════════════════
+     TOP BAR — file summary + persistent PDF drop
+     ════════════════════════════════════════════════ */
+  .top-bar {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 14px; margin-bottom: 18px;
+  }
+  .file-summary {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 12px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .file-summary .icon-box {
+    width: 36px; height: 36px; border-radius: 8px;
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.7rem; flex-shrink: 0;
+  }
+  .file-summary .icon-box.xlsx { background: #16a34a; }
+  .file-summary .icon-box.pdf  { background: #ea580c; }
+  .file-summary .text { flex: 1; min-width: 0; }
+  .file-summary .name {
+    font-weight: 600; color: #0f172a; font-size: 0.88rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-summary .meta { color: #64748b; font-size: 0.76rem; margin-top: 1px; }
+  .file-summary button {
+    background: none; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 5px 10px; font-size: 0.74rem; cursor: pointer;
+    color: #64748b; font-family: inherit;
+  }
+  .file-summary button:hover { border-color: #ea580c; color: #ea580c; }
+
+  /* Detected containers preview (between Excel-loaded and PDFs-dropped) */
+  .containers-preview {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 14px 18px;
+    font-size: 0.82rem; color: #64748b;
+  }
+  .containers-preview strong { color: #1e293b; }
+  .container-list {
+    margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px;
+  }
+  .container-list .chip {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.75rem; color: #475569;
+    background: #f1f5f9; padding: 3px 9px; border-radius: 5px;
+  }
+  .container-list .chip-more { color: #94a3b8; padding: 3px 4px; }
+
+  /* ════════════════════════════════════════════════
+     CONTROLS ROW — compact dropdowns
+     ════════════════════════════════════════════════ */
+  .controls-line {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .dropdown-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    font-size: 0.82rem; cursor: pointer; font-family: inherit;
+    color: #475569;
+  }
+  .dropdown-btn:hover { border-color: #cbd5e1; color: #1e293b; }
+  .dropdown-btn .dd-label {
+    color: #94a3b8; font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .dropdown-btn .dd-value { color: #1e293b; font-weight: 600; }
+  .dropdown-btn svg { color: #94a3b8; }
+
+  .summary-line {
+    color: #64748b; font-size: 0.86rem;
+    margin-left: auto;
+  }
+  .summary-line strong { color: #0f172a; font-weight: 700; }
+  .summary-line .ok { color: #16a34a; }
+  .summary-line .warn { color: #d97706; }
+
+  /* ════════════════════════════════════════════════
+     TABS
+     ════════════════════════════════════════════════ */
+  .tabs-row {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 2px solid #e2e8f0; margin-bottom: 0;
+  }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    padding: 9px 14px; background: none; border: none;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    cursor: pointer; font-size: 0.82rem; font-weight: 600;
+    color: #64748b; display: flex; align-items: center; gap: 7px;
+    font-family: inherit;
+  }
+  .tab:hover { color: #ea580c; }
+  .tab.active {
+    color: #ea580c; border-bottom-color: #ea580c;
+  }
+  .tab .count {
+    background: #f1f5f9; color: #475569;
+    padding: 1px 7px; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700;
+  }
+  .tab.active .count { background: #ea580c; color: white; }
+  .tab.has-issues .count { background: #fee2e2; color: #b91c1c; }
+
+  /* Toolbar above the table — search + sort dropdown */
+  .toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: #fff;
+    border: 1px solid #e2e8f0; border-top: none;
+    font-size: 0.82rem; color: #64748b;
+  }
+  .toolbar input.search {
+    flex: 0 1 320px;
+    padding: 6px 11px; border: 1px solid #cbd5e1; border-radius: 6px;
+    font-size: 0.84rem; font-family: inherit; color: #334155;
+    background: #fff;
+  }
+  .toolbar input.search:focus { outline: none; border-color: #ea580c; }
+  /* Custom-styled select that matches the orange theme */
+  select.sort-select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    padding: 7px 30px 7px 12px;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    font-size: 0.82rem; color: #1e293b; font-weight: 600;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    cursor: pointer; font-family: inherit;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  select.sort-select:hover { border-color: #fed7aa; color: #ea580c; }
+  select.sort-select:focus { outline: none; border-color: #ea580c; color: #ea580c; }
+  .toolbar .filter-meta { color: #94a3b8; margin-left: auto; }
+
+  /* ════════════════════════════════════════════════
+     MULTI-MERGE actions card (Ready state)
+     User can run multiple merge modes — each produces a separate output.
+     ════════════════════════════════════════════════ */
+  .merge-modes-card {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .merge-modes-help {
+    font-size: 0.8rem; color: #64748b;
+    margin-top: -4px; margin-bottom: 12px;
+  }
+  .mode-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px;
+  }
+  .mode-action {
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 4px;
+    padding: 11px 14px;
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 8px; cursor: pointer;
+    font-family: inherit; text-align: left;
+    transition: all 0.15s; position: relative;
+  }
+  .mode-action:hover {
+    border-color: #ea580c;
+    box-shadow: 0 1px 3px rgba(234,88,12,0.1);
+  }
+  .mode-action .mn {
+    font-size: 0.88rem; font-weight: 700; color: #0f172a;
+  }
+  .mode-action .mo {
+    font-size: 0.74rem; color: #64748b;
+  }
+  .mode-action.recommended {
+    border-color: #fed7aa; background: #fff7ed;
+  }
+  .mode-action.recommended .mn { color: #c2410c; }
+  .mode-action.recommended::before {
+    content: 'DEFAULT'; position: absolute;
+    top: -8px; right: 10px;
+    background: #ea580c; color: white;
+    font-size: 0.62rem; font-weight: 700;
+    padding: 2px 7px; border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+  .mode-action.completed {
+    background: #f0fdf4; border-color: #bbf7d0;
+  }
+  .mode-action.completed .mn { color: #15803d; }
+  .mode-action.completed .mo { color: #16a34a; }
+  .mode-action.completed::after {
+    content: '✓'; position: absolute;
+    top: 50%; right: 12px; transform: translateY(-50%);
+    color: #16a34a; font-weight: 700; font-size: 1rem;
+  }
+
+  .merge-modes-footer {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .merge-modes-footer .control-label {
+    font-size: 0.72rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .merge-modes-footer .summary {
+    margin-left: auto; font-size: 0.84rem; color: #64748b;
+  }
+  .merge-modes-footer .summary strong { color: #0f172a; }
+
+  /* ════════════════════════════════════════════════
+     READY-state action bar — single Run Merge button
+     (mode picker lives in Merge+Done state instead).
+     ════════════════════════════════════════════════ */
+  .ready-action-bar {
+    display: flex; align-items: center; gap: 14px;
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 12px 18px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .ready-status {
+    color: #475569; font-size: 0.86rem; flex: 1;
+  }
+  .ready-status strong { color: #0f172a; font-weight: 700; }
+  .ready-action-right {
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .ready-action-right .control-label {
+    font-size: 0.7rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .merge-btn.primary-merge {
+    padding: 9px 22px; font-size: 0.92rem;
+  }
+
+  .merge-btn {
+    padding: 9px 18px; background: #ea580c; color: white;
+    border: none; border-radius: 8px; font-weight: 700;
+    font-size: 0.86rem; cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .merge-btn:hover { background: #c2410c; }
+  .merge-btn:disabled { background: #fed7aa; cursor: not-allowed; }
+
+  /* ════════════════════════════════════════════════
+     TABLE
+     ════════════════════════════════════════════════ */
+  .table-wrap {
+    background: #fff; border: 1px solid #e2e8f0; border-top: none;
+    border-radius: 0 0 8px 8px; overflow: hidden;
+    max-height: calc(100vh - 420px);
+    min-height: 240px; overflow-y: auto;
+    margin-bottom: 18px;
+  }
+  .merge-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .merge-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+  .merge-table th {
+    padding: 10px 14px; text-align: left;
+    font-size: 0.68rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  .merge-table th input[type="checkbox"],
+  .merge-table td input[type="checkbox"] {
+    width: 15px; height: 15px; accent-color: #ea580c; cursor: pointer;
+  }
+  .merge-table td {
+    padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+    color: #334155; vertical-align: middle;
+  }
+  .merge-table tbody tr:hover { background: #fafafa; }
+  .merge-table tbody tr.row-issue { background: #fefce8; }
+  .merge-table tbody tr.row-issue:hover { background: #fef9c3; }
+  .merge-table tbody tr.row-merged { background: #f0fdf4; }
+  .merge-table tbody tr.row-processing { background: #eff6ff; }
+
+  .mono {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.82rem; font-weight: 600; color: #0f172a;
+  }
+  .mono-sub { color: #475569; font-weight: 500; }
+
+  /* Doc indicator — minimalist (just dots, no chips) */
+  .doc-row { display: flex; gap: 10px; align-items: center; font-size: 0.78rem; }
+  .doc-pair {
+    display: inline-flex; align-items: center; gap: 5px;
+    color: #475569;
+  }
+  .doc-pair .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1;
+  }
+  .doc-pair.ok .dot { background: #22c55e; }
+  .doc-pair.fallback .dot { background: #f59e0b; }
+  .doc-pair.miss .dot { background: #cbd5e1; }
+  .doc-pair.miss { color: #94a3b8; }
+  .doc-pair .label { font-weight: 600; }
+
+  /* Status — minimalist text indicators, not bordered badges */
+  .status-text {
+    font-size: 0.8rem; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .status-text.ready    { color: #16a34a; }
+  .status-text.issue    { color: #d97706; }
+  .status-text.error    { color: #dc2626; }
+  .status-text.merged   { color: #047857; }
+  .status-text.proc     { color: #1e40af; }
+  .status-text.queued   { color: #94a3b8; }
+
+  .small-spinner {
+    width: 11px; height: 11px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  .row-action {
+    background: none; border: 1px solid #e2e8f0; border-radius: 5px;
+    padding: 3px 9px; font-size: 0.74rem; cursor: pointer;
+    color: #475569; font-family: inherit;
+  }
+  .row-action:hover { border-color: #ea580c; color: #ea580c; }
+
+  /* ════════════════════════════════════════════════
+     PROCESSING progress bar — compact, no timer stats
+     ════════════════════════════════════════════════ */
+  .progress-line {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 12px 18px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .progress-line .now {
+    font-size: 0.88rem; color: #1e293b;
+    flex-shrink: 0;
+  }
+  .progress-line .now strong { color: #0f172a; font-weight: 700; }
+  .progress-line .now .container-name {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.82rem; color: #ea580c; font-weight: 700;
+  }
+  .progress-line .progress-track {
+    flex: 1;
+    background: #f1f5f9; height: 6px; border-radius: 3px; overflow: hidden;
+  }
+  .progress-line .progress-fill {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    height: 100%; border-radius: 3px; transition: width 0.3s;
+  }
+  .progress-line .cancel-btn {
+    background: none; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 6px 12px; font-size: 0.78rem; color: #64748b; cursor: pointer;
+    font-family: inherit; flex-shrink: 0;
+  }
+  .progress-line .cancel-btn:hover { border-color: #dc2626; color: #dc2626; }
+
+  /* Bottom utilities */
+  .bottom-utilities {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    margin-top: 18px;
+  }
+  .util-card {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; overflow: hidden;
+  }
+  .util-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; cursor: pointer;
+  }
+  .util-header .label {
+    font-size: 0.74rem; font-weight: 700; color: #475569;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .util-header .right {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.74rem; color: #94a3b8;
+  }
+  .util-body { padding: 0 16px 14px; display: none; border-top: 1px solid #f1f5f9; padding-top: 14px; }
+  .util-card.open .util-body { display: block; }
+  .util-card.open .util-arrow { transform: rotate(180deg); }
+  .util-arrow { transition: transform 0.2s; color: #94a3b8; }
+
+  /* ════════════════════════════════════════════════
+     OUTPUTS card (Done state) — list of merge outputs,
+     each row: name, status, view/run actions.
+     ════════════════════════════════════════════════ */
+  .outputs-card {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .output-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.15s;
+  }
+  .output-row:last-child { margin-bottom: 0; }
+  .output-row.done { background: #f0fdf4; border-color: #bbf7d0; }
+  .output-row.pending { cursor: pointer; }
+  .output-row.pending:hover { border-color: #ea580c; background: #fff7ed; }
+  .output-info { flex: 1; min-width: 0; }
+  .output-name {
+    font-size: 0.92rem; font-weight: 700; color: #0f172a;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .output-row.done .output-name { color: #15803d; }
+  .output-row.done .output-name::before {
+    content: '✓'; color: #16a34a;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #dcfce7;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.74rem; flex-shrink: 0;
+  }
+  .output-row.pending .output-name::before {
+    content: ''; width: 14px; height: 14px; border-radius: 50%;
+    background: transparent; border: 1.5px solid #cbd5e1; flex-shrink: 0;
+  }
+  .output-meta { font-size: 0.78rem; color: #64748b; margin-top: 3px; }
+  .output-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .output-action {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 6px; padding: 6px 12px;
+    font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    color: #475569; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .output-action:hover { border-color: #ea580c; color: #ea580c; }
+  .output-action.primary {
+    background: #ea580c; color: white; border-color: #ea580c;
+  }
+  .output-action.primary:hover { background: #c2410c; color: white; }
+
+  /* Demo trigger (mockup-only) */
+  .demo-trigger {
+    background: #1e293b; color: #f1f5f9;
+    padding: 8px 13px; border-radius: 7px;
+    font-size: 0.78rem; cursor: pointer; border: none;
+    font-family: inherit; font-weight: 500;
+    margin-bottom: 14px;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .demo-trigger:hover { background: #0f172a; }
+  .demo-trigger::before { content: "▶"; }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">MOCKUP v2</span>
+  <span>Merge Tool Redesign — Cleaner</span>
+  <div class="state-toggle">
+    <button data-state="s1" onclick="setState('empty')">1. Drop Excel</button>
+    <button data-state="s2" onclick="setState('review')">2. Review + Fetch</button>
+    <button data-state="s3" class="active" onclick="setState('ready')">3. Ready</button>
+    <button data-state="s4" onclick="setState('done')">4. Merge + Done</button>
+  </div>
+</div>
+
+<div class="app-layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+        </svg>
+      </div>
+      <div class="logo-title">NGL Transportation</div>
+      <div class="logo-subtitle">Accounting Suite</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="sidebar-section-label">Workspace</div>
+      <div class="sidebar-nav-item active">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        Merging Tool
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        INI Chassis Finder
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Invoice Sender
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        Customers
+      </div>
+      <div class="sidebar-nav-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Session History
+      </div>
+      <div class="sidebar-section-label" style="margin-top:14px;">System</div>
+      <div class="sidebar-nav-item" style="color:#94a3b8;">Settings</div>
+    </div>
+    <div class="sidebar-footer">v2.40.0</div>
+  </nav>
+
+  <!-- Main content -->
+  <div class="main-content">
+    <div class="tool-header">
+      <div class="tool-title-group">
+        <div class="tool-title-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-title">Merging Tool</div>
+          <div style="font-size:0.74rem; color:#94a3b8;">Combine invoices + PODs into per-container PDFs</div>
+        </div>
+      </div>
+      <div class="tool-actions">
+        <div class="agent-indicator"><span class="agent-dot"></span> Agent online</div>
+        <button class="tool-switcher-btn">
+          Switch Tool
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="work-area" id="workArea"><!-- injected by JS --></div>
+  </div>
+</div>
+
+<script>
+let subMode = 'ready';
+let pendingMode = null;
+let completedModes = [];        // tracks which merge modes have been run this session
+let lastCompletedMode = null;   // for the success banner
+
+const MODE_INFO = {
+  'per-container': { name: 'Per Container', mTeaser: '38 PDFs · one per WO',     mDone: '38 PDFs · 312 pages · 24.5 MB', folder: '/Per-Container/'      },
+  'all-in-one':    { name: 'All in One',    mTeaser: 'Combine all 38 into one PDF', mDone: '1 PDF · 312 pages · 24.5 MB', folder: '/All-in-One.pdf'      },
+  'invoices-only': { name: 'Invoices Only', mTeaser: '38 invoices in one PDF',  mDone: '1 PDF · 38 invoices · 96 pages', folder: '/Invoices-Only.pdf'    },
+  'pods-only':     { name: 'PODs Only',     mTeaser: '36 PODs in one PDF',      mDone: '1 PDF · 36 PODs · 184 pages',    folder: '/PODs-Only.pdf'        },
+  'bls-only':      { name: 'BLs Only',      mTeaser: 'BLs in one PDF',          mDone: '1 PDF · 12 BLs · 32 pages',      folder: '/BLs-Only.pdf'         },
+};
+
+function startMerge(mode) {
+  pendingMode = mode;
+  setState('merging');
+}
+
+const STATE_GROUP = {
+  empty: 's1', loading: 's1',
+  review: 's2', fetching: 's2',
+  ready: 's3',
+  merging: 's4', done: 's4',
+};
+
+const STATES = {
+  s1: () => subMode === 'loading' ? renderLoading() : renderEmpty(),
+  s2: () => subMode === 'fetching' ? renderFetching() : renderReview(),
+  s3: () => renderReady(),
+  s4: () => subMode === 'merging' ? renderMerging() : renderDone(),
+};
+
+// ─── State 1: Empty + Loading ──────────────────────
+function renderEmpty() {
+  return `
+    <div class="centered-stage">
+      <h1>Start a new merge</h1>
+      <p class="subtitle">Upload your Excel manifest first — we'll match PDFs to it next.</p>
+      <div class="big-drop kind-excel" onclick="setState('loading')">
+        <div class="drop-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drop Excel Manifest</div>
+        <div class="drop-help">Needs a Container Number column to match PDFs automatically</div>
+        <div class="drop-types">.xlsx · .xls · .csv</div>
+      </div>
+      <div class="hint-chip"><span class="step-num">2</span> We'll check the manifest, then fetch from APIs</div>
+    </div>
+  `;
+}
+function renderLoading() {
+  return `
+    <div class="centered-stage">
+      <h1>Start a new merge</h1>
+      <p class="subtitle">Upload your Excel manifest first — we'll match PDFs to it next.</p>
+      <div class="big-drop loading">
+        <div class="big-spinner"></div>
+        <div class="drop-title">Loading…</div>
+        <div class="drop-help">Reading container numbers and checking for issues</div>
+      </div>
+      <div class="hint-chip"><span class="step-num">2</span> We'll check the manifest, then fetch from APIs</div>
+    </div>
+    <script>setTimeout(() => setState('review'), 1200);<\/script>
+  `;
+}
+
+// ─── State 2: Review + Fetching ────────────────────
+function renderReview() {
+  return `
+    ${topBarOnlyExcel()}
+    <div class="controls-line" style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:11px 16px;">
+      <div style="font-size:0.86rem; color:#78350f;">
+        <strong style="color:#92400e;">3 issues</strong> in your manifest — review the rows below, then start the fetch.
+      </div>
+      <div class="summary-line" style="margin-left:auto; color:#78350f;">
+        <span class="ok">●</span> <strong>37</strong> ok &nbsp;·&nbsp;
+        <span class="warn">●</span> <strong>3</strong> issues
+      </div>
+    </div>
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab active">All <span class="count">40</span></button>
+        <button class="tab has-issues">Issues <span class="count">3</span></button>
+      </div>
+      <div style="padding-bottom:8px;">
+        <button class="top-action-btn" onclick="setState('fetching')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Fetch 40 Documents
+        </button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="Search containers…" />
+      <select class="sort-select">
+        <option>Sort: Excel Order</option>
+        <option>Sort: Container #</option>
+        <option>Sort: Invoice #</option>
+        <option>Sort: Issues first</option>
+      </select>
+      <span class="filter-meta">40 unique · 3 issues</span>
+    </div>
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead>
+          <tr>
+            <th style="width:36px;"><input type="checkbox" checked /></th>
+            <th>Row</th>
+            <th>Container ▼</th>
+            <th>Invoice #</th>
+            <th>Customer</th>
+            <th>Validation</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowPreFetchOk(1, 'KMTU3920184', '24-13888', 'OOCL')}
+          ${rowPreFetchOk(2, 'TCNU5839271', '24-13889', 'COSCO')}
+          ${rowPreFetchOk(3, 'GLDU9182435', '24-13890', 'KMTC LINE')}
+          ${rowPreFetchOk(4, 'KKFU7654819', '24-13892', 'KMTC LINE')}
+          ${rowPreFetchOk(5, 'NYKU8273619', '24-13891', 'ONE LINE')}
+          ${rowPreFetchOk(6, 'MAGU5764069', '24-13893', 'KMTC LINE')}
+          ${rowPreFetchDup(17, 'KKFU7654819', '24-13905', 'KMTC LINE', 'Same container as row 4 (different invoice)')}
+          ${rowPreFetchDup(22, 'MAGU5764069', '24-13893', 'KMTC LINE', 'Same container + invoice as row 6 (will be skipped)')}
+          ${rowPreFetchOk(7, 'TGBU5948072', '24-13894', 'YANG MING LINES')}
+          ${rowPreFetchMiss(31, 'TCLU8830712', '', 'EVERGREEN', 'No invoice # — fetch will search by container only')}
+          ${rowPreFetchOk(8, 'OOLU9931842', '24-13896', 'OOCL')}
+          ${rowPreFetchOk(9, 'CSLU6072281', '24-13897', 'COSCO')}
+          ${rowPreFetchOk(10, 'FCIU8127539', '24-13898', 'CMA-CGM')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderFetching() {
+  return `
+    ${topBarWithDrop({ pdfCount: 12, hasFailures: false, helpText: 'Drop PDFs to pre-empt API failures' })}
+    <div class="progress-line">
+      <div class="now"><strong>Fetching 14 / 40</strong> &nbsp; <span class="container-name">TLLU8847203</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:35%;"></div></div>
+      <button class="cancel-btn">Cancel</button>
+    </div>
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab active">All <span class="count">40</span></button>
+        <button class="tab">Fetched <span class="count">12</span></button>
+        <button class="tab has-issues">Failed <span class="count">2</span></button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="Search containers…" />
+      <select class="sort-select">
+        <option>Sort: Excel Order</option>
+        <option>Sort: Container #</option>
+        <option>Sort: Issues first</option>
+      </select>
+      <span class="filter-meta">14 / 40 fetched · 2 failed</span>
+    </div>
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead><tr>
+          <th style="width:36px;"></th><th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Documents</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${rowFetched('KKFU7654819', '24-13892', 'KMTC LINE')}
+          ${rowFetched('MAGU5764069', '24-13893', 'KMTC LINE')}
+          ${rowFetched('TGBU5948072', '24-13894', 'YANG MING LINES')}
+          ${rowFetchFailed('TCLU8830712', '24-13895', 'EVERGREEN', 'POD not in TMS')}
+          ${rowFetched('OOLU9931842', '24-13896', 'OOCL')}
+          ${rowFetchFailed('FCIU8127539', '24-13898', 'CMA-CGM', 'TMS API timeout')}
+          ${rowFetching('TLLU8847203', '24-13900', 'YANG MING LINES', 'Searching TMS for POD…')}
+          ${rowQueued('GESU9382014', '24-13901', 'KMTC LINE')}
+          ${rowQueued('NYKU3842910', '24-13902', 'ONE LINE')}
+        </tbody>
+      </table>
+    </div>
+    <script>setTimeout(() => { if (subMode === 'fetching') setState('ready'); }, 2200);<\/script>
+  `;
+}
+
+// ─── State 3: Ready ────────────────────────────────
+function renderReady() {
+  return `
+    ${topBarWithDrop({ pdfCount: 38, hasFailures: true, helpText: 'Or drop PDFs in bulk — sidebar lets you fix one row at a time' })}
+
+    <!-- Single primary action: review errors, then run the merge.
+         Output mode picker lives in Done state for additional outputs. -->
+    <div class="ready-action-bar">
+      <div class="ready-status">
+        <span style="color:#16a34a;">●</span> <strong>38 of 40</strong> ready to merge
+        <span style="color:#cbd5e1; margin: 0 6px;">·</span>
+        <span style="color:#d97706;">●</span> <strong>2</strong> need fixing <span style="color:#94a3b8;">(click any error row)</span>
+      </div>
+      <div class="ready-action-right">
+        <span class="control-label">Sort</span>
+        <select class="sort-select">
+          <option>Excel Order</option>
+          <option>Container #</option>
+          <option>Invoice #</option>
+        </select>
+        <button class="merge-btn primary-merge" onclick="completedModes = []; lastCompletedMode = null; startMerge('per-container')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+          Run Merge
+        </button>
+      </div>
+    </div>
+
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab active">All <span class="count">40</span></button>
+        <button class="tab has-issues">Errors <span class="count">2</span></button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="Search containers…" />
+      <select class="sort-select">
+        <option>Sort: Excel Order</option>
+        <option>Sort: Container #</option>
+        <option>Sort: Issues first</option>
+      </select>
+      <span class="filter-meta">40 containers · 2 need PDFs</span>
+    </div>
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead><tr>
+          <th style="width:36px;"><input type="checkbox" checked /></th>
+          <th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Documents</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${rowFetched('KMTU3920184', '24-13888', 'OOCL')}
+          ${rowFetched('TCNU5839271', '24-13889', 'COSCO')}
+          ${rowFetched('GLDU9182435', '24-13890', 'KMTC LINE')}
+          ${rowFetched('KKFU7654819', '24-13892', 'KMTC LINE')}
+          ${rowFetched('NYKU8273619', '24-13891', 'ONE LINE')}
+          ${rowFetched('MAGU5764069', '24-13893', 'KMTC LINE')}
+          ${rowFetched('TGBU5948072', '24-13894', 'YANG MING LINES')}
+          ${rowFailedClickable('TCLU8830712', '24-13895', 'EVERGREEN', 'POD not in TMS', true)}
+          ${rowFetched('OOLU9931842', '24-13896', 'OOCL')}
+          ${rowFetched('CSLU6072281', '24-13897', 'COSCO')}
+          ${rowFailedClickable('FCIU8127539', '24-13898', 'CMA-CGM', 'TMS API timeout', false)}
+          ${rowFetched('TLLU8847203', '24-13900', 'YANG MING LINES')}
+          ${rowFetched('GESU9382014', '24-13901', 'KMTC LINE')}
+          ${rowFetched('NYKU3842910', '24-13902', 'ONE LINE')}
+        </tbody>
+      </table>
+    </div>
+
+    ${sidebarMarkup()}
+    <div class="sidebar-backdrop open" onclick="closeSidebar()"></div>
+  `;
+}
+
+// ─── State 4: Merging + Done ───────────────────────
+function renderMerging() {
+  const mode = pendingMode ? MODE_INFO[pendingMode] : MODE_INFO['per-container'];
+  return `
+    ${topBarWithDrop({ pdfCount: 38, hasFailures: false, helpText: 'Drop more PDFs for late additions' })}
+    <div class="progress-line">
+      <div class="now"><strong>Running ${mode.name} merge</strong> &nbsp; · &nbsp; <span class="container-name">18 / 38</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:47%;"></div></div>
+      <button class="cancel-btn">Cancel</button>
+    </div>
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab active">All <span class="count">38</span></button>
+        <button class="tab">Done <span class="count">17</span></button>
+        <button class="tab">Pending <span class="count">21</span></button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead><tr>
+          <th style="width:36px;"></th><th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Documents</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${rowMerged('KKFU7654819', '24-13892', 'KMTC LINE')}
+          ${rowMerged('MAGU5764069', '24-13893', 'KMTC LINE')}
+          ${rowMerged('TGBU5948072', '24-13894', 'YANG MING LINES')}
+          ${rowMerged('OOLU9931842', '24-13896', 'OOCL')}
+          ${rowProcessing('TLLU8847203', '24-13900', 'YANG MING LINES')}
+          ${rowQueued('GESU9382014', '24-13901', 'KMTC LINE')}
+          ${rowQueued('NYKU3842910', '24-13902', 'ONE LINE')}
+        </tbody>
+      </table>
+    </div>
+    <script>setTimeout(() => { if (subMode === 'merging') setState('done'); }, 2200);<\/script>
+  `;
+}
+
+function renderDone() {
+  const last = lastCompletedMode ? MODE_INFO[lastCompletedMode] : null;
+  const banner = last ? `
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px 18px; margin-bottom:18px; display:flex; align-items:center; gap:14px;">
+      <div style="width:36px; height:36px; border-radius:50%; background:#16a34a; color:white; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">✓</div>
+      <div style="flex:1;">
+        <div style="font-weight:700; color:#15803d; font-size:0.92rem;">${last.name} merge complete · 38 of 38</div>
+        <div style="color:#166534; font-size:0.82rem; margin-top:2px;">
+          Saved to <span style="font-family:'SF Mono',Consolas,monospace;">NGL_Merged_2026-05-05${last.folder}</span>
+          <span style="color:#16a34a; margin-left:6px;">·</span>
+          <span style="color:#16a34a; font-weight:600;">📂 Folder opened in Explorer</span>
+        </div>
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    ${topBarWithDrop({ pdfCount: 38, hasFailures: false, helpText: 'Drop more PDFs to add to a future merge' })}
+    ${banner}
+    ${outputsMarkup()}
+  `;
+}
+
+// ─── Helpers ───────────────────────────────────────
+function topBarOnlyExcel() {
+  return `
+    <div class="top-bar" style="grid-template-columns: 1fr;">
+      <div class="file-summary">
+        <div class="icon-box xlsx">XLS</div>
+        <div class="text">
+          <div class="name">APAR_Reconcile_05-05-26.xlsx</div>
+          <div class="meta">42 rows parsed · 40 unique containers · 3 issues</div>
+        </div>
+        <button onclick="setState('empty')">Replace</button>
+      </div>
+    </div>
+  `;
+}
+
+function topBarWithDrop({ pdfCount, hasFailures, helpText }) {
+  const cardClass = hasFailures ? 'pdf-drop-card has-failures' : 'pdf-drop-card';
+  const help = helpText || 'Drop more PDFs here for missing or late docs';
+  return `
+    <div class="top-bar">
+      <div class="file-summary">
+        <div class="icon-box xlsx">XLS</div>
+        <div class="text">
+          <div class="name">APAR_Reconcile_05-05-26.xlsx</div>
+          <div class="meta">40 unique containers</div>
+        </div>
+      </div>
+      <div class="${cardClass}">
+        <div class="icon-box">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+        </div>
+        <div class="text">
+          <div class="label-line">PDFs <span class="count-pill">${pdfCount}</span></div>
+          <div class="help">${help}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function docPair(label, state) {
+  return `<span class="doc-pair ${state}"><span class="dot"></span><span class="label">${label}</span></span>`;
+}
+function docs(invState, podState) {
+  return `<div class="doc-row">${docPair('INV', invState)}${docPair('POD', podState)}</div>`;
+}
+
+// Pre-fetch (Review state)
+function rowPreFetchOk(n, c, i, cu) {
+  return `<tr>
+    <td><input type="checkbox" checked /></td>
+    <td style="color:#94a3b8; font-size:0.8rem;">${n}</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td><span class="val-badge ok"><span class="dot"></span>OK</span></td>
+  </tr>`;
+}
+function rowPreFetchDup(n, c, i, cu, r) {
+  return `<tr class="row-issue">
+    <td><input type="checkbox" /></td>
+    <td style="color:#94a3b8; font-size:0.8rem;">${n}</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>
+      <span class="val-badge dup"><span class="dot"></span>Duplicate</span>
+      <div style="font-size:0.72rem; color:#92400e; margin-top:3px;">${r}</div>
+    </td>
+  </tr>`;
+}
+function rowPreFetchMiss(n, c, i, cu, r) {
+  return `<tr class="row-issue">
+    <td><input type="checkbox" checked /></td>
+    <td style="color:#94a3b8; font-size:0.8rem;">${n}</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub" style="color:#dc2626;">${i || '— missing —'}</span></td>
+    <td>${cu}</td>
+    <td>
+      <span class="val-badge miss"><span class="dot"></span>Missing Inv #</span>
+      <div style="font-size:0.72rem; color:#b91c1c; margin-top:3px;">${r}</div>
+    </td>
+  </tr>`;
+}
+
+// Fetching/Ready rows
+function rowFetched(c, i, cu) {
+  return `<tr>
+    <td>✓</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>${docs('ok','ok')}</td>
+    <td><span class="status-text ready">Fetched</span></td>
+    <td></td>
+  </tr>`;
+}
+function rowFetching(c, i, cu, lbl) {
+  return `<tr class="row-processing">
+    <td><div class="small-spinner" style="color:#1e40af;"></div></td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td><span style="color:#1e40af; font-size:0.8rem;">${lbl}</span></td>
+    <td><span class="status-text proc">Fetching…</span></td>
+    <td></td>
+  </tr>`;
+}
+function rowFetchFailed(c, i, cu, r) {
+  return `<tr class="row-issue row-clickable" onclick="openSidebar('${c}')">
+    <td onclick="event.stopPropagation()">✗</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>
+      ${docs('ok','miss')}
+      <div style="font-size:0.72rem; color:#b45309; margin-top:3px;">${r}</div>
+    </td>
+    <td><span class="status-text issue">API failed</span></td>
+    <td><button class="row-action" onclick="event.stopPropagation(); openSidebar('${c}')">Fix Error</button></td>
+  </tr>`;
+}
+function rowFailedClickable(c, i, cu, r, isOpen) {
+  return `<tr class="row-issue row-clickable" onclick="openSidebar('${c}')" style="${isOpen ? 'background:#fff7ed; box-shadow: inset 3px 0 0 #ea580c;' : ''}">
+    <td onclick="event.stopPropagation()"><input type="checkbox" /></td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>
+      ${docs('ok','miss')}
+      <div style="font-size:0.72rem; color:#b45309; margin-top:3px;">${r}</div>
+    </td>
+    <td><span class="status-text issue">Needs PDF</span></td>
+    <td><button class="row-action" onclick="event.stopPropagation(); openSidebar('${c}')">Fix Error</button></td>
+  </tr>`;
+}
+
+// Merging/Done rows
+function rowMerged(c, i, cu) {
+  return `<tr class="row-merged">
+    <td>✓</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>${docs('ok','ok')}</td>
+    <td><span class="status-text merged">Merged</span></td>
+    <td><button class="row-action">View</button></td>
+  </tr>`;
+}
+function rowProcessing(c, i, cu) {
+  return `<tr class="row-processing">
+    <td><div class="small-spinner" style="color:#1e40af;"></div></td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>${docs('ok','ok')}</td>
+    <td><span class="status-text proc"><div class="small-spinner"></div>Merging…</span></td>
+    <td></td>
+  </tr>`;
+}
+function rowQueued(c, i, cu) {
+  return `<tr style="opacity:0.6;">
+    <td>—</td>
+    <td><span class="mono">${c}</span></td>
+    <td><span class="mono mono-sub">${i}</span></td>
+    <td>${cu}</td>
+    <td>${docs('ok','ok')}</td>
+    <td><span class="status-text queued">Queued</span></td>
+    <td></td>
+  </tr>`;
+}
+
+// Sidebar — used in Ready state for fixing fetch errors
+function sidebarMarkup() {
+  return `
+    <div class="detail-sidebar open" id="detailSidebar">
+      <div class="ds-header">
+        <div class="ds-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div>
+          <div class="ds-title">Fix Container Error</div>
+          <div class="ds-subtitle">TCLU8830712 · Invoice 24-13895</div>
+        </div>
+        <button class="ds-close" onclick="closeSidebar()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="ds-body">
+        <div class="ds-section">
+          <div class="section-label">Customer</div>
+          <div style="font-size:0.92rem; font-weight:600; color:#0f172a;">EVERGREEN</div>
+        </div>
+
+        <div class="ds-section">
+          <div class="section-label">What Happened</div>
+          <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:12px 14px;">
+            <div style="font-size:0.86rem; font-weight:600; color:#b91c1c; margin-bottom:4px;">POD not found in TMS</div>
+            <div style="font-size:0.8rem; color:#7f1d1d; line-height:1.5;">
+              The TMS API returned no document of type <strong>POD</strong> for work order <span style="font-family:'SF Mono',Consolas,monospace; background:#fee2e2; padding:1px 5px; border-radius:3px;">LM2602170012</span>. The invoice was found and is ready to merge.
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-section">
+          <div class="section-label">How to Fix It</div>
+          <ol style="margin:0; padding-left:22px; color:#475569; font-size:0.84rem; line-height:1.7;">
+            <li>Try <strong>Retry API</strong> — sometimes TMS is just slow.</li>
+            <li>If retry fails, find the POD elsewhere (email, dispatcher, carrier portal).</li>
+            <li>Drop the PDF in the upload box below — it'll attach to this container.</li>
+          </ol>
+        </div>
+
+        <div class="ds-section">
+          <div class="section-label">Resolve</div>
+          <button class="retry-api-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Retry API call
+          </button>
+          <div class="resolve-divider"><span>or upload manually</span></div>
+          <div class="ds-upload">
+            <div class="icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="title">Drop POD for TCLU8830712</div>
+            <div class="help">.pdf only — replaces whatever the API would have returned</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ds-footer">
+        <button class="skip-link">Skip this container</button>
+        <button class="nav-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Prev
+        </button>
+        <button class="nav-btn">
+          Next
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="save-btn">Save & Resolve</button>
+      </div>
+    </div>
+  `;
+}
+
+function openSidebar(c) {
+  const sb = document.getElementById('detailSidebar');
+  const bd = document.querySelector('.sidebar-backdrop');
+  if (sb) sb.classList.add('open');
+  if (bd) bd.classList.add('open');
+}
+function closeSidebar() {
+  const sb = document.getElementById('detailSidebar');
+  const bd = document.querySelector('.sidebar-backdrop');
+  if (sb) sb.classList.remove('open');
+  if (bd) bd.classList.remove('open');
+}
+
+// Outputs viewer (Done state) — dynamic based on completedModes
+function outputsMarkup() {
+  const rows = Object.entries(MODE_INFO).map(([key, info]) => {
+    const isDone = completedModes.includes(key);
+    if (isDone) {
+      return `
+        <div class="output-row done">
+          <div class="output-info">
+            <div class="output-name">${info.name}</div>
+            <div class="output-meta">${info.mDone} · saved to <span style="font-family:'SF Mono',Consolas,monospace;">${info.folder}</span></div>
+          </div>
+          <div class="output-actions">
+            <button class="output-action" title="Reopen output folder in Explorer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Open Folder
+            </button>
+            <button class="output-action">${key === 'per-container' ? 'View List (38)' : 'View'}</button>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="output-row pending" onclick="startMerge('${key}')">
+        <div class="output-info">
+          <div class="output-name">${info.name}</div>
+          <div class="output-meta">${info.mTeaser}</div>
+        </div>
+        <button class="output-action primary" onclick="event.stopPropagation(); startMerge('${key}')">Run This Merge</button>
+      </div>`;
+  }).join('');
+
+  const help = completedModes.length === 0
+    ? 'No merges run yet. Click any output to produce one — run as many as you want.'
+    : completedModes.length === 5
+      ? 'All 5 outputs produced. Open any folder above or use the top-bar drop card to add more PDFs and re-run.'
+      : `${completedModes.length} of 5 outputs produced. Run another mode to add a new output — each saves separately.`;
+
+  return `
+    <div class="outputs-card">
+      <div class="section-label" style="margin-bottom:6px;">Outputs</div>
+      <p class="merge-modes-help">${help}</p>
+      ${rows}
+    </div>
+  `;
+}
+
+// State manager
+function setState(name) {
+  // When arriving at Done from a merge, mark the pending mode as completed
+  if (name === 'done' && pendingMode) {
+    if (!completedModes.includes(pendingMode)) {
+      completedModes.push(pendingMode);
+    }
+    lastCompletedMode = pendingMode;
+    pendingMode = null;
+  }
+  subMode = name;
+  const group = STATE_GROUP[name] || name;
+  document.querySelectorAll('.state-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.state === group);
+  });
+  document.getElementById('workArea').innerHTML = STATES[group]();
+}
+
+// Seed the demo so Done state shows a realistic post-merge snapshot
+completedModes = ['per-container'];
+lastCompletedMode = 'per-container';
+setState('ready');
+</script>
+
+</body>
+</html>
