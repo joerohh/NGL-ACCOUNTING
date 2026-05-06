@@ -87,7 +87,7 @@ export function setStateV2(name) {
   if (renderer && wa) wa.innerHTML = renderer();
   // After any full re-render of the review pane, sync the visuals that depend on
   // imperative DOM state (indeterminate checkbox, dynamic fetch count).
-  if (v2State.subMode === 'review' && v2State.rows.some(r => r.status !== 'ok')) {
+  if (v2State.subMode === 'review') {
     updateMasterCheckbox();
     updateFetchButton();
   }
@@ -466,12 +466,42 @@ function renderReview() {
 
 function renderReviewSuccess() {
   const total = v2State.rows.length;
-  // Tasks 6+ replace this stub with the real expanded-table markup
-  const expanded = v2State.showAllInSuccess
-    ? `<div style="margin-top:18px; padding:16px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; color:#94a3b8; font-size:0.86rem;">
-         (Expanded table — wired in later tasks)
-       </div>`
-    : '';
+  let expanded = '';
+  if (v2State.showAllInSuccess) {
+    const sortOpts = [
+      ['excel',         'Sort: Excel Order'],
+      ['container',     'Sort: Container #'],
+      ['invoice',       'Sort: Invoice #'],
+    ].map(([v, lbl]) => `<option value="${v}" ${v2State.sortMode === v ? 'selected' : ''}>${lbl}</option>`).join('');
+    expanded = `
+      <div style="margin-top:24px;">
+        <div class="toolbar">
+          <input type="text" class="search" placeholder="Search containers…"
+                 value="${escHtml(v2State.searchQuery)}"
+                 oninput="window.v2HandleSearch(this.value)" />
+          <select class="sort-select" onchange="window.v2HandleSort(this.value)">
+            ${sortOpts}
+          </select>
+          <span class="filter-meta" id="v2FilterMeta">${total} unique · 0 issues</span>
+        </div>
+        <div class="table-wrap">
+          <table class="merge-table">
+            <thead>
+              <tr>
+                <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
+                <th>Row</th>
+                <th>Container</th>
+                <th>Invoice #</th>
+                <th>Customer</th>
+                <th>Validation</th>
+              </tr>
+            </thead>
+            <tbody id="v2ReviewTbody">${renderTbodyHTML()}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
   const linkLabel = v2State.showAllInSuccess
     ? 'Hide rows ▲'
     : `Show all ${total} rows ▼`;
@@ -487,7 +517,7 @@ function renderReviewSuccess() {
       <div class="subtitle">Ready to fetch documents.</div>
       <button class="fetch-btn" id="v2BtnFetch" onclick="window.v2ClickFetch()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Fetch ${total} Document${total !== 1 ? 's' : ''}
+        Fetch <span class="fetch-count">${total}</span> Document${total !== 1 ? 's' : ''}
       </button>
       <div>
         <button class="show-all-link" onclick="window.v2ToggleShowAll()">${linkLabel}</button>
