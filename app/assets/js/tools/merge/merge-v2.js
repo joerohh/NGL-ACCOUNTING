@@ -313,6 +313,46 @@ function topBarOnlyExcel() {
   `;
 }
 
+function getVisibleRows() {
+  let rows = v2State.rows;
+  if (v2State.activeTab === 'issues') {
+    rows = rows.filter(r => r.status !== 'ok');
+  }
+  if (v2State.searchQuery) {
+    const q = v2State.searchQuery.toLowerCase();
+    rows = rows.filter(r => r.containerNumber.toLowerCase().includes(q));
+  }
+  return sortRows(rows, v2State.sortMode);
+}
+
+function sortRows(rows, mode) {
+  const out = rows.slice();
+  if (mode === 'excel') {
+    out.sort((a, b) => a.rowNum - b.rowNum);
+  } else if (mode === 'container') {
+    out.sort((a, b) => a.containerNumber.localeCompare(b.containerNumber, undefined, { numeric: true }));
+  } else if (mode === 'invoice') {
+    out.sort((a, b) => {
+      // empty invoices sort last
+      if (!a.invoiceNumber && !b.invoiceNumber) return a.rowNum - b.rowNum;
+      if (!a.invoiceNumber) return 1;
+      if (!b.invoiceNumber) return -1;
+      return a.invoiceNumber.localeCompare(b.invoiceNumber, undefined, { numeric: true });
+    });
+  } else if (mode === 'issues-first') {
+    out.sort((a, b) => {
+      const aIssue = a.status !== 'ok' ? 0 : 1;
+      const bIssue = b.status !== 'ok' ? 0 : 1;
+      if (aIssue !== bIssue) return aIssue - bIssue;
+      return a.rowNum - b.rowNum;
+    });
+  }
+  return out;
+}
+
+function selectedCount()        { return v2State.rows.filter(r => r.selected).length; }
+function issuesCount()          { return v2State.rows.filter(r => r.status !== 'ok').length; }
+
 function renderReview() {
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   return hasIssues
@@ -354,11 +394,70 @@ function renderReviewSuccess() {
 }
 
 function renderReviewWithIssues() {
-  // Real implementation comes in Task 6
+  const total = v2State.rows.length;
+  const issues = issuesCount();
+  const okCount = total - issues;
+  const sel = selectedCount();
+  const fetchDisabled = sel === 0 ? 'disabled' : '';
+  const sortOpts = [
+    ['excel',         'Sort: Excel Order'],
+    ['container',     'Sort: Container #'],
+    ['invoice',       'Sort: Invoice #'],
+    ['issues-first',  'Sort: Issues first'],
+  ].map(([v, lbl]) => `<option value="${v}" ${v2State.sortMode === v ? 'selected' : ''}>${lbl}</option>`).join('');
+
   return `
     ${topBarOnlyExcel()}
-    <div class="centered-stage" style="margin-top:24px;">
-      <p class="subtitle" style="color:#94a3b8;">(Issues-path table — wired in later tasks)</p>
+
+    <div class="controls-line" style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:11px 16px;">
+      <div style="font-size:0.86rem; color:#78350f;">
+        <strong style="color:#92400e;">${issues} issue${issues !== 1 ? 's' : ''}</strong> in your manifest — review the rows below, then start the fetch.
+      </div>
+      <div class="summary-line" style="margin-left:auto; color:#78350f;">
+        <span class="ok">●</span> <strong>${okCount}</strong> ok &nbsp;·&nbsp;
+        <span class="warn">●</span> <strong>${issues}</strong> issue${issues !== 1 ? 's' : ''}
+      </div>
+    </div>
+
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab ${v2State.activeTab === 'all' ? 'active' : ''}" onclick="window.v2HandleTabClick('all')">All <span class="count">${total}</span></button>
+        <button class="tab has-issues ${v2State.activeTab === 'issues' ? 'active' : ''}" onclick="window.v2HandleTabClick('issues')">Issues <span class="count">${issues}</span></button>
+      </div>
+      <div style="padding-bottom:8px;">
+        <button class="top-action-btn" id="v2BtnFetch" ${fetchDisabled} onclick="window.v2ClickFetch()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Fetch <span class="fetch-count">${sel}</span> Document${sel !== 1 ? 's' : ''}
+        </button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="Search containers…"
+             value="${escHtml(v2State.searchQuery)}"
+             oninput="window.v2HandleSearch(this.value)" />
+      <select class="sort-select" onchange="window.v2HandleSort(this.value)">
+        ${sortOpts}
+      </select>
+      <span class="filter-meta" id="v2FilterMeta">${total} unique · ${issues} issue${issues !== 1 ? 's' : ''}</span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead>
+          <tr>
+            <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
+            <th>Row</th>
+            <th>Container</th>
+            <th>Invoice #</th>
+            <th>Customer</th>
+            <th>Validation</th>
+          </tr>
+        </thead>
+        <tbody id="v2ReviewTbody">
+          <tr><td colspan="6" style="padding:20px; text-align:center; color:#94a3b8;">(Table body — wired in Task 7)</td></tr>
+        </tbody>
+      </table>
     </div>
   `;
 }
@@ -379,4 +478,23 @@ function v2ToggleShowAll() {
 }
 window.v2ClickFetch = v2ClickFetch;
 window.v2ToggleShowAll = v2ToggleShowAll;
+function v2HandleTabClick(tab) {
+  v2State.activeTab = tab;
+  setStateV2('review');         // simple full re-render for now; tbody-only re-render is wired in Task 7
+}
+function v2HandleSearch(value) {
+  v2State.searchQuery = value;
+  // tbody-only re-render comes in Task 7; for now, do nothing visible
+}
+function v2HandleSort(mode) {
+  v2State.sortMode = mode;
+  // tbody-only re-render comes in Task 7
+}
+function v2ToggleAll(_checked) {
+  // wired in Task 9 (Task 8 actually — see plan; either way, stub for now)
+}
+window.v2HandleTabClick = v2HandleTabClick;
+window.v2HandleSearch   = v2HandleSearch;
+window.v2HandleSort     = v2HandleSort;
+window.v2ToggleAll      = v2ToggleAll;
 window.initMergeV2 = initMergeV2;
