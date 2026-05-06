@@ -167,17 +167,35 @@ export async function handleExcelFile(file) {
       addLog('info', `Matched work-order column: "${woKey}"`);
     }
 
-    // Parse rows — deduplicate by container number
-    const seen = new Set();
+    // Parse rows — keep every row with a container number.
+    // Dedup is now by INV# only (see invoice-grouping spec 2026-05-06).
+    const seenInv = new Map();   // invLower → original rowIndex (1-based for messages)
     const parsed = [];
+    const skipped = [];
+    let rowIndex = 0;
     for (const row of rows) {
+      rowIndex++;
       const cn = String(row[containerKey] || '').trim();
-      if (!cn || seen.has(cn.toLowerCase())) continue;
-      seen.add(cn.toLowerCase());
+      if (!cn) continue;          // a row without a container is unusable
+      const inv = invoiceKey ? String(row[invoiceKey] || '').trim() : '';
+      const wo  = woKey      ? String(row[woKey]      || '').trim() : '';
+
+      // Same INV# as a previous row? Skip the duplicate.
+      if (inv) {
+        const invLower = inv.toLowerCase();
+        const priorIdx = seenInv.get(invLower);
+        if (priorIdx !== undefined) {
+          skipped.push({ rowIndex, containerNumber: cn, invoiceNumber: inv, priorIndex: priorIdx });
+          continue;
+        }
+        seenInv.set(invLower, rowIndex);
+      }
+      // Rows with no INV# are never deduplicated (they get a Verify flag in the UI).
+
       parsed.push({
         containerNumber: cn,
-        invoiceNumber: invoiceKey ? String(row[invoiceKey] || '').trim() : '',
-        workOrderNumber: woKey ? String(row[woKey] || '').trim() : '',
+        invoiceNumber: inv,
+        workOrderNumber: wo,
       });
     }
 
@@ -187,7 +205,17 @@ export async function handleExcelFile(file) {
     }
 
     state.excelRows = parsed;
-    addLog('success', `Parsed ${parsed.length} container numbers from "${file.name}"`);
+    state.skippedRows = skipped;     // exposed for renderFailureReport in Task 5
+    const uniqueContainers = new Set(parsed.map(r => r.containerNumber.toLowerCase())).size;
+    const missInv = parsed.filter(r => !r.invoiceNumber).length;
+    addLog('success', `Parsed ${parsed.length} invoice row${parsed.length !== 1 ? 's' : ''} (${uniqueContainers} unique container${uniqueContainers !== 1 ? 's' : ''})`);
+    if (skipped.length > 0) {
+      addLog('warning', `Skipped ${skipped.length} duplicate row${skipped.length !== 1 ? 's' : ''} (same INV# as another row):`);
+      skipped.forEach(s => addLog('warning', `  → row ${s.rowIndex}: INV ${s.invoiceNumber} (already seen at row ${s.priorIndex})`));
+    }
+    if (missInv > 0) {
+      addLog('warning', `${missInv} row${missInv !== 1 ? 's' : ''} missing INV# — flagged for verification`);
+    }
     parsed.slice(0, 5).forEach(r => {
       const inv = r.invoiceNumber ? ` (Inv: ${r.invoiceNumber})` : '';
       addLog('info', `  → ${r.containerNumber}${inv}`);
@@ -202,9 +230,8 @@ export async function handleExcelFile(file) {
     drop.style.display = 'none';
     loaded.style.display = 'flex';
     document.getElementById('excelFileName').textContent = file.name;
-    const invCount = parsed.filter(r => r.invoiceNumber).length;
     document.getElementById('excelFileSub').textContent =
-      `${parsed.length} containers` + (invCount ? ` · ${invCount} invoice numbers` : '');
+      `${parsed.length} invoice${parsed.length !== 1 ? 's' : ''} · ${uniqueContainers} unique container${uniqueContainers !== 1 ? 's' : ''}`;
 
     renderContainerGroups();
     updateUI();
@@ -217,6 +244,7 @@ export async function handleExcelFile(file) {
 
 function removeExcel() {
   state.excelRows = [];
+  state.skippedRows = [];
   document.getElementById('excelInput').value = '';
   document.getElementById('excelDropZone').classList.remove('has-file');
   document.getElementById('excelDropContent').style.display = '';
@@ -884,6 +912,7 @@ async function saveMergedOutput() {
 function clearAll() {
   state.pdfs         = [];
   state.excelRows    = [];
+  state.skippedRows  = [];
   state.mergeResults = [];
   state.isProcessing = false;
   state.mergeMode    = 'per-container';
