@@ -292,17 +292,73 @@ function renderLoading() {
   `;
 }
 
-function renderReview() {
-  // M1 stub — M2 replaces this with the real review card + table
-  const fname = v2State.excelFile ? escHtml(v2State.excelFile.name) : '(no file)';
+function topBarOnlyExcel() {
+  const fname = v2State.excelFile ? escHtml(v2State.excelFile.name) : '';
+  const total = v2State.rows.length;
+  const issueCount = v2State.rows.filter(r => r.status !== 'ok').length;
+  const meta = issueCount === 0
+    ? `${total} unique container${total !== 1 ? 's' : ''}`
+    : `${total} unique container${total !== 1 ? 's' : ''} · ${issueCount} issue${issueCount !== 1 ? 's' : ''}`;
   return `
-    <div class="centered-stage">
-      <h1>Review (M2 stub)</h1>
-      <p class="subtitle">Loaded file: <strong>${fname}</strong></p>
-      <p class="subtitle" style="font-size:0.86rem; color:#94a3b8;">
-        Excel parsing + pre-fetch validation is coming in Milestone 2.
-      </p>
-      <button class="merge-btn" onclick="window.v2SetState('empty')">Start over</button>
+    <div class="top-bar" style="grid-template-columns: 1fr;">
+      <div class="file-summary">
+        <div class="icon-box xlsx">XLS</div>
+        <div class="text">
+          <div class="name">${fname}</div>
+          <div class="meta">${escHtml(meta)}</div>
+        </div>
+        <button onclick="window.v2SetState('empty')">Replace</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderReview() {
+  const hasIssues = v2State.rows.some(r => r.status !== 'ok');
+  return hasIssues
+    ? renderReviewWithIssues()
+    : renderReviewSuccess();
+}
+
+function renderReviewSuccess() {
+  const total = v2State.rows.length;
+  // Tasks 6+ replace this stub with the real expanded-table markup
+  const expanded = v2State.showAllInSuccess
+    ? `<div style="margin-top:18px; padding:16px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; color:#94a3b8; font-size:0.86rem;">
+         (Expanded table — wired in later tasks)
+       </div>`
+    : '';
+  const linkLabel = v2State.showAllInSuccess
+    ? 'Hide rows ▲'
+    : `Show all ${total} rows ▼`;
+  return `
+    ${topBarOnlyExcel()}
+    <div class="review-success-card">
+      <div class="check-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <div class="title">All ${total} row${total !== 1 ? 's' : ''} checked out</div>
+      <div class="subtitle">Ready to fetch documents.</div>
+      <button class="fetch-btn" id="v2BtnFetch" onclick="window.v2ClickFetch()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Fetch ${total} Document${total !== 1 ? 's' : ''}
+      </button>
+      <div>
+        <button class="show-all-link" onclick="window.v2ToggleShowAll()">${linkLabel}</button>
+      </div>
+      ${expanded}
+    </div>
+  `;
+}
+
+function renderReviewWithIssues() {
+  // Real implementation comes in Task 6
+  return `
+    ${topBarOnlyExcel()}
+    <div class="centered-stage" style="margin-top:24px;">
+      <p class="subtitle" style="color:#94a3b8;">(Issues-path table — wired in later tasks)</p>
     </div>
   `;
 }
@@ -316,4 +372,11 @@ function renderDone()     { return `<div class="centered-stage"><h1>Done (M4)</h
 // ── Expose to inline onclick handlers in render strings ──
 window.v2TriggerExcel = triggerExcel;
 window.v2SetState = setStateV2;
+function v2ClickFetch() { setStateV2('fetching'); }
+function v2ToggleShowAll() {
+  v2State.showAllInSuccess = !v2State.showAllInSuccess;
+  setStateV2('review');         // re-renders the whole review pane
+}
+window.v2ClickFetch = v2ClickFetch;
+window.v2ToggleShowAll = v2ToggleShowAll;
 window.initMergeV2 = initMergeV2;
