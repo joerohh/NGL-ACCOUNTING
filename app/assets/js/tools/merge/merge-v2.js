@@ -264,7 +264,7 @@ function renderLoading() {
     return `
       <div class="centered-stage">
         <h1>Couldn't read this file</h1>
-        <p class="subtitle">${escHtml(v2State.loadingError)}</p>
+        <p class="subtitle error-text">${escHtml(v2State.loadingError)}</p>
         <div class="big-drop kind-excel" onclick="window.v2TriggerExcel()">
           <div class="drop-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
