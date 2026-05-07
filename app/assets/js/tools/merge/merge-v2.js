@@ -40,8 +40,6 @@ const v2State = {
   runningMode: null,              // modeKey of in-progress merge (null = nothing running)
   mergeProgress: { done: 0, total: 0, current: '' },
   confirmPopup: null,             // null | { uncheckedCount, onContinue, onCancel }
-  pendingMode: null,              // unused — kept for backward compat
-  lastCompletedMode: null,        // unused — kept for backward compat
 };
 
 // ── localStorage for output location ──
