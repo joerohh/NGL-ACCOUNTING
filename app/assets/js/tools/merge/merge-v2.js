@@ -827,15 +827,30 @@ function renderFetching() {
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
   // Tabs split by current state
-  const fetchedCount = v2State.rows.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss').length;
-  const failedCount  = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss').length;
+  const fetchedRows = v2State.rows.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss');
+  const failedRows  = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss');
+  const fetchedCount = fetchedRows.length;
+  const failedCount  = failedRows.length;
   const allCount     = v2State.rows.length;
 
-  // Body — show all rows (fetched + queued + failed)
-  const bodyRows = v2State.rows.map((row, i) => fetchRowMarkup(i, row, {
-    includeCheck: false,
-    activeErrorIdx: v2State.openSidebarRow,
-  })).join('');
+  // Active tab — default to 'all' if not yet set or doesn't apply to fetching
+  const fetchTab = (v2State.activeTab === 'fetched' || v2State.activeTab === 'failed')
+    ? v2State.activeTab
+    : 'all';
+
+  // Filter rows by active tab
+  let visibleRows;
+  if (fetchTab === 'fetched')      visibleRows = fetchedRows;
+  else if (fetchTab === 'failed')  visibleRows = failedRows;
+  else                              visibleRows = v2State.rows;
+
+  const bodyRows = visibleRows.map(row => {
+    const i = v2State.rows.indexOf(row);
+    return fetchRowMarkup(i, row, {
+      includeCheck: false,
+      activeErrorIdx: v2State.openSidebarRow,
+    });
+  }).join('');
 
   // Sidebar overlay — opening Fix Error mid-fetch should NOT pause the fetch
   const sidebarHtml = (v2State.openSidebarRow !== null && v2State.openSidebarRow >= 0)
@@ -856,9 +871,9 @@ function renderFetching() {
     </div>
     <div class="tabs-row">
       <div class="tabs">
-        <button class="tab active">All <span class="count">${allCount}</span></button>
-        <button class="tab">Fetched <span class="count" id="v2FetchTabFetchedCount">${fetchedCount}</span></button>
-        <button class="tab has-issues">Failed <span class="count" id="v2FetchTabFailedCount">${failedCount}</span></button>
+        <button class="tab ${fetchTab === 'all' ? 'active' : ''}" onclick="window.v2HandleFetchTab('all')">All <span class="count">${allCount}</span></button>
+        <button class="tab ${fetchTab === 'fetched' ? 'active' : ''}" onclick="window.v2HandleFetchTab('fetched')">Fetched <span class="count" id="v2FetchTabFetchedCount">${fetchedCount}</span></button>
+        <button class="tab has-issues ${fetchTab === 'failed' ? 'active' : ''}" onclick="window.v2HandleFetchTab('failed')">Failed <span class="count" id="v2FetchTabFailedCount">${failedCount}</span></button>
       </div>
     </div>
     <div class="toolbar">
@@ -877,6 +892,12 @@ function renderFetching() {
     ${sidebarHtml}
   `;
 }
+
+function v2HandleFetchTab(tab) {
+  v2State.activeTab = tab;
+  setStateV2('fetching');   // stays on fetching state, just re-renders with the new filter
+}
+window.v2HandleFetchTab = v2HandleFetchTab;
 function renderReady() {
   const all = v2State.rows;
   const queued = all.filter(r => !r.fetchResult && !r.skipped);
@@ -922,10 +943,14 @@ function renderReady() {
         <span style="color:#94a3b8;">●</span> <strong>${queued.length}</strong> queued
       </div>
       <div class="ready-action-right">
-        <button class="merge-btn resume" onclick="window.v2ResumeFetch()">
+        <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
           ↻ Resume fetch
           <span class="count-badge">${queued.length} queued</span>
-          <span class="last-fetched-meta">Last fetched: ${escHtml(v2State.lastFetchedContainer || '—')}</span>
+        </button>
+        <button class="merge-btn" id="v2BtnContinueMerge" ${selected === 0 ? 'disabled' : ''}
+                onclick="window.v2ClickContinueMerge()" title="Merge what's already fetched — queued rows wait for Resume">
+          Continue to Merge
+          <span class="count-badge"><span class="sel-count">${selected}</span> selected</span>
         </button>
       </div>
     </div>
@@ -1831,7 +1856,14 @@ function rerenderFetchRow(rowIdx) {
   const tbody = document.getElementById('v2FetchTbody') || document.getElementById('v2ReadyTbody');
   if (!tbody) return;
   const tr = tbody.querySelector(`tr[data-row-idx="${rowIdx}"]`);
-  if (!tr) return;
+  if (!tr) {
+    // Row isn't in the current view (e.g. user filtered to Fetched/Failed tab and this row
+    // just changed state). Trigger a full re-render so the row appears in the right tab.
+    if (v2State.subMode === 'fetching' && (v2State.activeTab === 'fetched' || v2State.activeTab === 'failed')) {
+      setStateV2('fetching');
+    }
+    return;
+  }
   const fresh = document.createElement('tbody');
   fresh.innerHTML = fetchRowMarkup(rowIdx, v2State.rows[rowIdx], {
     includeCheck: !!tbody.id.startsWith('v2Ready'),
