@@ -1265,7 +1265,7 @@ function renderConfirmPopup() {
   const { uncheckedCount } = v2State.confirmPopup;
   return `
     <div class="v2-modal-backdrop" onclick="window.v2CancelConfirm()"></div>
-    <div class="v2-modal" role="dialog" aria-modal="true">
+    <div class="v2-modal" onclick="event.stopPropagation()">
       <div class="v2-modal-title"><span class="icon">ⓘ</span> Confirm merge selection</div>
       <div class="v2-modal-body">
         ${uncheckedCount} row${uncheckedCount === 1 ? '' : 's'} ${uncheckedCount === 1 ? 'is' : 'are'} unchecked and will not be included in this merge.
