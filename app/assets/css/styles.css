@@ -2046,3 +2046,57 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   background: #16a34a; box-shadow: 0 2px 6px rgba(22,163,74,0.25);
 }
 #mergeToolViewV2 .next-issue-btn.done:hover { background: #15803d; }
+
+/* ── M4: confirmation modal ─────────────────────────── */
+.v2-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 300;
+}
+.v2-modal {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 440px; max-width: 90vw;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  padding: 28px;
+  z-index: 301;
+  font-family: inherit;
+}
+.v2-modal-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 1rem; font-weight: 600; color: #0f172a;
+  margin-bottom: 12px;
+}
+.v2-modal-title .icon {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #fef3c7; color: #92400e;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.78rem;
+}
+.v2-modal-body {
+  font-size: 0.88rem; color: #475569;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.v2-modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+.v2-modal-actions .btn-secondary {
+  background: #ffffff; border: 1px solid #e2e8f0;
+  color: #475569; padding: 8px 14px;
+  border-radius: 7px; font-size: 0.86rem;
+  cursor: pointer; font-family: inherit;
+}
+.v2-modal-actions .btn-secondary:hover { border-color: #cbd5e1; color: #0f172a; }
+.v2-modal-actions .btn-primary {
+  background: #ea580c; border: none;
+  color: white; padding: 8px 16px;
+  border-radius: 7px; font-size: 0.86rem; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.v2-modal-actions .btn-primary:hover { background: #c2410c; }

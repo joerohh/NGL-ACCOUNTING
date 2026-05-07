@@ -1005,6 +1005,7 @@ function renderReady() {
     ${toolbarHtml}
     ${tableHtml}
     ${sidebarHtml}
+    ${renderConfirmPopup()}
   `;
 }
 
@@ -1258,6 +1259,38 @@ function renderRoutingTrace(row) {
   ).join('');
   return `<div class="routing-trace">${linesHtml}</div>`;
 }
+// ── M4: pre-merge confirmation popup ──
+function renderConfirmPopup() {
+  if (!v2State.confirmPopup) return '';
+  const { uncheckedCount } = v2State.confirmPopup;
+  return `
+    <div class="v2-modal-backdrop" onclick="window.v2CancelConfirm()"></div>
+    <div class="v2-modal" role="dialog" aria-modal="true">
+      <div class="v2-modal-title"><span class="icon">ⓘ</span> Confirm merge selection</div>
+      <div class="v2-modal-body">
+        ${uncheckedCount} row${uncheckedCount === 1 ? '' : 's'} ${uncheckedCount === 1 ? 'is' : 'are'} unchecked and will not be included in this merge.
+      </div>
+      <div class="v2-modal-actions">
+        <button class="btn-secondary" onclick="window.v2CancelConfirm()">Go Back</button>
+        <button class="btn-primary" onclick="window.v2AcceptConfirm()">Continue ▶</button>
+      </div>
+    </div>
+  `;
+}
+
+function v2AcceptConfirm() {
+  const cb = v2State.confirmPopup?.onContinue;
+  v2State.confirmPopup = null;
+  if (cb) cb();
+}
+function v2CancelConfirm() {
+  v2State.confirmPopup = null;
+  setStateV2(v2State.subMode);   // re-render to drop the popup
+}
+
+window.v2AcceptConfirm = v2AcceptConfirm;
+window.v2CancelConfirm = v2CancelConfirm;
+
 function renderMerge() { return `<div class="centered-stage"><h1>Merge (M4)</h1><p class="subtitle">Stub — replaced in Task 8.</p></div>`; }
 
 // ── Expose to inline onclick handlers in render strings ──
@@ -1338,7 +1371,19 @@ function v2ToggleFetchRow(rowIdx, checked) {
   }
 }
 function v2ClickContinueMerge() {
-  setStateV2('merge');   // M4 stub — Task 7 wires the popup
+  // Count unchecked rows that COULD have been merged (have fetchResult, not skipped).
+  // Errored-but-unchecked rows count too — they could be opted into via the new interactive checkbox.
+  const candidateRows = v2State.rows.filter(r => r.fetchResult && !r.skipped);
+  const uncheckedCount = candidateRows.filter(r => !r.selected).length;
+
+  const proceed = () => setStateV2('merge');
+
+  if (uncheckedCount > 0) {
+    v2State.confirmPopup = { uncheckedCount, onContinue: proceed };
+    setStateV2(v2State.subMode);   // re-render Ready with the popup overlay
+    return;
+  }
+  proceed();
 }
 async function v2RetryAllErrors() {
   const errors = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
