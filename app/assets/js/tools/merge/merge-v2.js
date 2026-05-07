@@ -973,11 +973,181 @@ function renderReady() {
 }
 
 function renderSidebar(rowIdx) {
-  // Real implementation in Task 12
-  return `<div class="detail-sidebar open" style="display:flex;">
-    <div style="padding:20px; color:#94a3b8;">Sidebar markup — wired in Task 12 (rowIdx: ${rowIdx})</div>
-  </div>
-  <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>`;
+  const row = v2State.rows[rowIdx];
+  if (!row) return '';
+
+  const isResolved = !!(row.fetchResult && row.fetchResult.podPill !== 'miss');
+  const sidebarClass = `detail-sidebar open${isResolved ? ' resolved' : ''}`;
+
+  const isExport = row.routingType === 'export';
+  const docName = isExport ? 'BOL or POL' : (row.routingType === 'unknown' ? 'POD, BOL, or POL' : 'POD');
+
+  // Count remaining errors (excluding this one and any skipped)
+  const remaining = v2State.rows.filter((r, i) =>
+    i !== rowIdx
+    && r.fetchResult?.podPill === 'miss'
+    && !r.skipped
+  ).length;
+
+  // Routing trace from chain_attempted (passed via fetchResult)
+  const trace = renderRoutingTrace(row);
+
+  // Body — happens or resolved
+  const bodyTop = isResolved
+    ? renderResolvedBody(row, trace)
+    : renderErrorBody(row, trace, docName);
+
+  // Footer
+  const isDone = remaining === 0;
+  const footer = `
+    <div class="ds-footer">
+      <button class="skip-link" onclick="window.v2SkipRow(${rowIdx})">Skip this one</button>
+      <button class="nav-btn" onclick="window.v2PrevError(${rowIdx})" title="Previous error">← Prev</button>
+      ${isDone
+        ? `<button class="next-issue-btn done" onclick="window.v2CloseSidebar()">Done — close sidebar ✓</button>`
+        : `<button class="next-issue-btn" onclick="window.v2NextError(${rowIdx})">
+             Next Error <span class="count-badge">${remaining} left</span> →
+           </button>`
+      }
+    </div>
+  `;
+
+  return `
+    <div class="${sidebarClass}" id="v2DetailSidebar">
+      <div class="ds-header">
+        <div class="ds-icon">${isResolved ? '✓' : '!'}</div>
+        <div>
+          <div class="ds-title">${isResolved ? 'Resolved' : 'Fix Container Error'}</div>
+          <div class="ds-subtitle">${escHtml(row.containerNumber)} · Invoice ${escHtml(row.invoiceNumber || '—')}</div>
+        </div>
+        <button class="ds-close" onclick="window.v2CloseSidebar()">×</button>
+      </div>
+      <div class="ds-body">
+        ${bodyTop}
+      </div>
+      ${footer}
+    </div>
+    <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>
+  `;
+}
+
+function renderErrorBody(row, traceHtml, docName) {
+  return `
+    <div class="ds-section">
+      <div class="ds-section-label">Customer</div>
+      <div style="font-size:0.92rem; font-weight:600; color:#0f172a;">${escHtml(row.customer || '—')}</div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">What Happened</div>
+      <div class="happened-block">
+        <div class="title">${escHtml(docName)} not found in TMS</div>
+        <div class="body">${escHtml(row.fetchResult?.message || 'No documents returned by TMS for this container.')}</div>
+      </div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Routing trace</div>
+      ${traceHtml}
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Resolve</div>
+      <button class="retry-api-btn" onclick="window.v2RetryRow(${v2State.rows.indexOf(row)})">↻ Retry API call</button>
+      <div class="resolve-divider"><span>or upload manually</span></div>
+      <label class="ds-upload" for="v2UploadInput-${row.rowNum}">
+        <div class="icon">⬆</div>
+        <div class="title">Drop ${escHtml(docName)} for ${escHtml(row.containerNumber)}</div>
+        <div class="help">.pdf only — replaces whatever the API would have returned</div>
+        <input type="file" id="v2UploadInput-${row.rowNum}" accept=".pdf"
+               onchange="window.v2HandleSidebarUpload(${v2State.rows.indexOf(row)}, this.files)" />
+      </label>
+    </div>
+  `;
+}
+
+function renderResolvedBody(row, traceHtml) {
+  const file = row.manualPodFile;
+  const summary = file
+    ? `<div class="ds-attached">
+         <div class="name">${escHtml(file.name)}</div>
+         <div class="size">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
+         <button class="replace" onclick="document.getElementById('v2UploadInput-${row.rowNum}').click()">Replace</button>
+         <input type="file" id="v2UploadInput-${row.rowNum}" accept=".pdf" style="display:none;"
+                onchange="window.v2HandleSidebarUpload(${v2State.rows.indexOf(row)}, this.files)" />
+       </div>`
+    : `<div class="ds-attached">
+         <div class="name">Retry succeeded — fetched from TMS</div>
+         <div class="size">${escHtml(row.fetchResult?.podLabel || '')}</div>
+       </div>`;
+
+  return `
+    <div class="ds-section">
+      <div class="ds-section-label">Customer</div>
+      <div style="font-size:0.92rem; font-weight:600; color:#0f172a;">${escHtml(row.customer || '—')}</div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Resolved</div>
+      <div class="resolved-block">
+        <div class="title">${escHtml(row.fetchResult?.statusText || 'Fetched')}</div>
+        <div class="body">This row is now ready to merge.</div>
+      </div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Routing trace</div>
+      ${traceHtml}
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Attached</div>
+      ${summary}
+    </div>
+  `;
+}
+
+function renderRoutingTrace(row) {
+  const fr = row.fetchResult;
+  const lines = [];
+  // Header lines: routing decision
+  if (row.routingType === 'import') {
+    lines.push({ cls: 'note', marker: '→', text: `INV# <code>${escHtml(row.invoiceNumber)}</code> pos-2 → <strong>import</strong>` });
+    lines.push({ cls: 'note', marker: '→', text: 'Plan: try POD → BOL → POL → IT' });
+  } else if (row.routingType === 'export') {
+    lines.push({ cls: 'note', marker: '→', text: `INV# <code>${escHtml(row.invoiceNumber)}</code> pos-2 → <strong>export</strong>` });
+    lines.push({ cls: 'note', marker: '→', text: 'Plan: try BOL → POL → ITE' });
+  } else {
+    lines.push({ cls: 'note', marker: '→', text: 'INV# prefix non-standard — fell back to safety chain' });
+    lines.push({ cls: 'note', marker: '→', text: 'Plan: try POD → BOL → POL → IT → ITE' });
+  }
+
+  // Steps from chain_attempted
+  const chain = fr?.chainAttempted || [];
+  for (const step of chain) {
+    if (step.outcome === 'tms_hit') {
+      lines.push({ cls: 'success', marker: '✓', text: `TMS: <code>${escHtml(step.type)}</code> found` });
+    } else if (step.outcome === 'tms_miss') {
+      lines.push({ cls: 'fail', marker: '✗', text: `TMS: no <code>${escHtml(step.type)}</code>` });
+    } else if (step.outcome === 'tms_error') {
+      lines.push({ cls: 'fail', marker: '✗', text: `TMS: <code>${escHtml(step.type)}</code> errored (timeout or API)` });
+    }
+  }
+
+  // Manual upload completion line
+  if (row.manualPodFile) {
+    lines.push({ cls: 'success', marker: '✓', text: `Manual upload: <code>${escHtml(row.manualPodFile.name)}</code>` });
+  }
+
+  // Final note
+  if (fr?.podPill === 'miss' && !row.manualPodFile) {
+    lines.push({ cls: 'note', marker: '!', text: 'Exhausted chain — manual upload required' });
+  }
+
+  const linesHtml = lines.map(l =>
+    `<div class="step ${l.cls}"><span class="marker">${l.marker}</span><span class="text">${l.text}</span></div>`
+  ).join('');
+  return `<div class="routing-trace">${linesHtml}</div>`;
 }
 function renderMerging()  { return `<div class="centered-stage"><h1>Merging (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
 function renderDone()     { return `<div class="centered-stage"><h1>Done (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
