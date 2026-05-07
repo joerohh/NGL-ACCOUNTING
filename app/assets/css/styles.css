@@ -2100,3 +2100,109 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   display: inline-flex; align-items: center; gap: 6px;
 }
 .v2-modal-actions .btn-primary:hover { background: #c2410c; }
+
+/* ── M4: merge screen ──────────────────────────────── */
+.merge-screen-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+}
+.merge-screen-header .header-spacer { flex: 1; }
+.output-location-btn {
+  background: white; border: 1px solid #e2e8f0;
+  border-radius: 7px; padding: 7px 12px;
+  font-size: 0.82rem; color: #475569;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.output-location-btn:hover { border-color: #cbd5e1; color: #0f172a; }
+.output-location-btn .label-prefix {
+  color: #94a3b8; font-size: 0.74rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.output-location-btn .path-text {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.78rem; color: #1e293b;
+  max-width: 260px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+.mode-group { margin-bottom: 22px; }
+.mode-group-label {
+  font-size: 0.74rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.mode-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+}
+
+.mode-card {
+  background: white; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 16px;
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit; text-align: left;
+  display: flex; flex-direction: column; gap: 6px;
+  min-height: 110px;
+}
+.mode-card:hover {
+  border-color: #fed7aa;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.08);
+}
+.mode-card .title {
+  font-size: 0.92rem; font-weight: 600; color: #0f172a;
+}
+.mode-card .description {
+  font-size: 0.8rem; color: #64748b; line-height: 1.45;
+}
+
+/* Running state — spinner inline, dim other cards */
+.mode-card.running {
+  border-color: #ea580c;
+  background: #fff7ed;
+  cursor: wait;
+}
+.mode-card.running .title::before {
+  content: '⟳';
+  display: inline-block; margin-right: 6px;
+  animation: spin 1s linear infinite;
+  color: #ea580c;
+}
+.mode-card.dim { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+/* Completed state — green check, stats, action buttons */
+.mode-card.completed {
+  border-color: #86efac;
+  background: #f0fdf4;
+  cursor: default;
+}
+.mode-card.completed:hover { box-shadow: none; }
+.mode-card.completed .title::before {
+  content: '✓ ';
+  color: #16a34a;
+  font-weight: 800;
+}
+.mode-card .stats-line {
+  font-size: 0.78rem; color: #475569;
+  margin-top: 4px;
+}
+.mode-card .completed-actions {
+  display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;
+}
+.mode-card .card-action-btn {
+  background: white; border: 1px solid #cbd5e1;
+  border-radius: 6px; padding: 5px 11px;
+  font-size: 0.78rem; color: #475569;
+  cursor: pointer; font-family: inherit;
+}
+.mode-card .card-action-btn:hover {
+  border-color: #ea580c; color: #ea580c;
+}
+
+.merge-running-banner {
+  background: #fff7ed; border: 1px solid #fed7aa;
+  border-radius: 8px; padding: 10px 16px;
+  font-size: 0.86rem; color: #c2410c;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px;
+}

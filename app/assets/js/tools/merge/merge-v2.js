@@ -12,6 +12,7 @@ import {
   routingDecisionFor,
 } from '../../shared/utils.js';
 import { agentBridge } from '../../shared/agent-client.js';
+import { MODES as MODES_LIST, modeByKey } from './merge-v2-output.js';
 
 // ── Module-local state ──
 const v2State = {
@@ -1291,7 +1292,134 @@ function v2CancelConfirm() {
 window.v2AcceptConfirm = v2AcceptConfirm;
 window.v2CancelConfirm = v2CancelConfirm;
 
-function renderMerge() { return `<div class="centered-stage"><h1>Merge (M4)</h1><p class="subtitle">Stub — replaced in Task 8.</p></div>`; }
+// ── M4: Merge screen (pickable + completed cards) ──
+function renderMerge() {
+  const isRunning = !!v2State.runningMode;
+
+  // Header: output location + (back to ready already wired by setStateV2)
+  const locText = v2State.outputLocation
+    ? shortenPath(v2State.outputLocation)
+    : 'Desktop (default)';
+  const headerHtml = `
+    <div class="merge-screen-header">
+      <h2 style="margin:0; font-size:1.1rem; font-weight:600;">Choose a merge format</h2>
+      <span class="header-spacer"></span>
+      <button class="output-location-btn" onclick="window.v2ChangeOutputLocation()" title="Change where files are saved">
+        <span class="label-prefix">Output:</span>
+        <span class="path-text">${escHtml(locText)}</span>
+      </button>
+    </div>
+  `;
+
+  // Optional running banner with progress
+  let runningBanner = '';
+  if (isRunning) {
+    const p = v2State.mergeProgress;
+    const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+    runningBanner = `
+      <div class="merge-running-banner">
+        <span>⟳ Merging ${escHtml(modeNameOf(v2State.runningMode))}…</span>
+        <span style="color:#94a3b8;">${p.done} / ${p.total}${p.current ? ` · ${escHtml(p.current)}` : ''}</span>
+        <span style="margin-left:auto; font-weight:600;">${pct}%</span>
+      </div>
+    `;
+  }
+
+  // Group cards by group (per-container vs combined)
+  const perCont = MODES_LIST.filter(m => m.group === 'per-container');
+  const combined = MODES_LIST.filter(m => m.group === 'combined');
+
+  return `
+    ${headerHtml}
+    ${runningBanner}
+    <div class="mode-group">
+      <div class="mode-group-label">Per-container outputs (one PDF per container)</div>
+      <div class="mode-grid">
+        ${perCont.map(m => renderModeCard(m, isRunning)).join('')}
+      </div>
+    </div>
+    <div class="mode-group">
+      <div class="mode-group-label">Single combined output (one PDF total)</div>
+      <div class="mode-grid">
+        ${combined.map(m => renderModeCard(m, isRunning)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderModeCard(mode, anyRunning) {
+  const completed = v2State.completedModes[mode.key];
+  const running = v2State.runningMode === mode.key;
+  const dim = anyRunning && !running && !completed;
+
+  if (running) {
+    return `
+      <div class="mode-card running">
+        <div class="title">${escHtml(mode.title)}</div>
+        <div class="description">${escHtml(mode.description)}</div>
+      </div>
+    `;
+  }
+  if (completed) {
+    const stats = formatCompletedStats(completed);
+    const showOpenFile = (mode.group === 'combined');   // hide for per-container
+    return `
+      <div class="mode-card completed">
+        <div class="title">${escHtml(mode.title)}</div>
+        <div class="stats-line">${escHtml(stats)}</div>
+        <div class="completed-actions">
+          ${showOpenFile ? `<button class="card-action-btn" onclick="window.v2OpenOutputFile('${mode.key}')">Open File</button>` : ''}
+          <button class="card-action-btn" onclick="window.v2OpenOutputFolder('${mode.key}')">Open Folder</button>
+          <button class="card-action-btn" onclick="window.v2RerunMode('${mode.key}')">Re-run</button>
+        </div>
+      </div>
+    `;
+  }
+  // Pickable
+  return `
+    <button class="mode-card ${dim ? 'dim' : ''}" onclick="window.v2ClickModeCard('${mode.key}')">
+      <div class="title">${escHtml(mode.title)}</div>
+      <div class="description">${escHtml(mode.description)}</div>
+    </button>
+  `;
+}
+
+function modeNameOf(modeKey) {
+  const m = MODES_LIST.find(x => x.key === modeKey);
+  return m ? m.title : modeKey;
+}
+
+function formatCompletedStats(completed) {
+  const { stats, completedAt } = completed;
+  const sizeMb = (stats.totalBytes / (1024 * 1024)).toFixed(1);
+  const time = completedAt instanceof Date
+    ? completedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : '';
+  const fileLabel = stats.fileCount === 1 ? '1 PDF' : `${stats.fileCount} PDFs`;
+  return `${fileLabel} · ${stats.totalPages} pages · ${sizeMb} MB${time ? ` · ${time}` : ''}`;
+}
+
+function shortenPath(p) {
+  if (!p) return '';
+  if (p.length <= 36) return p;
+  // Keep drive + last two folders
+  const parts = p.replace(/\\/g, '/').split('/').filter(Boolean);
+  if (parts.length <= 3) return p;
+  return `${parts[0]}\\…\\${parts[parts.length - 2]}\\${parts[parts.length - 1]}`;
+}
+
+// Stubs — wired in Task 9
+function v2ClickModeCard(modeKey) { console.log('TODO: click', modeKey); }
+function v2OpenOutputFile(modeKey) { console.log('TODO: open file', modeKey); }
+function v2OpenOutputFolder(modeKey) { console.log('TODO: open folder', modeKey); }
+function v2RerunMode(modeKey) { console.log('TODO: rerun', modeKey); }
+function v2ChangeOutputLocation() { console.log('TODO: change location'); }
+
+window.v2ClickModeCard = v2ClickModeCard;
+window.v2OpenOutputFile = v2OpenOutputFile;
+window.v2OpenOutputFolder = v2OpenOutputFolder;
+window.v2RerunMode = v2RerunMode;
+window.v2ChangeOutputLocation = v2ChangeOutputLocation;
 
 // ── Expose to inline onclick handlers in render strings ──
 window.v2TriggerExcel = triggerExcel;
