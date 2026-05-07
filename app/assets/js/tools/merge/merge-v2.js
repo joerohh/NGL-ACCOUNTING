@@ -831,7 +831,154 @@ function renderFetching() {
     </div>
   `;
 }
-function renderReady()    { return `<div class="centered-stage"><h1>Ready (M3)</h1><p class="subtitle">Coming in Milestone 3.</p></div>`; }
+function renderReady() {
+  const all = v2State.rows;
+  const queued = all.filter(r => !r.fetchResult && !r.skipped);
+  const errors = all.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
+  const ready  = all.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss' && !r.skipped);
+
+  // Active tab — Errors-default-when-errors rule
+  if (errors.length > 0 && v2State.activeTab !== 'errors' && v2State.activeTab !== 'queued') {
+    v2State.activeTab = 'errors';
+  } else if (errors.length === 0 && queued.length === 0) {
+    if (v2State.activeTab === 'errors' || v2State.activeTab === 'queued') {
+      v2State.activeTab = 'all';
+    }
+  }
+
+  // Filter rows based on active tab
+  let visibleRows;
+  if (v2State.activeTab === 'errors') visibleRows = errors;
+  else if (v2State.activeTab === 'queued') visibleRows = queued;
+  else visibleRows = all;
+
+  // Apply search
+  if (v2State.searchQuery) {
+    const q = v2State.searchQuery.toLowerCase();
+    visibleRows = visibleRows.filter(r => r.containerNumber.toLowerCase().includes(q));
+  }
+
+  // Selection count for the action button
+  const selected = ready.filter(r => r.selected).length;
+
+  const isPartial = queued.length > 0;
+
+  // Action bar
+  const actionBar = isPartial ? `
+    <div class="ready-action-bar">
+      <div class="ready-status">
+        <span style="color:#16a34a;">●</span> <strong>${ready.length} of ${ready.length + errors.length}</strong> fetched & ready
+        <span style="color:#cbd5e1; margin: 0 6px;">·</span>
+        <span style="color:#d97706;">●</span> <strong>${errors.length}</strong> need fixing
+        <span style="color:#cbd5e1; margin: 0 6px;">·</span>
+        <span style="color:#94a3b8;">●</span> <strong>${queued.length}</strong> queued
+      </div>
+      <div class="ready-action-right">
+        <button class="merge-btn resume" onclick="window.v2ResumeFetch()">
+          ↻ Resume fetch
+          <span class="count-badge">${queued.length} queued</span>
+          <span class="last-fetched-meta">Last fetched: ${escHtml(v2State.lastFetchedContainer || '—')}</span>
+        </button>
+      </div>
+    </div>
+  ` : `
+    <div class="ready-action-bar">
+      <div class="ready-status">
+        <span style="color:#16a34a;">●</span> <strong>${ready.length} of ${all.length}</strong> ready to merge
+        ${errors.length ? `<span style="color:#cbd5e1; margin: 0 6px;">·</span>
+          <span style="color:#d97706;">●</span> <strong>${errors.length}</strong> need fixing
+          <span style="color:#94a3b8;">(click any error row)</span>` : ''}
+      </div>
+      <div class="ready-action-right">
+        <button class="merge-btn" id="v2BtnContinueMerge" ${selected === 0 ? 'disabled' : ''}
+                onclick="window.v2ClickContinueMerge()">
+          Continue to Merge
+          <span class="count-badge"><span class="sel-count">${selected}</span> selected</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Tabs
+  const tabsHtml = `
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab ${v2State.activeTab === 'all' ? 'active' : ''}" onclick="window.v2HandleReadyTab('all')">
+          All <span class="count">${all.length}</span>
+        </button>
+        <button class="tab has-issues ${v2State.activeTab === 'errors' ? 'active' : ''}" onclick="window.v2HandleReadyTab('errors')">
+          Errors <span class="count">${errors.length}</span>
+        </button>
+        ${isPartial ? `<button class="tab queued-tab ${v2State.activeTab === 'queued' ? 'active' : ''}" onclick="window.v2HandleReadyTab('queued')">
+          Queued <span class="count">${queued.length}</span>
+        </button>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Toolbar — adds the mass-retry button when on the Errors tab with errors present
+  const massRetry = (v2State.activeTab === 'errors' && errors.length > 0)
+    ? `<button class="mass-retry-btn" onclick="window.v2RetryAllErrors()">↻ Retry all errors</button>`
+    : '';
+
+  const toolbarHtml = `
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="Search containers…"
+             value="${escHtml(v2State.searchQuery)}"
+             oninput="window.v2HandleReadySearch(this.value)" />
+      ${massRetry}
+      <span class="filter-meta">${visibleRows.length} of ${all.length}${errors.length ? ` · ${errors.length} need fixing` : ''}${queued.length ? ` · ${queued.length} queued` : ''}</span>
+    </div>
+  `;
+
+  // Table
+  const bodyRows = visibleRows.map(row => {
+    const idx = v2State.rows.indexOf(row);
+    return fetchRowMarkup(idx, row, {
+      includeCheck: true,
+      activeErrorIdx: v2State.openSidebarRow,
+    });
+  }).join('');
+
+  const tableHtml = `
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead><tr>
+          <th class="check-col"><input type="checkbox" id="v2ReadyMaster" onclick="window.v2ToggleAllReady(this.checked)" /></th>
+          <th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Will fetch</th><th>Documents</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody id="v2ReadyTbody">${bodyRows}</tbody>
+      </table>
+    </div>
+  `;
+
+  // Sidebar (auto-opens on first error if not yet set)
+  if (v2State.openSidebarRow === null && errors.length > 0) {
+    v2State.openSidebarRow = v2State.rows.indexOf(errors[0]);
+  }
+  const sidebarHtml = (v2State.openSidebarRow !== null && v2State.openSidebarRow >= 0)
+    ? renderSidebar(v2State.openSidebarRow)
+    : '';
+
+  return `
+    ${topBarWithDrop()}
+    ${routingSummaryBand()}
+    ${actionBar}
+    ${tabsHtml}
+    ${toolbarHtml}
+    ${tableHtml}
+    ${sidebarHtml}
+  `;
+}
+
+function renderSidebar(rowIdx) {
+  // Real implementation in Task 12
+  return `<div class="detail-sidebar open" style="display:flex;">
+    <div style="padding:20px; color:#94a3b8;">Sidebar markup — wired in Task 12 (rowIdx: ${rowIdx})</div>
+  </div>
+  <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>`;
+}
 function renderMerging()  { return `<div class="centered-stage"><h1>Merging (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
 function renderDone()     { return `<div class="centered-stage"><h1>Done (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
 
@@ -890,6 +1037,50 @@ async function v2ClickFetch() {
   }
 }
 window.v2ClickFetch = v2ClickFetch;
+
+function v2HandleReadyTab(tab) {
+  v2State.activeTab = tab;
+  setStateV2('ready');
+}
+function v2HandleReadySearch(value) {
+  v2State.searchQuery = value;
+  setStateV2('ready');
+}
+function v2ToggleAllReady(checked) {
+  for (const row of v2State.rows) {
+    if (row.fetchResult && row.fetchResult.podPill !== 'miss' && !row.skipped) {
+      row.selected = !!checked;
+    }
+  }
+  setStateV2('ready');
+}
+function v2ToggleFetchRow(rowIdx, checked) {
+  const row = v2State.rows[rowIdx];
+  if (!row) return;
+  row.selected = !!checked;
+  // Update count badge live (don't full re-render — keep search focus)
+  const cnt = document.querySelector('#v2BtnContinueMerge .sel-count');
+  if (cnt) {
+    cnt.textContent = v2State.rows.filter(r => r.selected && r.fetchResult && r.fetchResult.podPill !== 'miss').length;
+  }
+}
+function v2ClickContinueMerge() {
+  setStateV2('merging');   // M4 stub
+}
+function v2RetryAllErrors() {
+  console.log('v2RetryAllErrors — wired in Task 14');
+}
+function v2ResumeFetch() {
+  console.log('v2ResumeFetch — wired in Task 15');
+}
+
+window.v2HandleReadyTab     = v2HandleReadyTab;
+window.v2HandleReadySearch  = v2HandleReadySearch;
+window.v2ToggleAllReady     = v2ToggleAllReady;
+window.v2ToggleFetchRow     = v2ToggleFetchRow;
+window.v2ClickContinueMerge = v2ClickContinueMerge;
+window.v2RetryAllErrors     = v2RetryAllErrors;
+window.v2ResumeFetch        = v2ResumeFetch;
 
 function openSseStream(jobId) {
   // Use plain EventSource — the existing agentBridge wraps this but pulls in
@@ -1071,5 +1262,5 @@ async function v2CancelFetch() {
 }
 window.v2CancelFetch = v2CancelFetch;
 
-window.v2OpenSidebar    = (idx) => { console.log('v2OpenSidebar', idx, '— wired in Task 12'); };
-window.v2ToggleFetchRow = (idx, checked) => { console.log('v2ToggleFetchRow', idx, checked, '— wired in Task 11'); };
+window.v2CloseSidebar = () => { v2State.openSidebarRow = -1; setStateV2('ready'); };
+window.v2OpenSidebar  = (idx) => { v2State.openSidebarRow = idx; setStateV2('ready'); };
