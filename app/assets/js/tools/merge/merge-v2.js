@@ -11,6 +11,7 @@ import {
   escHtml, readAsArrayBuffer, findColumnKey, CSV_ALIASES,
   routingDecisionFor,
 } from '../../shared/utils.js';
+import { agentBridge } from '../../shared/agent-client.js';
 
 // ── Module-local state ──
 const v2State = {
@@ -80,11 +81,12 @@ export function setStateV2(name) {
         v2State.eventSource = null;
       }
       if (v2State.jobId) {
-        // Fire-and-forget cancel — we don't await it; if it fails, the agent will
+        // Fire-and-forget pause — we don't await it; if it fails, the agent will
         // notice no consumer and tear down on its own
-        fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/pause`, {
-          method: 'POST',
-        }).catch(() => {});
+        agentBridge._authFetch(
+          `${agentBridge.baseUrl}/jobs/${encodeURIComponent(v2State.jobId)}/pause`,
+          { method: 'POST' }
+        ).catch(() => {});
         v2State.jobId = null;
       }
     } catch (_) { /* best-effort cleanup, never throw */ }
@@ -1189,18 +1191,12 @@ async function v2ClickFetch() {
   setStateV2('fetching');
 
   try {
-    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ containers, doc_types: ['invoice', 'pod'] }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Agent rejected fetch: ${res.status} ${text}`);
+    const result = await agentBridge.fetchMissing(containers, ['invoice', 'pod']);
+    if (result.error || !result.jobId) {
+      throw new Error(result.error || 'Agent did not return a jobId');
     }
-    const { jobId } = await res.json();
-    v2State.jobId = jobId;
-    openSseStream(jobId);
+    v2State.jobId = result.jobId;
+    openSseStream(result.jobId);
   } catch (err) {
     alert(`Couldn't start fetch: ${err.message}\n\nIs the agent running? Check Settings.`);
     setStateV2('review');
@@ -1263,15 +1259,12 @@ async function v2RetryAllErrors() {
   setStateV2('fetching');
 
   try {
-    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ containers, doc_types: ['pod'] }),
-    });
-    if (!res.ok) throw new Error(`Agent rejected retry: ${res.status}`);
-    const { jobId } = await res.json();
-    v2State.jobId = jobId;
-    openSseStream(jobId);
+    const result = await agentBridge.fetchMissing(containers, ['pod']);
+    if (result.error || !result.jobId) {
+      throw new Error(result.error || 'Agent did not return a jobId');
+    }
+    v2State.jobId = result.jobId;
+    openSseStream(result.jobId);
   } catch (err) {
     alert(`Couldn't start mass retry: ${err.message}`);
     setStateV2('ready');
@@ -1303,15 +1296,12 @@ async function v2ResumeFetch() {
 
   setStateV2('fetching');
   try {
-    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ containers, doc_types: ['invoice', 'pod'] }),
-    });
-    if (!res.ok) throw new Error(`Agent rejected resume: ${res.status}`);
-    const { jobId } = await res.json();
-    v2State.jobId = jobId;
-    openSseStream(jobId);
+    const result = await agentBridge.fetchMissing(containers, ['invoice', 'pod']);
+    if (result.error || !result.jobId) {
+      throw new Error(result.error || 'Agent did not return a jobId');
+    }
+    v2State.jobId = result.jobId;
+    openSseStream(result.jobId);
   } catch (err) {
     alert(`Couldn't resume fetch: ${err.message}`);
     setStateV2('ready');
@@ -1327,22 +1317,13 @@ window.v2RetryAllErrors     = v2RetryAllErrors;
 window.v2ResumeFetch        = v2ResumeFetch;
 
 function openSseStream(jobId) {
-  // Use plain EventSource — the existing agentBridge wraps this but pulls in
-  // auth-token logic we don't need here (agent runs locally).
-  const url = `http://localhost:8787/jobs/${encodeURIComponent(jobId)}/stream`;
-  const es = new EventSource(url);
-  v2State.eventSource = es;
-
-  es.onmessage = (e) => {
+  // Route through agentBridge.streamProgress — it adds the auth token via
+  // ?token= query param (EventSource can't set headers), wires every named
+  // event the backend emits, handles auto-retry, and closes on terminal events.
+  v2State.eventSource = agentBridge.streamProgress(jobId, (evt) => {
     if (v2State.subMode !== 'fetching') return;   // ignore events after cancel/teardown
-    let evt;
-    try { evt = JSON.parse(e.data); } catch { return; }
     handleSseEvent(evt);
-  };
-  es.onerror = () => {
-    // EventSource auto-retries; if we want hard-fail on max retries, do it here.
-    console.warn('[v2 SSE] connection error — EventSource auto-retrying');
-  };
+  });
 }
 
 function handleSseEvent(evt) {
@@ -1520,9 +1501,10 @@ window.initMergeV2 = initMergeV2;
 async function v2CancelFetch() {
   if (!v2State.jobId) return;
   try {
-    await fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/pause`, {
-      method: 'POST',
-    });
+    await agentBridge._authFetch(
+      `${agentBridge.baseUrl}/jobs/${encodeURIComponent(v2State.jobId)}/pause`,
+      { method: 'POST' }
+    );
   } catch (err) {
     console.warn('Cancel POST failed:', err);
   }
@@ -1608,23 +1590,22 @@ async function v2RetryRow(rowIdx) {
   if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
 
   try {
-    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        containers: [{ containerNumber: row.containerNumber, invoiceNumber: row.invoiceNumber }],
-        doc_types: ['pod'],
-      }),
-    });
-    if (!res.ok) throw new Error(`Agent returned ${res.status}`);
-    const { jobId } = await res.json();
+    const result = await agentBridge.fetchMissing(
+      [{ containerNumber: row.containerNumber, invoiceNumber: row.invoiceNumber }],
+      ['pod'],
+    );
+    if (result.error || !result.jobId) {
+      throw new Error(result.error || 'Agent did not return a jobId');
+    }
 
-    // Subscribe to a one-shot stream — we only care about pod_found / pod_missing for our row
+    // Subscribe to a one-shot stream — we only care about events for our row
     await new Promise((resolve) => {
-      const url = `http://localhost:8787/jobs/${encodeURIComponent(jobId)}/stream`;
-      const es = new EventSource(url);
-      es.onmessage = (e) => {
-        let evt; try { evt = JSON.parse(e.data); } catch { return; }
+      const handle = agentBridge.streamProgress(result.jobId, (evt) => {
+        // Terminal events without a containerNumber (job_complete, job_paused) end the wait
+        if (evt.type === 'job_complete' || evt.type === 'job_paused') {
+          handle.close(); resolve();
+          return;
+        }
         if (evt.containerNumber !== row.containerNumber) return;
         if (evt.type === 'pod_found') {
           row.fetchResult = {
@@ -1635,7 +1616,7 @@ async function v2RetryRow(rowIdx) {
             chainAttempted: evt.chain_attempted || [],
             message: '',
           };
-          es.close(); resolve();
+          handle.close(); resolve();
         } else if (evt.type === 'pod_missing') {
           row.fetchResult = {
             invPill: 'ok', podPill: 'miss', podLabel: '—',
@@ -1643,7 +1624,7 @@ async function v2RetryRow(rowIdx) {
             chainAttempted: evt.chain_attempted || [],
             message: evt.message || '',
           };
-          es.close(); resolve();
+          handle.close(); resolve();
         } else if (evt.type === 'not_found') {
           row.fetchResult = {
             invPill: 'miss', podPill: 'miss', podLabel: '—',
@@ -1651,7 +1632,7 @@ async function v2RetryRow(rowIdx) {
             chainAttempted: [],
             message: `Invoice ${evt.invoiceNumber || ''} not found in QBO`,
           };
-          es.close(); resolve();
+          handle.close(); resolve();
         } else if (evt.type === 'container_error') {
           row.fetchResult = {
             invPill: 'miss', podPill: 'miss', podLabel: '—',
@@ -1659,12 +1640,9 @@ async function v2RetryRow(rowIdx) {
             chainAttempted: [],
             message: evt.error || 'Unknown error during retry',
           };
-          es.close(); resolve();
-        } else if (evt.type === 'job_complete' || evt.type === 'job_paused') {
-          es.close(); resolve();
+          handle.close(); resolve();
         }
-      };
-      es.onerror = () => { es.close(); resolve(); };
+      });
     });
 
     setStateV2('ready');   // re-renders sidebar to ✓ Resolved if pod_found landed
