@@ -32,6 +32,8 @@ const v2State = {
   fetchCurrentContainer: '', // shown next to the progress label
   lastFetchedContainer: '',  // shown in "Last fetched: <c>" meta line on Resume
   openSidebarRow: null,      // index into v2State.rows; null = sidebar closed
+  queuedRetries: [],         // [{rowIdx}] — Retry requests queued during a live fetch
+  completedContainers: null, // Set<containerLower> — dedups progress increments per fetch job
   // ── M4 placeholders (unchanged from M2) ──
   pendingMode: null,
   completedModes: [],
@@ -106,6 +108,8 @@ export function setStateV2(name) {
     v2State.fetchCurrentContainer = '';
     v2State.lastFetchedContainer = '';
     v2State.openSidebarRow = null;
+    v2State.queuedRetries = [];
+    v2State.completedContainers = null;
     const xinput = document.getElementById('v2ExcelInput');
     if (xinput) xinput.value = '';
   }
@@ -480,6 +484,9 @@ function fetchActionCell(rowIdx, row) {
   if (row.fetchResult && row.fetchResult.podPill === 'miss' && !row.skipped) {
     return `<td><button class="fix-error-btn" onclick="event.stopPropagation(); window.v2OpenSidebar(${rowIdx})">⚠ Fix Error</button></td>`;
   }
+  if (row.fetchResult && !row.skipped) {
+    return `<td><button class="view-details-btn" onclick="event.stopPropagation(); window.v2OpenSidebar(${rowIdx})" title="View fetch details">ⓘ View</button></td>`;
+  }
   return `<td></td>`;
 }
 
@@ -784,7 +791,9 @@ function renderReviewWithIssues() {
 }
 
 function renderFetching() {
-  const total = v2State.rows.filter(r => r.selected).length || v2State.rows.length;
+  // Use fetchTotal (= unique container count from job_started) for consistency
+  // across progress, tabs, and toolbar. Falls back to selected count before SSE arrives.
+  const total = v2State.fetchTotal || v2State.rows.filter(r => r.selected).length || v2State.rows.length;
   const done = v2State.fetchProgress;
   const cur = v2State.fetchCurrentContainer || '—';
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
@@ -797,8 +806,13 @@ function renderFetching() {
   // Body — show all rows (fetched + queued + failed)
   const bodyRows = v2State.rows.map((row, i) => fetchRowMarkup(i, row, {
     includeCheck: false,
-    activeErrorIdx: null,
+    activeErrorIdx: v2State.openSidebarRow,
   })).join('');
+
+  // Sidebar overlay — opening Fix Error mid-fetch should NOT pause the fetch
+  const sidebarHtml = (v2State.openSidebarRow !== null && v2State.openSidebarRow >= 0)
+    ? renderSidebar(v2State.openSidebarRow)
+    : '';
 
   return `
     ${topBarWithDrop()}
@@ -809,18 +823,19 @@ function renderFetching() {
         &nbsp; <span class="container-name">${escHtml(cur)}</span>
       </div>
       <div class="progress-track"><div class="progress-fill" style="width:${percent}%;"></div></div>
-      <button class="cancel-btn" onclick="window.v2CancelFetch()">Cancel</button>
+      <button class="pause-btn" onclick="window.v2CancelFetch()" title="Pause — you can resume from where you left off">⏸ Pause</button>
+      <button class="cancel-link" onclick="window.v2CancelAndReset()" title="Cancel and discard all progress">Cancel</button>
     </div>
     <div class="tabs-row">
       <div class="tabs">
         <button class="tab active">All <span class="count">${allCount}</span></button>
-        <button class="tab">Fetched <span class="count">${fetchedCount}</span></button>
-        <button class="tab has-issues">Failed <span class="count">${failedCount}</span></button>
+        <button class="tab">Fetched <span class="count" id="v2FetchTabFetchedCount">${fetchedCount}</span></button>
+        <button class="tab has-issues">Failed <span class="count" id="v2FetchTabFailedCount">${failedCount}</span></button>
       </div>
     </div>
     <div class="toolbar">
       <input type="text" class="search" placeholder="Search containers…" />
-      <span class="filter-meta">${done} / ${total} fetched · ${failedCount} failed</span>
+      <span class="filter-meta" id="v2FetchToolbarMeta">${done} / ${total} fetched · ${failedCount} failed</span>
     </div>
     <div class="table-wrap">
       <table class="merge-table">
@@ -831,6 +846,7 @@ function renderFetching() {
         <tbody id="v2FetchTbody">${bodyRows}</tbody>
       </table>
     </div>
+    ${sidebarHtml}
   `;
 }
 function renderReady() {
@@ -1091,6 +1107,11 @@ function classifyError(row, docName) {
 
 function renderErrorBody(row, traceHtml, docName) {
   const { title, body } = classifyError(row, docName);
+  const rowIdx = v2State.rows.indexOf(row);
+  const isQueuedForRetry = v2State.queuedRetries.some(q => q.rowIdx === rowIdx);
+  const retryBtn = isQueuedForRetry
+    ? `<button class="retry-api-btn" disabled>⏳ Queued — will retry after current fetch</button>`
+    : `<button class="retry-api-btn" onclick="window.v2RetryRow(${rowIdx})">↻ Retry API call</button>`;
   return `
     <div class="ds-section">
       <div class="ds-section-label">Customer</div>
@@ -1112,14 +1133,14 @@ function renderErrorBody(row, traceHtml, docName) {
 
     <div class="ds-section">
       <div class="ds-section-label">Resolve</div>
-      <button class="retry-api-btn" onclick="window.v2RetryRow(${v2State.rows.indexOf(row)})">↻ Retry API call</button>
+      ${retryBtn}
       <div class="resolve-divider"><span>or upload manually</span></div>
       <label class="ds-upload" for="v2UploadInput-${row.rowNum}">
         <div class="icon">⬆</div>
         <div class="title">Drop ${escHtml(docName)} for ${escHtml(row.containerNumber)}</div>
         <div class="help">.pdf only — replaces whatever the API would have returned</div>
         <input type="file" id="v2UploadInput-${row.rowNum}" accept=".pdf"
-               onchange="window.v2HandleSidebarUpload(${v2State.rows.indexOf(row)}, this.files)" />
+               onchange="window.v2HandleSidebarUpload(${rowIdx}, this.files)" />
       </label>
     </div>
   `;
@@ -1204,13 +1225,13 @@ function renderRoutingTrace(row) {
     const status = fr?.statusText || '';
     const triedAny = chain.some(s => s.outcome === 'tms_miss' || s.outcome === 'tms_hit');
     if (status === 'Invoice not in QBO') {
-      lines.push({ cls: 'note', marker: '!', text: 'Stopped at QBO step — TMS chain never tried' });
+      lines.push({ cls: 'note', marker: '!', text: "Couldn't find this invoice in QuickBooks — never got to check TMS" });
     } else if (status === 'Error' || (chain.length > 0 && chain.every(s => s.outcome === 'tms_error'))) {
-      lines.push({ cls: 'note', marker: '!', text: 'Fetch errored before completing — Retry once connectivity is back' });
+      lines.push({ cls: 'note', marker: '!', text: "Something went wrong before we could finish — try Retry once you're connected" });
     } else if (triedAny) {
-      lines.push({ cls: 'note', marker: '!', text: 'Exhausted chain — manual upload required' });
+      lines.push({ cls: 'note', marker: '!', text: "TMS doesn't have this document — please upload it manually below" });
     } else {
-      lines.push({ cls: 'note', marker: '!', text: 'No documents available — upload manually' });
+      lines.push({ cls: 'note', marker: '!', text: "No documents found for this container — please upload one manually below" });
     }
   }
 
@@ -1251,6 +1272,7 @@ async function v2ClickFetch() {
   v2State.fetchTotal = containers.length;
   v2State.fetchCurrentContainer = '';
   v2State.lastFetchedContainer = '';
+  v2State.completedContainers = new Set();
   // Clear any stale fetchResult on rows we're about to fetch
   for (const row of v2State.rows) {
     if (row.selected) { row.fetchResult = null; row.skipped = false; }
@@ -1323,6 +1345,7 @@ async function v2RetryAllErrors() {
   v2State.fetchProgress = 0;
   v2State.fetchTotal = containers.length;
   v2State.fetchCurrentContainer = '';
+  v2State.completedContainers = new Set();
 
   setStateV2('fetching');
 
@@ -1361,6 +1384,7 @@ async function v2ResumeFetch() {
   v2State.fetchTotal = containers.length;
   v2State.fetchProgress = 0;
   v2State.fetchCurrentContainer = '';
+  v2State.completedContainers = new Set();
 
   setStateV2('fetching');
   try {
@@ -1404,13 +1428,13 @@ function handleSseEvent(evt) {
 
     case 'container_start':
       v2State.fetchCurrentContainer = evt.containerNumber || '';
-      updateProgressLine();
+      updateLiveCounters();
       break;
 
     case 'container_complete':
-      v2State.fetchProgress += 1;
+      bumpProgress(evt.containerNumber);
       v2State.lastFetchedContainer = evt.containerNumber || v2State.lastFetchedContainer;
-      updateProgressLine();
+      updateLiveCounters();
       // The actual row update came in via prior pod_found / pod_missing events
       break;
 
@@ -1425,6 +1449,7 @@ function handleSseEvent(evt) {
         chainAttempted: evt.chain_attempted || [],
         message: '',
       });
+      updateLiveCounters();
       break;
     }
 
@@ -1437,6 +1462,7 @@ function handleSseEvent(evt) {
         chainAttempted: evt.chain_attempted || [],
         message: evt.message || 'No POD/BOL/POL/IT/ITE found',
       });
+      updateLiveCounters();
       break;
 
     // Backend exits _process_one_container early on these — no container_complete
@@ -1448,8 +1474,8 @@ function handleSseEvent(evt) {
         chainAttempted: [],
         message: `Invoice ${evt.invoiceNumber || ''} not found in QBO`,
       });
-      v2State.fetchProgress += 1;
-      updateProgressLine();
+      bumpProgress(evt.containerNumber);
+      updateLiveCounters();
       break;
 
     case 'container_error':
@@ -1459,8 +1485,8 @@ function handleSseEvent(evt) {
         chainAttempted: [],
         message: evt.error || 'Unknown error during fetch',
       });
-      v2State.fetchProgress += 1;
-      updateProgressLine();
+      bumpProgress(evt.containerNumber);
+      updateLiveCounters();
       break;
 
     case 'login_required':
@@ -1504,15 +1530,37 @@ function rerenderFetchRow(rowIdx) {
   tr.replaceWith(newTr);
 }
 
-function updateProgressLine() {
-  const now = document.querySelector('#mergeToolViewV2 .progress-line .now');
-  const fill = document.querySelector('#mergeToolViewV2 .progress-fill');
-  if (!now || !fill) return;
+// Dedup progress increments by container — guards against duplicate SSE events
+// (reconnects, backend race, etc.) from pushing fetchProgress past fetchTotal.
+function bumpProgress(container) {
+  const key = (container || '').toLowerCase();
+  if (!key) return;
+  if (!v2State.completedContainers) v2State.completedContainers = new Set();
+  if (v2State.completedContainers.has(key)) return;
+  v2State.completedContainers.add(key);
+  v2State.fetchProgress = Math.min(v2State.fetchTotal || Infinity, v2State.fetchProgress + 1);
+}
+
+// Surgical updates while Fetching — keeps progress label, progress bar,
+// tab counts, and toolbar meta in sync without a full re-render.
+function updateLiveCounters() {
   const total = v2State.fetchTotal;
   const done = v2State.fetchProgress;
   const cur = v2State.fetchCurrentContainer || '—';
-  now.innerHTML = `<strong>Fetching ${done} / ${total}</strong> &nbsp; <span class="container-name">${escHtml(cur)}</span>`;
-  fill.style.width = total > 0 ? `${Math.min(100, Math.round((done / total) * 100))}%` : '0%';
+  const fetchedCount = v2State.rows.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss').length;
+  const failedCount  = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss').length;
+  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+
+  const now = document.querySelector('#mergeToolViewV2 .progress-line .now');
+  if (now) now.innerHTML = `<strong>Fetching ${done} / ${total}</strong> &nbsp; <span class="container-name">${escHtml(cur)}</span>`;
+  const fill = document.querySelector('#mergeToolViewV2 .progress-fill');
+  if (fill) fill.style.width = `${percent}%`;
+  const fc = document.getElementById('v2FetchTabFetchedCount');
+  if (fc) fc.textContent = fetchedCount;
+  const ec = document.getElementById('v2FetchTabFailedCount');
+  if (ec) ec.textContent = failedCount;
+  const meta = document.getElementById('v2FetchToolbarMeta');
+  if (meta) meta.textContent = `${done} / ${total} fetched · ${failedCount} failed`;
 }
 
 function finalizeFetch({ cancelled }) {
@@ -1520,9 +1568,26 @@ function finalizeFetch({ cancelled }) {
     v2State.eventSource.close();
     v2State.eventSource = null;
   }
+  v2State.jobId = null;
   // Rows that never got a fetchResult stay null → they render as queued in Ready
   // (only relevant on cancel; on completion every row should have a result)
   setStateV2('ready');
+  // If the user queued single-row retries while the main fetch was running,
+  // run them now that we're idle. Sequential to avoid hammering the agent.
+  if (v2State.queuedRetries.length > 0) {
+    processQueuedRetries();
+  }
+}
+
+async function processQueuedRetries() {
+  // Snapshot — new retries can still be queued while we process
+  const queue = v2State.queuedRetries.slice();
+  v2State.queuedRetries = [];
+  for (const { rowIdx } of queue) {
+    // v2RetryRow checks subMode and runs immediately when not 'fetching'
+    try { await v2RetryRow(rowIdx); }
+    catch (err) { console.warn('Queued retry failed for row', rowIdx, err); }
+  }
 }
 
 function v2ToggleShowAll() {
@@ -1584,13 +1649,25 @@ async function v2CancelFetch() {
 }
 window.v2CancelFetch = v2CancelFetch;
 
+async function v2CancelAndReset() {
+  if (!confirm('Cancel the fetch and discard all progress? You\'ll need to start over from the spreadsheet.')) return;
+  // setStateV2('empty') runs the defensive teardown — closes SSE + POSTs /pause —
+  // and resets every v2State field to clean slate.
+  setStateV2('empty');
+}
+window.v2CancelAndReset = v2CancelAndReset;
+
+// Sidebar is an overlay — opening/closing it should NOT change subMode.
+// During a live fetch, the user wants the sidebar to float over the
+// Fetching state while the rest of the batch keeps running. Re-render
+// whichever state we're already in.
 function v2OpenSidebar(rowIdx) {
   v2State.openSidebarRow = rowIdx;
-  setStateV2('ready');
+  setStateV2(v2State.subMode);
 }
 function v2CloseSidebar() {
   v2State.openSidebarRow = -1;
-  setStateV2('ready');
+  setStateV2(v2State.subMode);
 }
 function v2SkipRow(rowIdx) {
   const row = v2State.rows[rowIdx];
@@ -1603,18 +1680,18 @@ function v2SkipRow(rowIdx) {
   } else {
     v2State.openSidebarRow = -1;   // no more errors
   }
-  setStateV2('ready');
+  setStateV2(v2State.subMode);
 }
 function v2NextError(currentIdx) {
   const next = nextErrorIndex(currentIdx);
   v2State.openSidebarRow = next >= 0 ? next : -1;
-  setStateV2('ready');
+  setStateV2(v2State.subMode);
 }
 function v2PrevError(currentIdx) {
   const prev = prevErrorIndex(currentIdx);
   if (prev >= 0) {
     v2State.openSidebarRow = prev;
-    setStateV2('ready');
+    setStateV2(v2State.subMode);
   }
 }
 
@@ -1652,6 +1729,21 @@ window.v2PrevError    = v2PrevError;
 async function v2RetryRow(rowIdx) {
   const row = v2State.rows[rowIdx];
   if (!row) return;
+
+  // If a fetch is currently running, queue the retry to run after it
+  // finishes. Two concurrent fetch jobs against the same agent can race
+  // (shared QBO/TMS sessions, browser pool), so we serialize.
+  if (v2State.subMode === 'fetching') {
+    if (!v2State.queuedRetries.find(q => q.rowIdx === rowIdx)) {
+      v2State.queuedRetries.push({ rowIdx });
+    }
+    const btn = document.querySelector('#v2DetailSidebar .retry-api-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Queued — will retry after current fetch';
+    }
+    return;
+  }
 
   // Show pending state on the button
   const btn = document.querySelector('#v2DetailSidebar .retry-api-btn');

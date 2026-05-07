@@ -1708,6 +1708,24 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 }
 #mergeToolViewV2 .cancel-btn:hover { border-color: #dc2626; color: #dc2626; }
 
+/* Pause = primary action on the Fetching state. Recoverable — lands on Ready
+   with a Resume Fetch button. */
+#mergeToolViewV2 .pause-btn {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 7px; padding: 7px 14px;
+  font-size: 0.82rem; cursor: pointer; color: #475569; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+}
+#mergeToolViewV2 .pause-btn:hover { border-color: #ea580c; color: #ea580c; }
+
+/* Cancel = discrete text link. Throws away progress, returns to Empty. */
+#mergeToolViewV2 .cancel-link {
+  background: none; border: none; padding: 4px 8px;
+  font-size: 0.78rem; color: #94a3b8; cursor: pointer;
+  text-decoration: underline; font-family: inherit; flex-shrink: 0;
+}
+#mergeToolViewV2 .cancel-link:hover { color: #dc2626; }
+
 /* Ready action bar */
 #mergeToolViewV2 .ready-action-bar {
   display: flex; align-items: center; gap: 14px;
@@ -1781,6 +1799,24 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   display: inline-flex; align-items: center; gap: 5px; font-family: inherit;
 }
 #mergeToolViewV2 .fix-error-btn:hover { background: #fecaca; border-color: #f87171; color: #991b1b; }
+
+/* Discrete "View" button — appears on hover for fetched (non-error) rows */
+#mergeToolViewV2 .view-details-btn {
+  background: transparent; color: #94a3b8; border: 1px solid transparent;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 0.76rem; font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; font-family: inherit;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+#mergeToolViewV2 tr:hover .view-details-btn { opacity: 1; }
+#mergeToolViewV2 .view-details-btn:hover {
+  background: #f1f5f9; border-color: #cbd5e1; color: #334155;
+}
+#mergeToolViewV2 .view-details-btn:focus-visible {
+  opacity: 1; outline: 2px solid #cbd5e1; outline-offset: 1px;
+}
 
 /* Mass retry button on the Errors tab toolbar */
 #mergeToolViewV2 .toolbar .mass-retry-btn {
