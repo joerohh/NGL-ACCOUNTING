@@ -34,16 +34,20 @@ async function preloadRowFiles(jobId, row) {
 }
 
 // ── Concatenate page-arrays into one PDFDocument and serialize ──
+//   Returns { bytes, pageCount } so callers can tally pages without re-loading.
 async function concatPages(pageGroups) {
   const { PDFDocument } = PDFLib;
   const out = await PDFDocument.create();
+  let pageCount = 0;
   for (const group of pageGroups) {
     if (!group) continue;
     const src = await PDFDocument.load(group, { ignoreEncryption: true, updateMetadata: false });
     const pages = await out.copyPages(src, src.getPageIndices());
     pages.forEach(p => out.addPage(p));
+    pageCount += pages.length;
   }
-  return await out.save({ updateFieldAppearances: false });
+  const bytes = await out.save({ updateFieldAppearances: false });
+  return { bytes, pageCount };
 }
 
 // ── Filename collision dedup helper ──
@@ -70,7 +74,6 @@ function uniqueFilename(name, usedSet) {
 
 // ── Per-container modes ──
 async function runPerContainer(rows, jobId, modeKey, onProgress) {
-  const { PDFDocument } = PDFLib;
   const files = [];
   const usedNames = new Set();
   let totalPages = 0;
@@ -92,15 +95,12 @@ async function runPerContainer(rows, jobId, modeKey, onProgress) {
     bufs = bufs.filter(Boolean);
     if (bufs.length === 0) continue;
 
-    const merged = await concatPages(bufs);
+    const { bytes: merged, pageCount } = await concatPages(bufs);
     const desiredName = perContainerFilename(row, modeKey);
     const finalName = uniqueFilename(desiredName, usedNames);
     files.push({ filename: finalName, bytes: merged });
     totalBytes += merged.byteLength;
-
-    // Quick page-count tally (re-load just to read length — cheap on already-merged tiny PDFs)
-    const tally = await PDFDocument.load(merged, { ignoreEncryption: true });
-    totalPages += tally.getPageCount();
+    totalPages += pageCount;
   }
 
   onProgress?.({ done: rows.length, total: rows.length, current: '' });
@@ -110,6 +110,8 @@ async function runPerContainer(rows, jobId, modeKey, onProgress) {
 // ── Single-output modes ──
 async function runCombined(rows, jobId, modeKey, onProgress) {
   const { PDFDocument } = PDFLib;
+  // We can't reuse concatPages here — we keep one out doc alive across rows
+  // to stream pages straight in, so the final PDF is built incrementally.
   const out = await PDFDocument.create();
   let totalPages = 0;
 
