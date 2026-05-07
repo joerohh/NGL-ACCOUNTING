@@ -892,9 +892,125 @@ async function v2ClickFetch() {
 window.v2ClickFetch = v2ClickFetch;
 
 function openSseStream(jobId) {
-  // Placeholder — Task 11 wires the real event handlers
-  // (split this way so Task 9's PR is independently testable).
-  console.log('openSseStream', jobId, '— handlers wired in Task 11');
+  // Use plain EventSource — the existing agentBridge wraps this but pulls in
+  // auth-token logic we don't need here (agent runs locally).
+  const url = `http://localhost:8787/jobs/${encodeURIComponent(jobId)}/stream`;
+  const es = new EventSource(url);
+  v2State.eventSource = es;
+
+  es.onmessage = (e) => {
+    if (v2State.subMode !== 'fetching') return;   // ignore events after cancel/teardown
+    let evt;
+    try { evt = JSON.parse(e.data); } catch { return; }
+    handleSseEvent(evt);
+  };
+  es.onerror = () => {
+    // EventSource auto-retries; if we want hard-fail on max retries, do it here.
+    console.warn('[v2 SSE] connection error — EventSource auto-retrying');
+  };
+}
+
+function handleSseEvent(evt) {
+  switch (evt.type) {
+    case 'job_started':
+      v2State.fetchTotal = evt.total;
+      // Re-render to update the total in the progress label
+      setStateV2('fetching');
+      break;
+
+    case 'container_start':
+      v2State.fetchCurrentContainer = evt.containerNumber || '';
+      updateProgressLine();
+      break;
+
+    case 'container_complete':
+      v2State.fetchProgress += 1;
+      v2State.lastFetchedContainer = evt.containerNumber || v2State.lastFetchedContainer;
+      updateProgressLine();
+      // The actual row update came in via prior pod_found / pod_missing events
+      break;
+
+    case 'pod_found': {
+      const tmsType = evt.tms_doc_type || null;
+      const fromTms = !!tmsType;
+      patchRow(evt.containerNumber, {
+        invPill: 'ok',
+        podPill: fromTms ? 'fallback' : 'ok',
+        podLabel: tmsType || 'POD',
+        statusText: fromTms ? `Fetched (${tmsType})` : 'Fetched',
+        chainAttempted: evt.chain_attempted || [],
+        message: '',
+      });
+      break;
+    }
+
+    case 'pod_missing':
+      patchRow(evt.containerNumber, {
+        invPill: 'ok',
+        podPill: 'miss',
+        podLabel: '—',
+        statusText: 'Needs PDF',
+        chainAttempted: evt.chain_attempted || [],
+        message: evt.message || 'No POD/BOL/POL/IT/ITE found',
+      });
+      break;
+
+    case 'job_completed':
+      finalizeFetch({ cancelled: false });
+      break;
+
+    case 'job_cancelled':
+    case 'job_paused':
+      finalizeFetch({ cancelled: true });
+      break;
+  }
+}
+
+function patchRow(container, fetchResult) {
+  // Same-container dedup: apply the result to ALL invoice rows sharing this container
+  const containerLower = (container || '').toLowerCase();
+  for (let i = 0; i < v2State.rows.length; i++) {
+    const row = v2State.rows[i];
+    if (row.containerNumber.toLowerCase() !== containerLower) continue;
+    row.fetchResult = { ...fetchResult };
+    rerenderFetchRow(i);
+  }
+}
+
+function rerenderFetchRow(rowIdx) {
+  const tbody = document.getElementById('v2FetchTbody') || document.getElementById('v2ReadyTbody');
+  if (!tbody) return;
+  const tr = tbody.querySelector(`tr[data-row-idx="${rowIdx}"]`);
+  if (!tr) return;
+  const fresh = document.createElement('tbody');
+  fresh.innerHTML = fetchRowMarkup(rowIdx, v2State.rows[rowIdx], {
+    includeCheck: !!tbody.id.startsWith('v2Ready'),
+    activeErrorIdx: v2State.openSidebarRow,
+  });
+  const newTr = fresh.firstElementChild;
+  newTr.classList.add('flash-update');
+  tr.replaceWith(newTr);
+}
+
+function updateProgressLine() {
+  const now = document.querySelector('#mergeToolViewV2 .progress-line .now');
+  const fill = document.querySelector('#mergeToolViewV2 .progress-fill');
+  if (!now || !fill) return;
+  const total = v2State.fetchTotal;
+  const done = v2State.fetchProgress;
+  const cur = v2State.fetchCurrentContainer || '—';
+  now.innerHTML = `<strong>Fetching ${done} / ${total}</strong> &nbsp; <span class="container-name">${escHtml(cur)}</span>`;
+  fill.style.width = total > 0 ? `${Math.min(100, Math.round((done / total) * 100))}%` : '0%';
+}
+
+function finalizeFetch({ cancelled }) {
+  if (v2State.eventSource) {
+    v2State.eventSource.close();
+    v2State.eventSource = null;
+  }
+  // Rows that never got a fetchResult stay null → they render as queued in Ready
+  // (only relevant on cancel; on completion every row should have a result)
+  setStateV2('ready');
 }
 
 function v2ToggleShowAll() {
@@ -938,6 +1054,22 @@ window.v2ToggleRow      = v2ToggleRow;
 window.v2ToggleAll      = v2ToggleAll;
 window.initMergeV2 = initMergeV2;
 
-window.v2CancelFetch    = () => { console.log('v2CancelFetch — wired in Task 13'); };
+async function v2CancelFetch() {
+  if (!v2State.jobId) return;
+  try {
+    await fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/cancel`, {
+      method: 'POST',
+    });
+  } catch (err) {
+    console.warn('Cancel POST failed:', err);
+  }
+  // Don't transition here — wait for the SSE 'job_cancelled' / 'job_paused' event.
+  // If the SSE stream dies before the event arrives, manually finalize.
+  setTimeout(() => {
+    if (v2State.subMode === 'fetching') finalizeFetch({ cancelled: true });
+  }, 2000);
+}
+window.v2CancelFetch = v2CancelFetch;
+
 window.v2OpenSidebar    = (idx) => { console.log('v2OpenSidebar', idx, '— wired in Task 12'); };
 window.v2ToggleFetchRow = (idx, checked) => { console.log('v2ToggleFetchRow', idx, checked, '— wired in Task 11'); };
