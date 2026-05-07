@@ -12,9 +12,11 @@ import {
   routingDecisionFor,
 } from '../../shared/utils.js';
 import { agentBridge } from '../../shared/agent-client.js';
-import { MODES as MODES_LIST, modeByKey } from './merge-v2-output.js';
+import {
+  MODES as MODES_LIST, modeByKey,
+  saveMergedFiles, subfolderFor,
+} from './merge-v2-output.js';
 import { runMergeMode } from './merge-v2-engine.js';
-import { saveMergedFiles, subfolderFor } from './merge-v2-output.js';
 
 // ── Module-local state ──
 const v2State = {
@@ -1313,19 +1315,10 @@ function renderMerge() {
     </div>
   `;
 
-  // Optional running banner with progress
-  let runningBanner = '';
-  if (isRunning) {
-    const p = v2State.mergeProgress;
-    const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
-    runningBanner = `
-      <div class="merge-running-banner">
-        <span>⟳ Merging ${escHtml(modeNameOf(v2State.runningMode))}…</span>
-        <span style="color:#94a3b8;">${p.done} / ${p.total}${p.current ? ` · ${escHtml(p.current)}` : ''}</span>
-        <span style="margin-left:auto; font-weight:600;">${pct}%</span>
-      </div>
-    `;
-  }
+  // Optional running banner with progress (shared with the in-flight onProgress patcher)
+  const runningBanner = isRunning
+    ? `<div class="merge-running-banner">${runningBannerContent(v2State.runningMode, v2State.mergeProgress)}</div>`
+    : '';
 
   // Group cards by group (per-container vs combined)
   const perCont = MODES_LIST.filter(m => m.group === 'per-container');
@@ -1391,6 +1384,16 @@ function modeNameOf(modeKey) {
   return m ? m.title : modeKey;
 }
 
+// Inner HTML of the running banner — shared between full render and mid-merge progress patch.
+function runningBannerContent(modeKey, p) {
+  const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+  return `
+    <span>⟳ Merging ${escHtml(modeNameOf(modeKey))}…</span>
+    <span style="color:#94a3b8;">${p.done} / ${p.total}${p.current ? ' · ' + escHtml(p.current) : ''}</span>
+    <span style="margin-left:auto; font-weight:600;">${pct}%</span>
+  `;
+}
+
 function formatCompletedStats(completed) {
   const { stats, completedAt } = completed;
   const time = completedAt instanceof Date
@@ -1438,23 +1441,14 @@ async function v2ClickModeCard(modeKey) {
       modeKey,
       onProgress: (p) => {
         v2State.mergeProgress = p;
-        // Update only the banner — avoid full re-render mid-merge
+        // Update only the banner DOM — avoid full re-render mid-merge.
         const banner = document.querySelector('.merge-running-banner');
-        if (banner) {
-          const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
-          banner.innerHTML = `
-            <span>⟳ Merging ${escHtml(modeNameOf(modeKey))}…</span>
-            <span style="color:#94a3b8;">${p.done} / ${p.total}${p.current ? ' · ' + escHtml(p.current) : ''}</span>
-            <span style="margin-left:auto; font-weight:600;">${pct}%</span>
-          `;
-        }
+        if (banner) banner.innerHTML = runningBannerContent(modeKey, p);
       },
     });
 
     if (result.files.length === 0) {
       alert('Merge produced no files. Check the row selection and try again.');
-      v2State.runningMode = null;
-      setStateV2('merge');
       return;
     }
 
@@ -1467,8 +1461,6 @@ async function v2ClickModeCard(modeKey) {
     });
     if (saveRes.error) {
       alert(`Save failed: ${saveRes.error}`);
-      v2State.runningMode = null;
-      setStateV2('merge');
       return;
     }
 
@@ -1479,13 +1471,12 @@ async function v2ClickModeCard(modeKey) {
       outputDir: saveRes.outputDir,
       completedAt: new Date(),
     };
-    v2State.runningMode = null;
-    v2State.mergeProgress = { done: 0, total: 0, current: '' };
-    setStateV2('merge');
   } catch (err) {
     console.error('Merge failed:', err);
     alert(`Merge failed: ${err.message}`);
+  } finally {
     v2State.runningMode = null;
+    v2State.mergeProgress = { done: 0, total: 0, current: '' };
     setStateV2('merge');
   }
 }
