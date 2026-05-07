@@ -335,3 +335,17 @@ class TestSaveOutputExtensions:
             })
             assert r.status_code == 400
             assert "path" in r.text.lower() or "subfolder" in r.text.lower()
+
+    def test_absolute_subfolder_rejected(self, client):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = client.post("/files/save-output", json={
+                "files": [{
+                    "filename": "x.pdf",
+                    "data": self._pdf_bytes(),
+                    "subfolder": "/etc/passwd",
+                }],
+                "openFolder": False,
+                "baseLocation": tmp,
+            })
+            assert r.status_code == 400
+            assert "relative" in r.text.lower() or "subfolder" in r.text.lower()

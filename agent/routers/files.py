@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -84,6 +85,9 @@ def _safe_subfolder(subfolder: str, base: Path) -> Path:
     """Resolve a multi-level subfolder under base, rejecting path-traversal attempts."""
     if not subfolder:
         return base
+    # Reject absolute paths and UNC paths early — these are caller bugs, not just safety hazards.
+    if subfolder.startswith(("/", "\\")) or subfolder.startswith("\\\\"):
+        raise HTTPException(400, "subfolder must be a relative path")
     # Normalize separators and split into parts
     parts = [p for p in subfolder.replace("\\", "/").split("/") if p not in ("", ".")]
     for part in parts:
@@ -132,7 +136,6 @@ async def save_output(req: SaveOutputRequest):
                         child.unlink()
                     elif child.is_dir():
                         # Recursively remove subdirs (rare, but possible from prior runs)
-                        import shutil
                         shutil.rmtree(child)
                 except Exception as e:
                     logger.warning("Failed to clear %s: %s", child, e)
