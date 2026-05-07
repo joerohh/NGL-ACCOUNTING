@@ -1432,5 +1432,67 @@ async function v2CancelFetch() {
 }
 window.v2CancelFetch = v2CancelFetch;
 
-window.v2CloseSidebar = () => { v2State.openSidebarRow = -1; setStateV2('ready'); };
-window.v2OpenSidebar  = (idx) => { v2State.openSidebarRow = idx; setStateV2('ready'); };
+function v2OpenSidebar(rowIdx) {
+  v2State.openSidebarRow = rowIdx;
+  setStateV2('ready');
+}
+function v2CloseSidebar() {
+  v2State.openSidebarRow = -1;
+  setStateV2('ready');
+}
+function v2SkipRow(rowIdx) {
+  const row = v2State.rows[rowIdx];
+  if (!row) return;
+  row.skipped = true;
+  // Advance to next un-skipped error
+  const next = nextErrorIndex(rowIdx);
+  if (next >= 0) {
+    v2State.openSidebarRow = next;
+  } else {
+    v2State.openSidebarRow = -1;   // no more errors
+  }
+  setStateV2('ready');
+}
+function v2NextError(currentIdx) {
+  const next = nextErrorIndex(currentIdx);
+  v2State.openSidebarRow = next >= 0 ? next : -1;
+  setStateV2('ready');
+}
+function v2PrevError(currentIdx) {
+  const prev = prevErrorIndex(currentIdx);
+  if (prev >= 0) {
+    v2State.openSidebarRow = prev;
+    setStateV2('ready');
+  }
+}
+
+function nextErrorIndex(fromIdx) {
+  for (let i = fromIdx + 1; i < v2State.rows.length; i++) {
+    const r = v2State.rows[i];
+    if (r.fetchResult?.podPill === 'miss' && !r.skipped) return i;
+  }
+  // Wrap around
+  for (let i = 0; i < fromIdx; i++) {
+    const r = v2State.rows[i];
+    if (r.fetchResult?.podPill === 'miss' && !r.skipped) return i;
+  }
+  return -1;
+}
+function prevErrorIndex(fromIdx) {
+  for (let i = fromIdx - 1; i >= 0; i--) {
+    const r = v2State.rows[i];
+    if (r.fetchResult?.podPill === 'miss' && !r.skipped) return i;
+  }
+  // Wrap around backward
+  for (let i = v2State.rows.length - 1; i > fromIdx; i--) {
+    const r = v2State.rows[i];
+    if (r.fetchResult?.podPill === 'miss' && !r.skipped) return i;
+  }
+  return -1;
+}
+
+window.v2OpenSidebar  = v2OpenSidebar;
+window.v2CloseSidebar = v2CloseSidebar;
+window.v2SkipRow      = v2SkipRow;
+window.v2NextError    = v2NextError;
+window.v2PrevError    = v2PrevError;
