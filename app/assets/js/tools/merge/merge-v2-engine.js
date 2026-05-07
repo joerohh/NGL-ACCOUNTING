@@ -21,7 +21,11 @@ async function fetchAgentFile(jobId, filename) {
 }
 
 // ── Pre-load both files for one row. Returns { invoiceBuf, docBuf } (either may be null). ──
-async function preloadRowFiles(jobId, row) {
+//   Uses row.fetchJobId (set when the SSE event landed) so rows from different fetch jobs
+//   each look in the right downloads/{jobId}/ folder. Falls back to the dispatcher's jobId.
+async function preloadRowFiles(fallbackJobId, row) {
+  const jobId = row.fetchJobId || fallbackJobId;
+  if (!jobId) return { invoiceBuf: null, docBuf: null };
   const cn = row.containerNumber;
   const [invoiceBuf, docBuf] = await Promise.all([
     fetchAgentFile(jobId, `${cn}_invoice.pdf`),
@@ -151,16 +155,21 @@ async function runCombined(rows, jobId, modeKey, onProgress) {
 
 // ── Public dispatcher ──
 //   rows: filtered subset (selected, non-skipped, sorted as user wants on Ready)
-//   jobId: the v2State.jobId from the fetch
+//   jobId: the v2State.jobId from the most-recent fetch (fallback when row.fetchJobId is unset)
 //   modeKey: one of MODES[].key
 //   onProgress: optional ({ done, total, current }) => void
 
 export async function runMergeMode({ rows, jobId, modeKey, onProgress }) {
   const mode = modeByKey(modeKey);
   if (!mode) throw new Error(`Unknown mode: ${modeKey}`);
-  if (!jobId) throw new Error('runMergeMode: jobId is required');
   if (!rows || rows.length === 0) {
     return { files: [], stats: { fileCount: 0, totalPages: 0, totalBytes: 0 } };
+  }
+  // Need at least one source of jobId per row — either the row's own fetchJobId or the
+  // dispatcher fallback. If both are missing for every row, we have no way to find files.
+  const haveAnyJob = jobId || rows.some(r => r.fetchJobId);
+  if (!haveAnyJob) {
+    throw new Error('runMergeMode: no jobId on rows or dispatcher — cannot locate fetched files');
   }
   if (mode.group === 'per-container') {
     return runPerContainer(rows, jobId, modeKey, onProgress);

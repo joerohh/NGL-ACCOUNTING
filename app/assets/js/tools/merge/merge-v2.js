@@ -1848,6 +1848,9 @@ function patchRow(container, fetchResult) {
     const row = v2State.rows[i];
     if (row.containerNumber.toLowerCase() !== containerLower) continue;
     row.fetchResult = { ...fetchResult };
+    // Snapshot the jobId so the merge engine can find this row's files later, even after
+    // a Resume creates a new jobId or finalizeFetch clears the active one.
+    row.fetchJobId = v2State.jobId || row.fetchJobId || null;
     rerenderFetchRow(i);
   }
 }
@@ -1912,9 +1915,9 @@ function finalizeFetch({ cancelled }) {
     v2State.eventSource.close();
     v2State.eventSource = null;
   }
-  v2State.jobId = null;
-  // Rows that never got a fetchResult stay null → they render as queued in Ready
-  // (only relevant on cancel; on completion every row should have a result)
+  // Keep v2State.jobId — rows store their own fetchJobId via patchRow, but we leave the
+  // last-active job reference around as a fallback for any code that hasn't been per-row-ified.
+  // Rows that never got a fetchResult stay null → they render as queued in Ready.
   setStateV2('ready');
   // If the user queued single-row retries while the main fetch was running,
   // run them now that we're idle. Sequential to avoid hammering the agent.
