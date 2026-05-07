@@ -34,10 +34,10 @@ async def test_pod_fallback_returns_pod_first(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="ABCU1234567")
+    container = MagicMock(container_number="ABCU1234567", invoice_number="")
     dest = tmp_path / "ABCU1234567_pod.pdf"
 
-    result = await jm._tms_pod_fallback(job, container, {"Id": "1"}, dest)
+    result, _chain = await jm._tms_pod_fallback(job, container, {"Id": "1"}, dest)
 
     assert result == "POD"
     assert dest.exists()
@@ -62,10 +62,10 @@ async def test_pod_fallback_falls_through_to_bol_for_export(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="EXPU0000001")
+    container = MagicMock(container_number="EXPU0000001", invoice_number="")
     dest = tmp_path / "EXPU0000001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(job, container, {"Id": "2"}, dest)
+    result, _chain = await jm._tms_pod_fallback(job, container, {"Id": "2"}, dest)
 
     assert result == "BOL"
     assert dest.exists()
@@ -90,10 +90,10 @@ async def test_pod_fallback_falls_through_to_pol(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="EXPU0000002")
+    container = MagicMock(container_number="EXPU0000002", invoice_number="")
     dest = tmp_path / "EXPU0000002_pod.pdf"
 
-    result = await jm._tms_pod_fallback(job, container, {"Id": "3"}, dest)
+    result, _chain = await jm._tms_pod_fallback(job, container, {"Id": "3"}, dest)
 
     assert result == "POL"
     assert layer.get_document.call_count == 3
@@ -101,20 +101,22 @@ async def test_pod_fallback_falls_through_to_pol(tmp_path):
 
 @pytest.mark.asyncio
 async def test_pod_fallback_returns_none_when_nothing_found(tmp_path):
-    """All three doc types missing → None, dest not created."""
+    """All doc types in safety chain missing → None, dest not created."""
     layer = MagicMock()
     layer.get_document = AsyncMock(return_value=None)
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="MISS0000001")
+    container = MagicMock(container_number="MISS0000001", invoice_number="")
     dest = tmp_path / "MISS0000001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(job, container, {"Id": "4"}, dest)
+    result, chain = await jm._tms_pod_fallback(job, container, {"Id": "4"}, dest)
 
     assert result is None
     assert not dest.exists()
-    assert layer.get_document.call_count == 3
+    # Safety chain (no INV# / WO# letters) tries POD, BOL, POL, IT, ITE
+    assert layer.get_document.call_count == 5
+    assert [c["type"] for c in chain] == ["POD", "BOL", "POL", "IT", "ITE"]
 
 
 @pytest.mark.asyncio
@@ -123,13 +125,14 @@ async def test_pod_fallback_returns_none_when_layer_not_configured(tmp_path):
     jm = _make_jm(layer=None)
     jm._tms_data = None  # explicit
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="NOTMS00001")
+    container = MagicMock(container_number="NOTMS00001", invoice_number="")
     dest = tmp_path / "NOTMS00001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(job, container, {"Id": "5"}, dest)
+    result, chain = await jm._tms_pod_fallback(job, container, {"Id": "5"}, dest)
 
     assert result is None
     assert not dest.exists()
+    assert chain == []
 
 
 def _wo_invoice(wo_no: str) -> dict:
@@ -155,10 +158,10 @@ async def test_pod_fallback_export_wo_skips_pod_uses_bol(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="EXPU0000001")
+    container = MagicMock(container_number="EXPU0000001", invoice_number="")
     dest = tmp_path / "EXPU0000001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(
+    result, _chain = await jm._tms_pod_fallback(
         job, container, _wo_invoice("LX2604170040"), dest,
     )
 
@@ -186,10 +189,10 @@ async def test_pod_fallback_export_wo_falls_through_to_pol(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="EXPU0000002")
+    container = MagicMock(container_number="EXPU0000002", invoice_number="")
     dest = tmp_path / "EXPU0000002_pod.pdf"
 
-    result = await jm._tms_pod_fallback(
+    result, _chain = await jm._tms_pod_fallback(
         job, container, _wo_invoice("LX2604170099"), dest,
     )
 
@@ -200,7 +203,7 @@ async def test_pod_fallback_export_wo_falls_through_to_pol(tmp_path):
 
 @pytest.mark.asyncio
 async def test_pod_fallback_import_wo_only_tries_pod(tmp_path):
-    """WO# containing M (and no X) → import → POD only; no BOL or POL probe."""
+    """WO# containing M (and no X), no INV# → import chain POD→BOL→POL→IT."""
     layer = MagicMock()
     calls: list[str] = []
 
@@ -212,20 +215,21 @@ async def test_pod_fallback_import_wo_only_tries_pod(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="IMPU0000001")
+    container = MagicMock(container_number="IMPU0000001", invoice_number="")
     dest = tmp_path / "IMPU0000001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(
+    result, _chain = await jm._tms_pod_fallback(
         job, container, _wo_invoice("LM2604170040"), dest,
     )
 
     assert result is None
-    assert calls == ["POD"]
+    # M3 extension — import chain now includes IT after POD/BOL/POL
+    assert calls == ["POD", "BOL", "POL", "IT"]
 
 
 @pytest.mark.asyncio
 async def test_pod_fallback_unknown_wo_tries_full_chain(tmp_path):
-    """WO# with neither X nor M (e.g., 'LE…') → safety chain POD→BOL→POL."""
+    """WO# with neither X nor M (e.g., 'LE…') → safety chain POD→BOL→POL→IT→ITE."""
     layer = MagicMock()
     calls: list[str] = []
 
@@ -237,15 +241,16 @@ async def test_pod_fallback_unknown_wo_tries_full_chain(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="UNKU0000001")
+    container = MagicMock(container_number="UNKU0000001", invoice_number="")
     dest = tmp_path / "UNKU0000001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(
+    result, _chain = await jm._tms_pod_fallback(
         job, container, _wo_invoice("LE2603300055"), dest,
     )
 
     assert result is None
-    assert calls == ["POD", "BOL", "POL"]
+    # M3 extension — safety chain now includes IT and ITE after POD/BOL/POL
+    assert calls == ["POD", "BOL", "POL", "IT", "ITE"]
 
 
 @pytest.mark.asyncio
@@ -268,10 +273,10 @@ async def test_pod_fallback_continues_past_timeout(tmp_path):
 
     jm = _make_jm(layer)
     job = MagicMock(id="j1")
-    container = MagicMock(container_number="TOUT0000001")
+    container = MagicMock(container_number="TOUT0000001", invoice_number="")
     dest = tmp_path / "TOUT0000001_pod.pdf"
 
-    result = await jm._tms_pod_fallback(job, container, {"Id": "6"}, dest)
+    result, _chain = await jm._tms_pod_fallback(job, container, {"Id": "6"}, dest)
 
     assert result == "BOL"
     assert dest.exists()

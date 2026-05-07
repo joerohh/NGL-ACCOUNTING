@@ -67,12 +67,16 @@ class FetchJobMixin:
     ):
         """Fetch a proof-of-delivery doc from TMS when QBO has none.
 
-        Routes by WO# letter:
-          - 'X' in WO# → export → try BOL, then POL
-          - 'M' in WO# → import → try POD
-          - neither   → unknown → try POD, BOL, POL (safety chain)
+        Routes by INV# pos-2 letter (primary) → WO# letter (fallback):
+          - INV# pos-2 = 'M' or WO# contains 'M' → import → POD → BOL → POL → IT
+          - INV# pos-2 = 'E' or WO# contains 'X' → export → BOL → POL → ITE
+          - neither parses → unknown → POD → BOL → POL → IT → ITE
 
-        Returns the doc_type that succeeded, or None if TMS has nothing.
+        Returns a tuple: (success_doc_type | None, chain_attempted)
+          - success_doc_type: 'POD' | 'BOL' | 'POL' | 'IT' | 'ITE' | None
+          - chain_attempted: list[{'type': str, 'outcome': 'tms_hit' | 'tms_miss' | 'tms_error'}]
+            in the order they were tried.
+
         Writes the file to dest_path on success.
         """
         if not self._tms_data:
@@ -80,24 +84,36 @@ class FetchJobMixin:
                 "TMSDataLayer not configured — skipping TMS POD fallback for %s",
                 container.container_number,
             )
-            return None
+            return None, []
 
         from services.tms_data.extractors import extract_wo_from_qbo
         wo_no = (extract_wo_from_qbo(invoice_data) or "").upper()
-        if "X" in wo_no:
-            doc_types = ("BOL", "POL")
-            wo_kind = "export"
+        inv_no = (container.invoice_number or "").upper()
+
+        # INV# pos-2 primary
+        inv_letter = inv_no[1] if len(inv_no) >= 2 else ""
+        if inv_letter == "M":
+            doc_types = ("POD", "BOL", "POL", "IT")
+            wo_kind = "import (by INV#)"
+        elif inv_letter == "E":
+            doc_types = ("BOL", "POL", "ITE")
+            wo_kind = "export (by INV#)"
+        elif "X" in wo_no:
+            doc_types = ("BOL", "POL", "ITE")
+            wo_kind = "export (by WO#)"
         elif "M" in wo_no:
-            doc_types = ("POD",)
-            wo_kind = "import"
+            doc_types = ("POD", "BOL", "POL", "IT")
+            wo_kind = "import (by WO#)"
         else:
-            doc_types = ("POD", "BOL", "POL")
+            doc_types = ("POD", "BOL", "POL", "IT", "ITE")
             wo_kind = "unknown"
+
         logger.info(
-            "TMS POD fallback for %s: WO=%s kind=%s trying=%s",
-            container.container_number, wo_no or "<none>", wo_kind, doc_types,
+            "TMS POD fallback for %s: INV=%s WO=%s kind=%s trying=%s",
+            container.container_number, inv_no or "<none>", wo_no or "<none>", wo_kind, doc_types,
         )
 
+        chain_attempted: list[dict] = []
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_pod_fb_"))
         try:
             for doc_type in doc_types:
@@ -113,12 +129,14 @@ class FetchJobMixin:
                         "TMS get_document(%s) timed out for %s",
                         doc_type, container.container_number,
                     )
+                    chain_attempted.append({"type": doc_type, "outcome": "tms_error"})
                     continue
                 except Exception as e:
                     logger.warning(
                         "TMS get_document(%s) failed for %s: %s",
                         doc_type, container.container_number, e,
                     )
+                    chain_attempted.append({"type": doc_type, "outcome": "tms_error"})
                     continue
 
                 if path and path.exists():
@@ -129,11 +147,14 @@ class FetchJobMixin:
                         "TMS POD fallback succeeded for %s via %s",
                         container.container_number, doc_type,
                     )
-                    return doc_type
+                    chain_attempted.append({"type": doc_type, "outcome": "tms_hit"})
+                    return doc_type, chain_attempted
+
+                chain_attempted.append({"type": doc_type, "outcome": "tms_miss"})
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-        return None
+        return None, chain_attempted
 
     async def _process_one_container(self, job, container, result) -> None:
         """Process a single container via QBO API: search, download invoice, download POD."""
@@ -249,13 +270,12 @@ class FetchJobMixin:
                     )
 
             if not pod_obtained:
-                # Fall back to TMS Data Layer. Import WOs store the proof-of-delivery
-                # as POD; export WOs (LE/PE/HE… prefix) store it as BOL or POL.
-                # Try the chain so we don't have to special-case WO# parsing here.
+                # Fall back to TMS Data Layer. Routes by INV# pos-2 (M=import, E=export)
+                # primary; falls back to WO# letter; tries POD/BOL/POL/IT/ITE chain.
                 await self._emit(job, "tms_pod_searching", {
                     "containerNumber": container.container_number,
                 })
-                tms_doc_type = await self._tms_pod_fallback(
+                tms_doc_type, chain_attempted = await self._tms_pod_fallback(
                     job, container, invoice_data, new_path,
                 )
                 if tms_doc_type:
@@ -270,15 +290,18 @@ class FetchJobMixin:
                         "containerNumber": container.container_number,
                         "file": new_name,
                         "source": f"TMS ({tms_doc_type})",
+                        "tms_doc_type": tms_doc_type,
+                        "chain_attempted": chain_attempted,
                     })
                 else:
                     result.pod_missing = True
                     await self._emit(job, "pod_missing", {
                         "containerNumber": container.container_number,
                         "message": (
-                            f"No POD/BOL/POL found in QBO or TMS for "
+                            f"No POD/BOL/POL/IT/ITE found in QBO or TMS for "
                             f"container {container.container_number}"
                         ),
+                        "chain_attempted": chain_attempted,
                     })
 
         # Step 4: Emit container complete
