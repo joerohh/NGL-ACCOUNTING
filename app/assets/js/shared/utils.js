@@ -113,3 +113,50 @@ export function buildMergedFilename(row, datePrefix) {
   if (key) return `${datePrefix}_${sanitize(key)}_${container}_merged.pdf`;
   return `${datePrefix}_${container}_merged.pdf`;
 }
+
+// ── Doc-fetch routing (M3) ──────────────────────────────────────────────────
+// Decide whether a row is an import or export based on the INV# prefix
+// (primary) and the WO# letter (fallback). See spec
+// docs/superpowers/specs/2026-05-06-merge-tool-v2-m3-fetching-design.md.
+
+/**
+ * Parse the type letter at INV# position 2.
+ * @returns {'import' | 'export' | null}
+ */
+export function parseInvType(inv) {
+  if (!inv || inv.length < 2) return null;
+  const c = inv[1].toUpperCase();
+  if (c === 'M') return 'import';
+  if (c === 'E') return 'export';
+  return null;
+}
+
+/**
+ * Parse the type letter from WO# (M=import, X=export, anywhere in the string).
+ * @returns {'import' | 'export' | null}
+ */
+export function parseWoType(wo) {
+  if (!wo) return null;
+  const upper = wo.toUpperCase();
+  if (upper.includes('X')) return 'export';
+  if (upper.includes('M')) return 'import';
+  return null;
+}
+
+/**
+ * Decide the doc-fetch type for a row. INV# prefix is primary, WO# letter
+ * is the fallback when the prefix doesn't parse.
+ * @param {{invoiceNumber?: string, workOrderNumber?: string}} row
+ * @returns {{ type: 'import' | 'export' | 'unknown', expectedDoc: 'POD' | 'BOL/POL' | '?' }}
+ */
+export function routingDecisionFor(row) {
+  const fromInv = parseInvType(row.invoiceNumber);
+  if (fromInv) {
+    return { type: fromInv, expectedDoc: fromInv === 'import' ? 'POD' : 'BOL/POL' };
+  }
+  const fromWo = parseWoType(row.workOrderNumber);
+  if (fromWo) {
+    return { type: fromWo, expectedDoc: fromWo === 'import' ? 'POD' : 'BOL/POL' };
+  }
+  return { type: 'unknown', expectedDoc: '?' };
+}
