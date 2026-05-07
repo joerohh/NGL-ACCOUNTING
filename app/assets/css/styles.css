@@ -1630,3 +1630,53 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .centered-stage p.subtitle.error-text {
   color: #b91c1c;
 }
+
+/* ── M3: routing summary band + Will-fetch column ─────────────────────────── */
+#mergeToolViewV2 .routing-summary {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  font-size: 0.84rem;
+  color: #475569;
+  display: flex; align-items: center; gap: 18px;
+  flex-wrap: wrap;
+}
+#mergeToolViewV2 .routing-summary .label {
+  font-weight: 700; color: #0f172a;
+  font-size: 0.78rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+#mergeToolViewV2 .routing-summary .group {
+  display: inline-flex; align-items: center; gap: 7px;
+}
+#mergeToolViewV2 .routing-summary .group strong { color: #0f172a; font-weight: 700; }
+#mergeToolViewV2 .routing-summary .group .chip {
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+}
+#mergeToolViewV2 .routing-summary .group .chip.import  { background: #dbeafe; color: #1e40af; }
+#mergeToolViewV2 .routing-summary .group .chip.export  { background: #f3e8ff; color: #6b21a8; }
+#mergeToolViewV2 .routing-summary .group .chip.unknown { background: #f1f5f9; color: #94a3b8; }
+#mergeToolViewV2 .routing-summary .hint {
+  margin-left: auto;
+  font-size: 0.78rem; color: #94a3b8;
+}
+
+/* Will-fetch chip rendered in the table cells */
+#mergeToolViewV2 .will-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 5px;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+#mergeToolViewV2 .will-chip.import  { background: #dbeafe; color: #1e40af; }
+#mergeToolViewV2 .will-chip.export  { background: #f3e8ff; color: #6b21a8; }
+#mergeToolViewV2 .will-chip.unknown { background: #f1f5f9; color: #94a3b8; }
+
+/* INV# letter highlight (shows the routing letter at pos 2) */
+#mergeToolViewV2 .inv-letter {
+  color: #ea580c; font-weight: 800;
+}
