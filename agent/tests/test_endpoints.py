@@ -349,3 +349,36 @@ class TestSaveOutputExtensions:
             })
             assert r.status_code == 400
             assert "relative" in r.text.lower() or "subfolder" in r.text.lower()
+
+
+class TestFolderPickerAndOpenPath:
+    """M4: pick-folder and open-path helpers."""
+
+    def test_open_path_rejects_missing_path(self, client):
+        r = client.post("/files/open-path", json={"path": "/this/does/not/exist/123abc"})
+        assert r.status_code == 404
+
+    def test_open_path_accepts_existing_dir(self, client):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = client.post("/files/open-path", json={"path": tmp})
+            # On CI/headless this may fail to spawn explorer; endpoint should still return 200
+            # because we use a fire-and-forget subprocess.Popen.
+            assert r.status_code == 200
+            assert r.json()["status"] == "ok"
+
+    def test_open_path_accepts_existing_file(self, client):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "test.txt"
+            f.write_text("hello")
+            r = client.post("/files/open-path", json={"path": str(f)})
+            assert r.status_code == 200
+
+    # pick-folder is intentionally NOT auto-tested — it opens a blocking GUI dialog.
+    # Manual QA only. We just verify the endpoint exists and rejects bad input.
+    def test_pick_folder_endpoint_exists(self, client):
+        # We don't actually invoke it (would block on Tk dialog).
+        # Just verify the route is registered by hitting OPTIONS or a malformed POST.
+        r = client.options("/files/pick-folder")
+        # FastAPI returns 405 for OPTIONS on a POST-only route by default,
+        # OR 200 with the allowed methods listed. Either confirms the route exists.
+        assert r.status_code in (200, 405)

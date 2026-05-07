@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -171,3 +172,48 @@ async def save_output(req: SaveOutputRequest):
         "outputDir": str(open_dir),
         "files": saved,
     }
+
+
+class OpenPathRequest(BaseModel):
+    path: str
+
+
+@router.post("/open-path")
+async def open_path(req: OpenPathRequest):
+    """Open a folder in Explorer or a file in its default app. Fire-and-forget."""
+    target = Path(req.path)
+    if not target.exists():
+        raise HTTPException(404, f"Path not found: {req.path}")
+
+    try:
+        if target.is_dir():
+            subprocess.Popen(["explorer", str(target)])
+        else:
+            # os.startfile is Windows-only and uses the file's default handler
+            os.startfile(str(target))
+    except Exception as e:
+        logger.warning("open-path failed for %s: %s", target, e)
+        raise HTTPException(500, f"Failed to open: {e}")
+
+    return {"status": "ok", "path": str(target)}
+
+
+@router.post("/pick-folder")
+async def pick_folder():
+    """Show a native folder picker and return the chosen absolute path (or null on cancel)."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    # Tk requires a hidden root window. Withdraw it so it doesn't flash on screen.
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)  # ensure dialog appears above the Electron window
+    try:
+        chosen = filedialog.askdirectory(
+            title="Choose where Merge Outputs/ should live",
+            mustexist=False,
+        )
+    finally:
+        root.destroy()
+
+    return {"status": "ok", "path": chosen if chosen else None}
