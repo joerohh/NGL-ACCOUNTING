@@ -303,6 +303,52 @@ export const agentBridge = {
     } catch (e) { return { error: e.message }; }
   },
 
+  async saveBatchOutput({ files, baseLocation, overwriteFolder, openFolder }) {
+    // M4: extended save with multi-level subfolders, custom base location, overwrite.
+    // `files` is [{ filename, data: base64, subfolder }] — same shape as saveToFolder.
+    try {
+      const res = await this._authFetch(this.baseUrl + '/files/save-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files,
+          baseLocation: baseLocation || null,
+          overwriteFolder: !!overwriteFolder,
+          openFolder: openFolder !== false,  // default true
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${text ? ': ' + text : ''}`);
+      }
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async pickFolder() {
+    // M4: open a native folder picker dialog. Returns { path } or { path: null } on cancel.
+    try {
+      const res = await this._authFetch(this.baseUrl + '/files/pick-folder', {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async openPath(path) {
+    // M4: ask the agent to open a folder (Explorer) or file (default app).
+    try {
+      const res = await this._authFetch(this.baseUrl + '/files/open-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
   // ── Customer Storage (localStorage) ──
   _custRead() {
     try { return JSON.parse(localStorage.getItem(LS_CUSTOMERS) || '{}'); } catch { return {}; }
