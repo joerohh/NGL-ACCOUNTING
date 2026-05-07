@@ -12,17 +12,26 @@ import { escHtml, readAsArrayBuffer, findColumnKey, CSV_ALIASES } from '../../sh
 // ── Module-local state ──
 const v2State = {
   subMode: 'empty',          // empty | loading | review | fetching | ready | merging | done
-  excelFile: null,           // File handle
-  excelHeaders: [],          // Captured for diagnostics when alias matching fails
-  rows: [],                  // Array<{rowNum, containerNumber, invoiceNumber, workOrderNumber, customer, selected, status, statusReason}>
-  loadingError: null,        // Inline error shown on the loading state when parse fails
-  searchQuery: '',           // Live search box value
-  sortMode: 'excel',         // 'excel' | 'container' | 'invoice' | 'issues-first'
-  activeTab: 'all',          // 'all' | 'issues'
-  showAllInSuccess: false,   // Success-card "Show all rows" expander toggle
-  pendingMode: null,         // mode about to run (M4)
-  completedModes: [],        // mode keys that produced output this session (M4)
-  lastCompletedMode: null,   // for the Done banner / focus (M4)
+  excelFile: null,
+  excelHeaders: [],
+  rows: [],                  // M3: each row gains status, fetchResult, manualPodFile, skipped fields
+  loadingError: null,
+  searchQuery: '',
+  sortMode: 'excel',
+  activeTab: 'all',          // all | issues | errors | queued
+  showAllInSuccess: false,
+  // ── M3: fetch + sidebar ──
+  jobId: null,               // active fetch job id
+  eventSource: null,         // SSE EventSource handle (closed on teardown)
+  fetchProgress: 0,          // X in "Fetching X / N"
+  fetchTotal: 0,             // N in "Fetching X / N"
+  fetchCurrentContainer: '', // shown next to the progress label
+  lastFetchedContainer: '',  // shown in "Last fetched: <c>" meta line on Resume
+  openSidebarRow: null,      // index into v2State.rows; null = sidebar closed
+  // ── M4 placeholders (unchanged from M2) ──
+  pendingMode: null,
+  completedModes: [],
+  lastCompletedMode: null,
 };
 
 // State group is what the header/toggle buttons key off.
@@ -61,6 +70,22 @@ export function initMergeV2() {
 export function setStateV2(name) {
   // Entering Empty resets the session (used by `+ New Merge` header button + Start over)
   if (name === 'empty') {
+    // M3: defensive teardown — close any SSE / cancel any active job before nuking state
+    try {
+      if (v2State.eventSource) {
+        v2State.eventSource.close();
+        v2State.eventSource = null;
+      }
+      if (v2State.jobId) {
+        // Fire-and-forget cancel — we don't await it; if it fails, the agent will
+        // notice no consumer and tear down on its own
+        fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/cancel`, {
+          method: 'POST',
+        }).catch(() => {});
+        v2State.jobId = null;
+      }
+    } catch (_) { /* best-effort cleanup, never throw */ }
+
     v2State.completedModes = [];
     v2State.lastCompletedMode = null;
     v2State.excelFile = null;
@@ -71,6 +96,11 @@ export function setStateV2(name) {
     v2State.sortMode = 'excel';
     v2State.activeTab = 'all';
     v2State.showAllInSuccess = false;
+    v2State.fetchProgress = 0;
+    v2State.fetchTotal = 0;
+    v2State.fetchCurrentContainer = '';
+    v2State.lastFetchedContainer = '';
+    v2State.openSidebarRow = null;
     const xinput = document.getElementById('v2ExcelInput');
     if (xinput) xinput.value = '';
   }
