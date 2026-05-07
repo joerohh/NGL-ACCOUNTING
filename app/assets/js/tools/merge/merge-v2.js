@@ -1496,3 +1496,87 @@ window.v2CloseSidebar = v2CloseSidebar;
 window.v2SkipRow      = v2SkipRow;
 window.v2NextError    = v2NextError;
 window.v2PrevError    = v2PrevError;
+
+async function v2RetryRow(rowIdx) {
+  const row = v2State.rows[rowIdx];
+  if (!row) return;
+
+  // Show pending state on the button
+  const btn = document.querySelector('#v2DetailSidebar .retry-api-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+
+  try {
+    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        containers: [{ containerNumber: row.containerNumber, invoiceNumber: row.invoiceNumber }],
+        doc_types: ['pod'],
+      }),
+    });
+    if (!res.ok) throw new Error(`Agent returned ${res.status}`);
+    const { jobId } = await res.json();
+
+    // Subscribe to a one-shot stream — we only care about pod_found / pod_missing for our row
+    await new Promise((resolve) => {
+      const url = `http://localhost:8787/jobs/${encodeURIComponent(jobId)}/stream`;
+      const es = new EventSource(url);
+      es.onmessage = (e) => {
+        let evt; try { evt = JSON.parse(e.data); } catch { return; }
+        if (evt.containerNumber !== row.containerNumber) return;
+        if (evt.type === 'pod_found') {
+          row.fetchResult = {
+            invPill: 'ok',
+            podPill: evt.tms_doc_type ? 'fallback' : 'ok',
+            podLabel: evt.tms_doc_type || 'POD',
+            statusText: evt.tms_doc_type ? `Fetched (${evt.tms_doc_type})` : 'Fetched',
+            chainAttempted: evt.chain_attempted || [],
+            message: '',
+          };
+          es.close(); resolve();
+        } else if (evt.type === 'pod_missing') {
+          row.fetchResult = {
+            invPill: 'ok', podPill: 'miss', podLabel: '—',
+            statusText: 'Needs PDF',
+            chainAttempted: evt.chain_attempted || [],
+            message: evt.message || '',
+          };
+          es.close(); resolve();
+        } else if (evt.type === 'job_completed' || evt.type === 'job_cancelled') {
+          es.close(); resolve();
+        }
+      };
+      es.onerror = () => { es.close(); resolve(); };
+    });
+
+    setStateV2('ready');   // re-renders sidebar to ✓ Resolved if pod_found landed
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Retry API call'; }
+    alert(`Retry failed: ${err.message}`);
+  }
+}
+window.v2RetryRow = v2RetryRow;
+
+function v2HandleSidebarUpload(rowIdx, fileList) {
+  const row = v2State.rows[rowIdx];
+  if (!row) return;
+  const file = fileList && fileList[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    alert('Only .pdf files are accepted.');
+    return;
+  }
+
+  row.manualPodFile = file;
+  // Mark fetchResult as "ok" — manual upload bypasses the chain
+  row.fetchResult = {
+    invPill: 'ok',
+    podPill: 'ok',
+    podLabel: row.routingType === 'export' ? 'BOL' : 'POD',  // best-effort label; real type from filename or user
+    statusText: 'Manual upload',
+    chainAttempted: row.fetchResult?.chainAttempted || [],
+    message: '',
+  };
+  setStateV2('ready');   // re-renders sidebar to ✓ Resolved
+}
+window.v2HandleSidebarUpload = v2HandleSidebarUpload;
