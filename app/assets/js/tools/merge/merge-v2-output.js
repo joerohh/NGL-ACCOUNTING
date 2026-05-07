@@ -113,7 +113,12 @@ export function perContainerFilename(row, modeKey) {
     return `${stem}${invSuffix}_INV.pdf`;
   }
   if (modeKey === 'per-container-document') {
-    const docLabel = sanitizeFilenamePart(row.fetchResult?.podLabel || 'DOC');
+    // podLabel is one of POD/BOL/POL/IT/ITE on success or '—' on miss/error.
+    // Treat the em-dash sentinel as "no label" so we don't emit "FOO_—.pdf".
+    const rawLabel = row.fetchResult?.podLabel;
+    const docLabel = (rawLabel && rawLabel !== '—')
+      ? sanitizeFilenamePart(rawLabel)
+      : 'DOC';
     return `${stem}${invSuffix}_${docLabel}.pdf`;
   }
   throw new Error(`perContainerFilename: not a per-container mode: ${modeKey}`);
