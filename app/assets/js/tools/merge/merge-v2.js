@@ -838,12 +838,69 @@ function renderDone()     { return `<div class="centered-stage"><h1>Done (M4)</h
 // ── Expose to inline onclick handlers in render strings ──
 window.v2TriggerExcel = triggerExcel;
 window.v2SetState = setStateV2;
-function v2ClickFetch() { setStateV2('fetching'); }
+
+async function v2ClickFetch() {
+  // Build the fetch payload — dedup selected rows by container.
+  const selected = v2State.rows.filter(r => r.selected);
+  const seen = new Set();
+  const containers = [];
+  for (const row of selected) {
+    const key = row.containerNumber.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    containers.push({
+      containerNumber: row.containerNumber,
+      invoiceNumber: row.invoiceNumber,
+    });
+  }
+
+  if (containers.length === 0) {
+    alert('No rows selected to fetch.');
+    return;
+  }
+
+  // Reset progress state
+  v2State.fetchProgress = 0;
+  v2State.fetchTotal = containers.length;
+  v2State.fetchCurrentContainer = '';
+  v2State.lastFetchedContainer = '';
+  // Clear any stale fetchResult on rows we're about to fetch
+  for (const row of v2State.rows) {
+    if (row.selected) { row.fetchResult = null; row.skipped = false; }
+  }
+
+  setStateV2('fetching');
+
+  try {
+    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ containers, doc_types: ['invoice', 'pod'] }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Agent rejected fetch: ${res.status} ${text}`);
+    }
+    const { jobId } = await res.json();
+    v2State.jobId = jobId;
+    openSseStream(jobId);
+  } catch (err) {
+    alert(`Couldn't start fetch: ${err.message}\n\nIs the agent running? Check Settings.`);
+    setStateV2('review');
+  }
+}
+window.v2ClickFetch = v2ClickFetch;
+
+function openSseStream(jobId) {
+  // Placeholder — Task 11 wires the real event handlers
+  // (split this way so Task 9's PR is independently testable).
+  console.log('openSseStream', jobId, '— handlers wired in Task 11');
+}
+
 function v2ToggleShowAll() {
   v2State.showAllInSuccess = !v2State.showAllInSuccess;
   setStateV2('review');         // re-renders the whole review pane
 }
-window.v2ClickFetch = v2ClickFetch;
 window.v2ToggleShowAll = v2ToggleShowAll;
 function v2HandleTabClick(tab) {
   v2State.activeTab = tab;
