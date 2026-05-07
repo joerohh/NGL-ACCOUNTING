@@ -70,50 +70,91 @@ async def list_job_files(job_id: str):
 class SaveFileItem(BaseModel):
     filename: str
     data: str  # base64-encoded PDF bytes
-    subfolder: str = ""  # subfolder within OUTPUT_DIR (e.g. "One to One Merge")
+    subfolder: str = ""  # may be multi-level: "Per Container/2026-05/2026-05-07"
 
 
 class SaveOutputRequest(BaseModel):
     files: list[SaveFileItem]
     openFolder: bool = True
+    baseLocation: str | None = None  # absolute path; falls back to OUTPUT_DIR if absent
+    overwriteFolder: bool = False    # if True, clear the target subfolder before writing
+
+
+def _safe_subfolder(subfolder: str, base: Path) -> Path:
+    """Resolve a multi-level subfolder under base, rejecting path-traversal attempts."""
+    if not subfolder:
+        return base
+    # Normalize separators and split into parts
+    parts = [p for p in subfolder.replace("\\", "/").split("/") if p not in ("", ".")]
+    for part in parts:
+        if part == ".." or part.startswith("/") or ":" in part:
+            raise HTTPException(400, f"Invalid subfolder path component: {part}")
+    target = base.joinpath(*parts) if parts else base
+    # Final sanity check: target must be inside base
+    try:
+        target.resolve().relative_to(base.resolve())
+    except ValueError:
+        raise HTTPException(400, "Subfolder path escapes base location")
+    return target
 
 
 @router.post("/save-output")
 async def save_output(req: SaveOutputRequest):
-    """Save merged PDFs directly to the output folder (bypasses browser download + MOTW)."""
+    """Save merged PDFs into [baseLocation]/[subfolder]/. Supports nested paths and overwrite."""
     if not req.files:
         raise HTTPException(400, "No files provided")
 
+    # Resolve base location — user-chosen path or OUTPUT_DIR fallback
+    if req.baseLocation:
+        base = Path(req.baseLocation)
+        if not base.is_absolute():
+            raise HTTPException(400, "baseLocation must be an absolute path")
+        base.mkdir(parents=True, exist_ok=True)
+    else:
+        base = OUTPUT_DIR
+
     saved = []
-    open_dir = OUTPUT_DIR  # track the target dir for Explorer
+    open_dir = base
 
+    # Group files by subfolder so we can apply overwriteFolder once per folder
+    by_folder: dict[str, list[SaveFileItem]] = {}
     for item in req.files:
-        safe_name = Path(item.filename).name
-        if not safe_name:
-            continue
+        by_folder.setdefault(item.subfolder, []).append(item)
 
-        # Resolve subfolder (sanitize to prevent traversal)
-        if item.subfolder:
-            safe_subfolder = Path(item.subfolder).name
-            target_dir = OUTPUT_DIR / safe_subfolder
-        else:
-            target_dir = OUTPUT_DIR
+    for subfolder, items in by_folder.items():
+        target_dir = _safe_subfolder(subfolder, base)
+
+        # Overwrite mode: clear the target folder first (only if it exists and is non-empty)
+        if req.overwriteFolder and target_dir.exists() and target_dir.is_dir():
+            for child in target_dir.iterdir():
+                try:
+                    if child.is_file():
+                        child.unlink()
+                    elif child.is_dir():
+                        # Recursively remove subdirs (rare, but possible from prior runs)
+                        import shutil
+                        shutil.rmtree(child)
+                except Exception as e:
+                    logger.warning("Failed to clear %s: %s", child, e)
 
         target_dir.mkdir(parents=True, exist_ok=True)
-        open_dir = target_dir  # open the last subfolder used
+        open_dir = target_dir
 
-        dest = target_dir / safe_name
-        try:
-            pdf_bytes = base64.b64decode(item.data)
-            dest.write_bytes(pdf_bytes)
-            strip_motw(dest)
-            saved.append({"name": safe_name, "size": len(pdf_bytes), "path": str(dest)})
-            logger.info("Saved merged file: %s (%d bytes) -> %s", safe_name, len(pdf_bytes), target_dir)
-        except Exception as e:
-            logger.error("Failed to save %s: %s", safe_name, e)
-            saved.append({"name": safe_name, "error": str(e)})
+        for item in items:
+            safe_name = Path(item.filename).name
+            if not safe_name:
+                continue
+            dest = target_dir / safe_name
+            try:
+                pdf_bytes = base64.b64decode(item.data)
+                dest.write_bytes(pdf_bytes)
+                strip_motw(dest)
+                saved.append({"name": safe_name, "size": len(pdf_bytes), "path": str(dest)})
+                logger.info("Saved merged file: %s (%d bytes) -> %s", safe_name, len(pdf_bytes), target_dir)
+            except Exception as e:
+                logger.error("Failed to save %s: %s", safe_name, e)
+                saved.append({"name": safe_name, "error": str(e)})
 
-    # Open the target subfolder in Windows Explorer
     if req.openFolder and saved:
         try:
             subprocess.Popen(["explorer", str(open_dir)])
