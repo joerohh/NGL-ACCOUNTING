@@ -1518,11 +1518,28 @@ async function v2ChangeOutputLocation() {
   setStateV2('merge');
 }
 
+function v2BackToReady() {
+  // Preserves rows + completedModes — user can come back and run more modes.
+  setStateV2('ready');
+}
+
+function v2NewMerge() {
+  const completedCount = Object.keys(v2State.completedModes || {}).length;
+  if (completedCount > 0) {
+    if (!confirm(`This will reset the workflow and clear ${completedCount} completed merge${completedCount === 1 ? '' : 's'} from the Merge screen. (Files on disk are kept.) Continue?`)) {
+      return;
+    }
+  }
+  setStateV2('empty');
+}
+
 window.v2ClickModeCard = v2ClickModeCard;
 window.v2OpenOutputFile = v2OpenOutputFile;
 window.v2OpenOutputFolder = v2OpenOutputFolder;
 window.v2RerunMode = v2RerunMode;
 window.v2ChangeOutputLocation = v2ChangeOutputLocation;
+window.v2BackToReady = v2BackToReady;
+window.v2NewMerge = v2NewMerge;
 
 // ── Expose to inline onclick handlers in render strings ──
 window.v2TriggerExcel = triggerExcel;
