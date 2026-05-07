@@ -2106,6 +2106,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 16px;
 }
+.merge-screen-header h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
 .merge-screen-header .header-spacer { flex: 1; }
 .output-location-btn {
   background: white; border: 1px solid #e2e8f0;

@@ -1302,7 +1302,7 @@ function renderMerge() {
     : 'Desktop (default)';
   const headerHtml = `
     <div class="merge-screen-header">
-      <h2 style="margin:0; font-size:1.1rem; font-weight:600;">Choose a merge format</h2>
+      <h2>Choose a merge format</h2>
       <span class="header-spacer"></span>
       <button class="output-location-btn" onclick="window.v2ChangeOutputLocation()" title="Change where files are saved">
         <span class="label-prefix">Output:</span>
@@ -1391,12 +1391,17 @@ function modeNameOf(modeKey) {
 
 function formatCompletedStats(completed) {
   const { stats, completedAt } = completed;
-  const sizeMb = (stats.totalBytes / (1024 * 1024)).toFixed(1);
   const time = completedAt instanceof Date
     ? completedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : '';
   const fileLabel = stats.fileCount === 1 ? '1 PDF' : `${stats.fileCount} PDFs`;
-  return `${fileLabel} · ${stats.totalPages} pages · ${sizeMb} MB${time ? ` · ${time}` : ''}`;
+  return `${fileLabel} · ${stats.totalPages} pages · ${formatBytes(stats.totalBytes)}${time ? ` · ${time}` : ''}`;
+}
+
+function formatBytes(bytes) {
+  // Sub-MB outputs would round to "0.0 MB" — show KB instead so users don't think the file is empty.
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function shortenPath(p) {
