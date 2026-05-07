@@ -15,30 +15,46 @@ import { agentBridge } from '../../shared/agent-client.js';
 
 // ── Module-local state ──
 const v2State = {
-  subMode: 'empty',          // empty | loading | review | fetching | ready | merging | done
+  subMode: 'empty',          // empty | loading | review | fetching | ready | merge
   excelFile: null,
   excelHeaders: [],
-  rows: [],                  // M3: each row gains status, fetchResult, manualPodFile, skipped fields
+  rows: [],
   loadingError: null,
   searchQuery: '',
   sortMode: 'excel',
-  activeTab: 'all',          // all | issues | errors | queued
+  activeTab: 'all',
   showAllInSuccess: false,
-  // ── M3: fetch + sidebar ──
-  jobId: null,               // active fetch job id
-  eventSource: null,         // SSE EventSource handle (closed on teardown)
-  fetchProgress: 0,          // X in "Fetching X / N"
-  fetchTotal: 0,             // N in "Fetching X / N"
-  fetchCurrentContainer: '', // shown next to the progress label
-  lastFetchedContainer: '',  // shown in "Last fetched: <c>" meta line on Resume
-  openSidebarRow: null,      // index into v2State.rows; null = sidebar closed
-  queuedRetries: [],         // [{rowIdx}] — Retry requests queued during a live fetch
-  completedContainers: null, // Set<containerLower> — dedups progress increments per fetch job
-  // ── M4 placeholders (unchanged from M2) ──
-  pendingMode: null,
-  completedModes: [],
-  lastCompletedMode: null,
+  // M3: fetch + sidebar
+  jobId: null,
+  eventSource: null,
+  fetchProgress: 0,
+  fetchTotal: 0,
+  fetchCurrentContainer: '',
+  lastFetchedContainer: '',
+  openSidebarRow: null,
+  queuedRetries: [],
+  completedContainers: null,
+  // M4: merge screen
+  outputLocation: null,           // absolute path; null → agent uses OUTPUT_DIR
+  completedModes: {},             // { modeKey: { stats, files: [{filename, path}], completedAt: Date } }
+  runningMode: null,              // modeKey of in-progress merge (null = nothing running)
+  mergeProgress: { done: 0, total: 0, current: '' },
+  confirmPopup: null,             // null | { uncheckedCount, onContinue, onCancel }
+  pendingMode: null,              // unused — kept for backward compat
+  lastCompletedMode: null,        // unused — kept for backward compat
 };
+
+// ── localStorage for output location ──
+const LS_OUTPUT_LOCATION = 'mergeV2OutputLocation';
+function loadSavedOutputLocation() {
+  try { return localStorage.getItem(LS_OUTPUT_LOCATION) || null; } catch { return null; }
+}
+function saveOutputLocation(path) {
+  try {
+    if (path) localStorage.setItem(LS_OUTPUT_LOCATION, path);
+    else localStorage.removeItem(LS_OUTPUT_LOCATION);
+  } catch {}
+}
 
 // State group is what the header/toggle buttons key off.
 // Within a group, sub-states (loading vs empty, fetching vs review) pick which renderer fires.
@@ -46,14 +62,14 @@ const STATE_GROUP = {
   empty: 's1', loading: 's1',
   review: 's2', fetching: 's2',
   ready: 's3',
-  merging: 's4', done: 's4',
+  merge: 's4',
 };
 
 const STATES = {
   s1: () => v2State.subMode === 'loading' ? renderLoading() : renderEmpty(),
   s2: () => v2State.subMode === 'fetching' ? renderFetching() : renderReview(),
   s3: () => renderReady(),
-  s4: () => v2State.subMode === 'merging' ? renderMerging() : renderDone(),
+  s4: () => renderMerge(),
 };
 
 let _initialized = false;
@@ -66,6 +82,7 @@ export function initMergeV2() {
     return;
   }
   _initialized = true;
+  v2State.outputLocation = loadSavedOutputLocation();
   // Wire the hidden Excel input — change event picks up the file from native picker
   const xinput = document.getElementById('v2ExcelInput');
   if (xinput) xinput.addEventListener('change', handleExcelChange);
@@ -93,8 +110,6 @@ export function setStateV2(name) {
       }
     } catch (_) { /* best-effort cleanup, never throw */ }
 
-    v2State.completedModes = [];
-    v2State.lastCompletedMode = null;
     v2State.excelFile = null;
     v2State.excelHeaders = [];
     v2State.rows = [];
@@ -110,6 +125,11 @@ export function setStateV2(name) {
     v2State.openSidebarRow = null;
     v2State.queuedRetries = [];
     v2State.completedContainers = null;
+    v2State.completedModes = {};
+    v2State.runningMode = null;
+    v2State.mergeProgress = { done: 0, total: 0, current: '' };
+    v2State.confirmPopup = null;
+    // outputLocation is preserved across runs — survives the reset.
     const xinput = document.getElementById('v2ExcelInput');
     if (xinput) xinput.value = '';
   }
@@ -1240,8 +1260,7 @@ function renderRoutingTrace(row) {
   ).join('');
   return `<div class="routing-trace">${linesHtml}</div>`;
 }
-function renderMerging()  { return `<div class="centered-stage"><h1>Merging (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
-function renderDone()     { return `<div class="centered-stage"><h1>Done (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
+function renderMerge() { return `<div class="centered-stage"><h1>Merge (M4)</h1><p class="subtitle">Stub — replaced in Task 8.</p></div>`; }
 
 // ── Expose to inline onclick handlers in render strings ──
 window.v2TriggerExcel = triggerExcel;
@@ -1321,7 +1340,7 @@ function v2ToggleFetchRow(rowIdx, checked) {
   }
 }
 function v2ClickContinueMerge() {
-  setStateV2('merging');   // M4 stub
+  setStateV2('merge');   // M4 stub — Task 7 wires the popup
 }
 async function v2RetryAllErrors() {
   const errors = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
