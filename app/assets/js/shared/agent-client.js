@@ -325,9 +325,14 @@ export const agentBridge = {
     } catch (e) { return { error: e.message }; }
   },
 
-  async pickFolder() {
+  async pickFolder(defaultPath) {
     // M4: open a native folder picker dialog. Returns { path } or { path: null } on cancel.
+    // Prefers the Electron main-process dialog (no Tcl/Tk dependency in agent bundle).
+    // Falls back to the agent's Tk endpoint for browser-mode dev.
     try {
+      if (window.nglDesktop && typeof window.nglDesktop.pickFolder === 'function') {
+        return await window.nglDesktop.pickFolder(defaultPath);
+      }
       const res = await this._authFetch(this.baseUrl + '/files/pick-folder', {
         method: 'POST',
       });

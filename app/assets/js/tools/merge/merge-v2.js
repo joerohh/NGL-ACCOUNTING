@@ -631,6 +631,11 @@ function updateFetchButton() {
 function topBarWithDrop() {
   const fname = v2State.excelFile ? escHtml(v2State.excelFile.name) : '';
   const total = v2State.rows.length;
+  const manualCount = v2State.rows.filter(r => r.manualPodFile).length;
+  const helpText = manualCount > 0
+    ? `${manualCount} manual upload${manualCount === 1 ? '' : 's'} attached. Drop more to override fetched docs.`
+    : 'Drop or click to add PDFs for missing or late docs. Filename must contain the container #.';
+
   return `
     <div class="top-bar">
       <div class="file-summary">
@@ -640,16 +645,79 @@ function topBarWithDrop() {
           <div class="meta">${total} unique container${total !== 1 ? 's' : ''}</div>
         </div>
       </div>
-      <div class="pdf-drop-card" title="Bulk PDF drop wires up in M4">
+      <label class="pdf-drop-card ${manualCount > 0 ? 'has-manual' : ''}" for="v2BulkPdfInput"
+             ondragover="event.preventDefault(); this.classList.add('drag-over');"
+             ondragleave="this.classList.remove('drag-over');"
+             ondrop="event.preventDefault(); this.classList.remove('drag-over'); window.v2HandleBulkPdfDrop(event.dataTransfer.files);">
         <div class="icon-box pdf">PDF</div>
         <div class="text">
-          <div class="label-line">PDFs <span class="count-pill">0</span></div>
-          <div class="help">Drop bulk PDFs here for missing or late docs (M4)</div>
+          <div class="label-line">PDFs <span class="count-pill">${manualCount}</span></div>
+          <div class="help">${helpText}</div>
         </div>
-      </div>
+        <input type="file" id="v2BulkPdfInput" accept=".pdf" multiple
+               style="display:none;"
+               onchange="window.v2HandleBulkPdfDrop(this.files); this.value='';" />
+      </label>
     </div>
   `;
 }
+
+function v2HandleBulkPdfDrop(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  const files = Array.from(fileList).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (files.length === 0) {
+    alert('Only .pdf files are accepted.');
+    return;
+  }
+
+  // Match each file to a row whose container number appears in the filename (case-insensitive).
+  // First match wins per row; first row wins per file.
+  let matched = 0;
+  const unmatched = [];
+  const usedRowIdxs = new Set();
+  for (const file of files) {
+    const lower = file.name.toLowerCase();
+    let hit = false;
+    for (let i = 0; i < v2State.rows.length; i++) {
+      if (usedRowIdxs.has(i)) continue;
+      const row = v2State.rows[i];
+      const cn = (row.containerNumber || '').toLowerCase();
+      if (!cn) continue;
+      if (lower.includes(cn)) {
+        row.manualPodFile = file;
+        // Promote the row's fetchResult to "ok" so it counts as ready/selectable.
+        const wasError = row.fetchResult?.podPill === 'miss';
+        row.fetchResult = {
+          invPill: row.fetchResult?.invPill || 'ok',
+          podPill: 'ok',
+          podLabel: row.routingType === 'export' ? 'BOL' : 'POD',
+          statusText: 'Manual upload',
+          chainAttempted: row.fetchResult?.chainAttempted || [],
+          message: '',
+        };
+        if (wasError) row.selected = true;   // auto-select rows that were error-blocked
+        usedRowIdxs.add(i);
+        matched++;
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) unmatched.push(file.name);
+  }
+
+  // Re-render whichever screen we're on so counters + row pills update.
+  setStateV2(v2State.subMode);
+
+  // Brief feedback. Use alert for now — matches the rest of the file's pattern.
+  let msg = `${matched} of ${files.length} PDF${files.length === 1 ? '' : 's'} matched to containers.`;
+  if (unmatched.length > 0) {
+    const sample = unmatched.slice(0, 3).map(n => `\n  • ${n}`).join('');
+    const more = unmatched.length > 3 ? `\n  …and ${unmatched.length - 3} more` : '';
+    msg += `\n\nNo container # match in filename for:${sample}${more}`;
+  }
+  if (matched > 0 || unmatched.length > 0) alert(msg);
+}
+window.v2HandleBulkPdfDrop = v2HandleBulkPdfDrop;
 
 function routingSummaryBand() {
   const imports  = v2State.rows.filter(r => r.routingType === 'import').length;
@@ -1535,7 +1603,7 @@ function v2RerunMode(modeKey) {
 }
 
 async function v2ChangeOutputLocation() {
-  const res = await agentBridge.pickFolder();
+  const res = await agentBridge.pickFolder(v2State.outputLocation);
   if (res.error) { alert(`Couldn't open folder picker: ${res.error}`); return; }
   if (!res.path) return;   // user cancelled
   v2State.outputLocation = res.path;

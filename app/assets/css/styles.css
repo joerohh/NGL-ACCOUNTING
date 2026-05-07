@@ -942,33 +942,51 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 }
 #mergeToolViewV2 .review-actions .secondary-btn:hover { border-color: #cbd5e1; color: #1e293b; }
 
-/* ── PDF drop card (top-bar variant) ── */
+/* ── PDF drop card (top-bar variant) — matches the file-summary card's solid white look ── */
 #mergeToolViewV2 .pdf-drop-card {
-  background: #fff; border: 2px dashed #cbd5e1;
+  background: #ffffff; border: 1px solid #e2e8f0;
   border-radius: 10px; padding: 12px 16px;
-  cursor: pointer; transition: all 0.15s;
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
   display: flex; align-items: center; gap: 12px;
+  font-family: inherit; margin: 0;
 }
-#mergeToolViewV2 .pdf-drop-card:hover { border-color: #f97316; background: #fff7ed; }
-#mergeToolViewV2 .pdf-drop-card.has-failures { border-color: #f59e0b; background: #fffbeb; }
-#mergeToolViewV2 .pdf-drop-card.has-failures:hover { background: #fef3c7; }
+#mergeToolViewV2 .pdf-drop-card:hover {
+  border-color: #fed7aa;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.08);
+}
+#mergeToolViewV2 .pdf-drop-card.drag-over {
+  border-color: #ea580c;
+  background: #fff7ed;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+}
+#mergeToolViewV2 .pdf-drop-card.has-manual {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+#mergeToolViewV2 .pdf-drop-card.has-manual:hover { border-color: #4ade80; }
 #mergeToolViewV2 .pdf-drop-card .icon-box {
   width: 36px; height: 36px; border-radius: 8px;
-  background: #fff7ed; color: #ea580c;
+  background: #fef3c7; color: #b45309;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+}
+#mergeToolViewV2 .pdf-drop-card.has-manual .icon-box {
+  background: #dcfce7; color: #15803d;
 }
 #mergeToolViewV2 .pdf-drop-card .text { flex: 1; min-width: 0; }
 #mergeToolViewV2 .pdf-drop-card .label-line {
-  font-weight: 600; color: #1e293b; font-size: 0.86rem;
+  font-weight: 600; color: #0f172a; font-size: 0.88rem;
   display: flex; align-items: center; gap: 8px;
 }
 #mergeToolViewV2 .pdf-drop-card .label-line .count-pill {
-  background: #ea580c; color: white;
+  background: #94a3b8; color: white;
   padding: 1px 8px; border-radius: 999px;
   font-size: 0.7rem; font-weight: 700;
+  min-width: 18px; text-align: center;
 }
-#mergeToolViewV2 .pdf-drop-card .help { color: #64748b; font-size: 0.76rem; margin-top: 2px; }
-#mergeToolViewV2 .pdf-drop-card.has-failures .help { color: #b45309; }
+#mergeToolViewV2 .pdf-drop-card.has-manual .label-line .count-pill { background: #16a34a; }
+#mergeToolViewV2 .pdf-drop-card .help { color: #64748b; font-size: 0.78rem; margin-top: 3px; line-height: 1.4; }
+#mergeToolViewV2 .pdf-drop-card.has-manual .help { color: #166534; }
 
 /* ── Pre-fetch validation badge ── */
 #mergeToolViewV2 .val-badge {

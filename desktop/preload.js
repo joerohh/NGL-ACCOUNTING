@@ -5,7 +5,7 @@
  * desktop-specific APIs to the web app via window.nglDesktop.
  */
 
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 let appVersion = "1.0.0";
 try { appVersion = require("./package.json").version; } catch { /* packaged mode */ }
@@ -16,4 +16,7 @@ contextBridge.exposeInMainWorld("nglDesktop", {
 
   /** App version from package.json. */
   version: appVersion,
+
+  /** Open a native folder picker. Returns { path: string|null } (null = user cancelled). */
+  pickFolder: (defaultPath) => ipcRenderer.invoke("ngl:pick-folder", { defaultPath }),
 });

@@ -20,20 +20,42 @@ async function fetchAgentFile(jobId, filename) {
   return await res.arrayBuffer();
 }
 
+// ── Read a File/Blob as ArrayBuffer ──
+function blobToArrayBuffer(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsArrayBuffer(blob);
+  });
+}
+
 // ── Pre-load both files for one row. Returns { invoiceBuf, docBuf } (either may be null). ──
-//   Uses row.fetchJobId (set when the SSE event landed) so rows from different fetch jobs
-//   each look in the right downloads/{jobId}/ folder. Falls back to the dispatcher's jobId.
+//   Manual uploads (row.manualPodFile from sidebar Fix Error or top-bar bulk drop) take
+//   precedence over fetched agent files. Uses row.fetchJobId (set when the SSE event landed)
+//   so rows from different fetch jobs each look in the right downloads/{jobId}/ folder.
 async function preloadRowFiles(fallbackJobId, row) {
   const jobId = row.fetchJobId || fallbackJobId;
-  if (!jobId) return { invoiceBuf: null, docBuf: null };
   const cn = row.containerNumber;
-  const [invoiceBuf, docBuf] = await Promise.all([
-    fetchAgentFile(jobId, `${cn}_invoice.pdf`),
-    // Errored rows skip the doc fetch entirely — saves a 404 round-trip.
-    row.fetchResult?.podPill === 'miss'
-      ? Promise.resolve(null)
-      : fetchAgentFile(jobId, `${cn}_pod.pdf`),
-  ]);
+
+  // Doc: prefer manual upload over fetched file. If errored AND no manual upload, skip.
+  let docPromise;
+  if (row.manualPodFile) {
+    docPromise = blobToArrayBuffer(row.manualPodFile);
+  } else if (row.fetchResult?.podPill === 'miss') {
+    docPromise = Promise.resolve(null);
+  } else if (jobId) {
+    docPromise = fetchAgentFile(jobId, `${cn}_pod.pdf`);
+  } else {
+    docPromise = Promise.resolve(null);
+  }
+
+  // Invoice: always from the agent (no manual-invoice path today).
+  const invoicePromise = jobId
+    ? fetchAgentFile(jobId, `${cn}_invoice.pdf`)
+    : Promise.resolve(null);
+
+  const [invoiceBuf, docBuf] = await Promise.all([invoicePromise, docPromise]);
   return { invoiceBuf, docBuf };
 }
 

@@ -16,7 +16,7 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, globalShortcut, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, globalShortcut, shell, ipcMain } = require("electron");
 const path = _path;
 const fs = _fs;
 const { spawn } = require("child_process");
@@ -335,6 +335,20 @@ if (!gotTheLock) {
     }
   });
 }
+
+// ── IPC: native folder picker (used by merge-tool v2 output location button) ──
+ipcMain.handle("ngl:pick-folder", async (_event, opts = {}) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showOpenDialog(win, {
+    title: "Choose where Merge Outputs/ should live",
+    defaultPath: opts.defaultPath || app.getPath("desktop"),
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return { path: null };
+  }
+  return { path: result.filePaths[0] };
+});
 
 // ── App lifecycle ──────────────────────────────────────────────────
 
