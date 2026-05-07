@@ -13,6 +13,8 @@ import {
 } from '../../shared/utils.js';
 import { agentBridge } from '../../shared/agent-client.js';
 import { MODES as MODES_LIST, modeByKey } from './merge-v2-output.js';
+import { runMergeMode } from './merge-v2-engine.js';
+import { saveMergedFiles, subfolderFor } from './merge-v2-output.js';
 
 // ── Module-local state ──
 const v2State = {
@@ -1413,12 +1415,110 @@ function shortenPath(p) {
   return `${parts[0]}\\…\\${parts[parts.length - 2]}\\${parts[parts.length - 1]}`;
 }
 
-// Stubs — wired in Task 9
-function v2ClickModeCard(modeKey) { console.log('TODO: click', modeKey); }
-function v2OpenOutputFile(modeKey) { console.log('TODO: open file', modeKey); }
-function v2OpenOutputFolder(modeKey) { console.log('TODO: open folder', modeKey); }
-function v2RerunMode(modeKey) { console.log('TODO: rerun', modeKey); }
-function v2ChangeOutputLocation() { console.log('TODO: change location'); }
+async function v2ClickModeCard(modeKey) {
+  // Block re-entry while another merge is running.
+  if (v2State.runningMode) return;
+
+  // Build the row set: selected, non-skipped, non-errored OR errored-but-checked.
+  // Engine handles the case where document is missing — silently produces invoice-only entry.
+  const rows = v2State.rows.filter(r => r.selected && r.fetchResult && !r.skipped);
+  if (rows.length === 0) {
+    alert('No rows selected. Go back to Ready and check at least one row.');
+    return;
+  }
+
+  v2State.runningMode = modeKey;
+  v2State.mergeProgress = { done: 0, total: rows.length, current: '' };
+  setStateV2('merge');   // shows running banner + spinner card
+
+  try {
+    const result = await runMergeMode({
+      rows,
+      jobId: v2State.jobId,
+      modeKey,
+      onProgress: (p) => {
+        v2State.mergeProgress = p;
+        // Update only the banner — avoid full re-render mid-merge
+        const banner = document.querySelector('.merge-running-banner');
+        if (banner) {
+          const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+          banner.innerHTML = `
+            <span>⟳ Merging ${escHtml(modeNameOf(modeKey))}…</span>
+            <span style="color:#94a3b8;">${p.done} / ${p.total}${p.current ? ' · ' + escHtml(p.current) : ''}</span>
+            <span style="margin-left:auto; font-weight:600;">${pct}%</span>
+          `;
+        }
+      },
+    });
+
+    if (result.files.length === 0) {
+      alert('Merge produced no files. Check the row selection and try again.');
+      v2State.runningMode = null;
+      setStateV2('merge');
+      return;
+    }
+
+    // Write to disk
+    const saveRes = await saveMergedFiles({
+      files: result.files,
+      modeKey,
+      baseLocation: v2State.outputLocation,
+      openFolder: false,   // don't auto-open; user clicks Open Folder if they want
+    });
+    if (saveRes.error) {
+      alert(`Save failed: ${saveRes.error}`);
+      v2State.runningMode = null;
+      setStateV2('merge');
+      return;
+    }
+
+    // Record completion. Pull file paths back from the agent response so Open File works.
+    v2State.completedModes[modeKey] = {
+      stats: result.stats,
+      files: (saveRes.files || []).filter(f => !f.error),
+      outputDir: saveRes.outputDir,
+      completedAt: new Date(),
+    };
+    v2State.runningMode = null;
+    v2State.mergeProgress = { done: 0, total: 0, current: '' };
+    setStateV2('merge');
+  } catch (err) {
+    console.error('Merge failed:', err);
+    alert(`Merge failed: ${err.message}`);
+    v2State.runningMode = null;
+    setStateV2('merge');
+  }
+}
+
+function v2OpenOutputFile(modeKey) {
+  const completed = v2State.completedModes[modeKey];
+  if (!completed || completed.files.length === 0) return;
+  // Single-output modes have exactly one file. We hide the button for per-container modes.
+  const target = completed.files[0]?.path;
+  if (target) agentBridge.openPath(target);
+}
+
+function v2OpenOutputFolder(modeKey) {
+  const completed = v2State.completedModes[modeKey];
+  if (!completed) return;
+  if (completed.outputDir) agentBridge.openPath(completed.outputDir);
+}
+
+function v2RerunMode(modeKey) {
+  // Re-run uses the same row selection. saveMergedFiles already passes overwriteFolder: true.
+  // Drop the existing completion record so the card flips back to running while it works.
+  delete v2State.completedModes[modeKey];
+  v2ClickModeCard(modeKey);
+}
+
+async function v2ChangeOutputLocation() {
+  const res = await agentBridge.pickFolder();
+  if (res.error) { alert(`Couldn't open folder picker: ${res.error}`); return; }
+  if (!res.path) return;   // user cancelled
+  v2State.outputLocation = res.path;
+  saveOutputLocation(res.path);
+  setStateV2('merge');
+}
 
 window.v2ClickModeCard = v2ClickModeCard;
 window.v2OpenOutputFile = v2OpenOutputFile;
