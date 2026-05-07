@@ -1680,3 +1680,130 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .inv-letter {
   color: #ea580c; font-weight: 800;
 }
+
+/* ── M3: Fetching state — progress line + queued/error rows ───────────────── */
+#mergeToolViewV2 .progress-line {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 12px 18px;
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 14px;
+}
+#mergeToolViewV2 .progress-line .now { color: #475569; font-size: 0.86rem; flex-shrink: 0; }
+#mergeToolViewV2 .progress-line .now strong { color: #0f172a; }
+#mergeToolViewV2 .progress-line .container-name {
+  font-family: 'SF Mono', Consolas, monospace;
+  color: #1e40af; font-weight: 600; font-size: 0.82rem;
+}
+#mergeToolViewV2 .progress-track {
+  flex: 1; height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden;
+}
+#mergeToolViewV2 .progress-fill {
+  height: 100%; background: #ea580c; border-radius: 999px;
+  transition: width 0.3s ease-out;
+}
+#mergeToolViewV2 .cancel-btn {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 7px; padding: 7px 14px;
+  font-size: 0.82rem; cursor: pointer; color: #475569; font-family: inherit;
+}
+#mergeToolViewV2 .cancel-btn:hover { border-color: #dc2626; color: #dc2626; }
+
+/* Ready action bar */
+#mergeToolViewV2 .ready-action-bar {
+  display: flex; align-items: center; gap: 14px;
+  background: white; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 12px 18px; margin-bottom: 14px;
+}
+#mergeToolViewV2 .ready-status { color: #475569; font-size: 0.86rem; flex: 1; }
+#mergeToolViewV2 .ready-status strong { color: #0f172a; }
+#mergeToolViewV2 .ready-action-right { display: flex; align-items: center; gap: 10px; }
+#mergeToolViewV2 .ready-action-right .control-label {
+  font-size: 0.7rem; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+#mergeToolViewV2 .merge-btn {
+  padding: 9px 18px; background: #ea580c; color: white;
+  border: none; border-radius: 8px; font-weight: 700; font-size: 0.86rem;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  font-family: inherit;
+}
+#mergeToolViewV2 .merge-btn:hover { background: #c2410c; }
+#mergeToolViewV2 .merge-btn:disabled { background: #fed7aa; cursor: not-allowed; }
+#mergeToolViewV2 .merge-btn .count-badge {
+  background: rgba(255,255,255,0.22);
+  padding: 2px 9px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 700;
+}
+#mergeToolViewV2 .merge-btn.resume {
+  background: #2563eb;
+}
+#mergeToolViewV2 .merge-btn.resume:hover { background: #1d4ed8; }
+#mergeToolViewV2 .merge-btn .last-fetched-meta {
+  display: block; font-size: 0.66rem; font-weight: 500; opacity: 0.85;
+  margin-top: 2px; text-align: left;
+}
+
+/* Queued tab + queued rows */
+#mergeToolViewV2 .tab.queued-tab .count { background: #f1f5f9; color: #94a3b8; }
+#mergeToolViewV2 tbody tr.row-queued { opacity: 0.55; }
+#mergeToolViewV2 tbody tr.row-active-error {
+  background: #fff7ed !important;
+  box-shadow: inset 3px 0 0 #ea580c;
+}
+
+/* Doc-result pills */
+#mergeToolViewV2 .doc-row { display: flex; gap: 6px; align-items: center; }
+#mergeToolViewV2 .doc-pill {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 5px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+}
+#mergeToolViewV2 .doc-pill.ok       { background: #dcfce7; color: #15803d; }
+#mergeToolViewV2 .doc-pill.fallback { background: #fef3c7; color: #92400e; }
+#mergeToolViewV2 .doc-pill.miss     { background: #fee2e2; color: #b91c1c; }
+#mergeToolViewV2 .doc-pill.queued   { background: #f1f5f9; color: #94a3b8; }
+
+/* Status text */
+#mergeToolViewV2 .status-text { font-size: 0.8rem; font-weight: 600; }
+#mergeToolViewV2 .status-text.ready  { color: #16a34a; }
+#mergeToolViewV2 .status-text.issue  { color: #d97706; }
+#mergeToolViewV2 .status-text.queued { color: #94a3b8; }
+#mergeToolViewV2 .status-text.skipped {
+  color: #94a3b8; font-style: italic;
+  background: #f1f5f9; padding: 2px 7px; border-radius: 4px;
+}
+
+/* Fix Error button (soft red palette per parent spec) */
+#mergeToolViewV2 .fix-error-btn {
+  background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;
+  padding: 5px 11px; border-radius: 6px;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; font-family: inherit;
+}
+#mergeToolViewV2 .fix-error-btn:hover { background: #fecaca; border-color: #f87171; color: #991b1b; }
+
+/* Mass retry button on the Errors tab toolbar */
+#mergeToolViewV2 .toolbar .mass-retry-btn {
+  background: #fff; border: 1px solid #fca5a5; color: #b91c1c;
+  padding: 6px 12px; border-radius: 6px;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit;
+  margin-left: 8px;
+}
+#mergeToolViewV2 .toolbar .mass-retry-btn:hover {
+  background: #fee2e2; border-color: #f87171;
+}
+#mergeToolViewV2 .toolbar .mass-retry-btn:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+
+/* Row-update flash animation (live SSE) */
+@keyframes v2-row-flash {
+  0% { background: #fef3c7; }
+  100% { background: transparent; }
+}
+#mergeToolViewV2 tr.flash-update { animation: v2-row-flash 1s ease-out; }
+
+/* Doc-pill swap transition (fade in/out) */
+#mergeToolViewV2 .doc-pill {
+  transition: background 0.25s ease-out, color 0.25s ease-out;
+}
