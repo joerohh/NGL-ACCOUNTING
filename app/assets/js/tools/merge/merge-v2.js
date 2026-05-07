@@ -524,9 +524,14 @@ function fetchRowMarkup(rowIdx, row, opts) {
     isQueued ? 'row-queued' : '',
   ].filter(Boolean).join(' ');
 
-  const checkable = !!row.fetchResult && row.fetchResult.podPill !== 'miss' && !row.skipped;
-  const checkAttrs = `${row.selected && checkable ? 'checked' : ''} ${!checkable ? 'disabled' : ''}`;
-  const checkTitle = isError ? 'Fix the error before this can be merged'
+  // M4: errored rows are unchecked by default but still INTERACTIVE.
+  // Skipped (dedup) rows remain disabled — they can't be merged at all.
+  const hasFetch    = !!row.fetchResult;
+  const isErrorRow  = row.fetchResult?.podPill === 'miss';
+  const isSkipped   = !!row.skipped;
+  const interactive = hasFetch && !isSkipped;
+  const checkAttrs  = `${row.selected && interactive ? 'checked' : ''} ${interactive ? '' : 'disabled'}`;
+  const checkTitle  = isErrorRow ? 'This row is missing a document. If checked, only the invoice page will be merged.'
                    : isQueued ? 'Not yet fetched'
                    : row.skipped ? 'Skipped — re-click Fix Error to undo'
                    : '';
@@ -900,7 +905,9 @@ function renderReady() {
   }
 
   // Selection count for the action button
-  const selected = ready.filter(r => r.selected).length;
+  // M4: errored rows can also be selected; they'll merge with invoice-page-only.
+  const selectableRows = all.filter(r => r.fetchResult && !r.skipped);
+  const selected = selectableRows.filter(r => r.selected).length;
 
   const isPartial = queued.length > 0;
 
@@ -1577,8 +1584,9 @@ function v2HandleReadySearch(value) {
   setStateV2('ready');
 }
 function v2ToggleAllReady(checked) {
+  // M4: errored rows now toggle with the master too (they can be opted-in for invoice-only).
   for (const row of v2State.rows) {
-    if (row.fetchResult && row.fetchResult.podPill !== 'miss' && !row.skipped) {
+    if (row.fetchResult && !row.skipped) {
       row.selected = !!checked;
     }
   }
@@ -1591,7 +1599,8 @@ function v2ToggleFetchRow(rowIdx, checked) {
   // Update count badge live (don't full re-render — keep search focus)
   const cnt = document.querySelector('#v2BtnContinueMerge .sel-count');
   if (cnt) {
-    cnt.textContent = v2State.rows.filter(r => r.selected && r.fetchResult && r.fetchResult.podPill !== 'miss').length;
+    // M4: count errored-but-checked rows too — they merge as invoice-only.
+    cnt.textContent = v2State.rows.filter(r => r.selected && r.fetchResult && !r.skipped).length;
   }
 }
 function v2ClickContinueMerge() {
