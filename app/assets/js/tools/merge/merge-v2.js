@@ -531,7 +531,7 @@ function fetchRowMarkup(rowIdx, row, opts) {
   const isSkipped   = !!row.skipped;
   const interactive = hasFetch && !isSkipped;
   const checkAttrs  = `${row.selected && interactive ? 'checked' : ''} ${interactive ? '' : 'disabled'}`;
-  const checkTitle  = isErrorRow ? 'This row is missing a document. If checked, only the invoice page will be merged.'
+  const checkTitle  = isErrorRow ? 'This row is missing its POD/BOL. If checked, the merge will include only the invoice page for this container.'
                    : isQueued ? 'Not yet fetched'
                    : row.skipped ? 'Skipped — re-click Fix Error to undo'
                    : '';
