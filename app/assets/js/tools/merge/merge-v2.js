@@ -7,7 +7,10 @@
 //  M1 (Foundation): Empty + Loading states render; Review is a stub
 //  showing the loaded file name. Real Excel parsing comes in M2.
 // ══════════════════════════════════════════════════════════
-import { escHtml, readAsArrayBuffer, findColumnKey, CSV_ALIASES } from '../../shared/utils.js';
+import {
+  escHtml, readAsArrayBuffer, findColumnKey, CSV_ALIASES,
+  routingDecisionFor,
+} from '../../shared/utils.js';
 
 // ── Module-local state ──
 const v2State = {
@@ -210,16 +213,26 @@ async function parseExcelFile(file) {
     const r = sheetRows[i];
     const cn = String(r[containerKey] || '').trim();
     if (!cn) continue;          // skip blank container rows entirely
+    const decision = routingDecisionFor({
+      invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
+      workOrderNumber: woKey ? String(r[woKey] || '').trim() : '',
+    });
+
     rows.push({
       rowNum: i + 2,            // sheet row 1 is headers, so first data row → 2
       containerNumber: cn,
       invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
       workOrderNumber: woKey ? String(r[woKey] || '').trim() : '',
       customer: customerKey ? String(r[customerKey] || '').trim() : '',
-      // selected/status/statusReason filled in by validateRows()
       selected: false,
       status: 'ok',
       statusReason: '',
+      // M3 routing
+      routingType: decision.type,
+      expectedDoc: decision.expectedDoc,
+      fetchResult: null,
+      manualPodFile: null,
+      skipped: false,
     });
   }
 
@@ -383,11 +396,26 @@ function sortRows(rows, mode) {
 function selectedCount()        { return v2State.rows.filter(r => r.selected).length; }
 function issuesCount()          { return v2State.rows.filter(r => r.status !== 'ok').length; }
 
+function willChipFor(row) {
+  if (row.routingType === 'import') return `<span class="will-chip import">POD</span>`;
+  if (row.routingType === 'export') return `<span class="will-chip export">BOL/POL</span>`;
+  return `<span class="will-chip unknown">?</span>`;
+}
+
+function highlightInvLetter(inv) {
+  if (!inv || inv.length < 2) return escHtml(inv);
+  const c = inv[1].toUpperCase();
+  if (c === 'M' || c === 'E' || c === 'X') {
+    return escHtml(inv[0]) + `<span class="inv-letter">${escHtml(inv[1])}</span>` + escHtml(inv.slice(2));
+  }
+  return escHtml(inv);
+}
+
 function rowMarkup(row) {
   const checkAttr = row.selected ? 'checked' : '';
   const trClass = row.status === 'ok' ? '' : 'row-issue';
   const invDisplay = row.invoiceNumber
-    ? `<span class="mono mono-sub">${escHtml(row.invoiceNumber)}</span>`
+    ? `<span class="mono mono-sub">${highlightInvLetter(row.invoiceNumber)}</span>`
     : `<span class="mono mono-sub" style="color:#dc2626;">— missing —</span>`;
   const customerDisplay = row.customer
     ? escHtml(row.customer)
@@ -407,6 +435,8 @@ function rowMarkup(row) {
     ? `<td>${row.workOrderNumber ? `<span class="mono">${escHtml(row.workOrderNumber)}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>`
     : '';
 
+  const willCell = `<td>${willChipFor(row)}</td>`;
+
   return `<tr class="${trClass}" data-row-num="${row.rowNum}">
     <td class="check-col"><input type="checkbox" class="row-check" ${checkAttr} onchange="window.v2ToggleRow(${row.rowNum}, this.checked)" /></td>
     <td style="color:#94a3b8; font-size:0.8rem;">${row.rowNum}</td>
@@ -414,6 +444,7 @@ function rowMarkup(row) {
     <td>${invDisplay}</td>
     ${woCell}
     <td>${customerDisplay}</td>
+    ${willCell}
     <td>${badge}${reasonLine}</td>
   </tr>`;
 }
@@ -421,7 +452,7 @@ function rowMarkup(row) {
 function renderTbodyHTML() {
   const rows = getVisibleRows();
   if (rows.length === 0) {
-    const cols = hasAnyWO() ? 7 : 6;
+    const cols = hasAnyWO() ? 8 : 7;
     return `<tr><td colspan="${cols}" style="padding:20px; text-align:center; color:#94a3b8;">No rows match.</td></tr>`;
   }
   return rows.map(rowMarkup).join('');
@@ -487,6 +518,30 @@ function updateFetchButton() {
   }
 }
 
+function routingSummaryBand() {
+  const imports  = v2State.rows.filter(r => r.routingType === 'import').length;
+  const exports_ = v2State.rows.filter(r => r.routingType === 'export').length;
+  const unknown  = v2State.rows.filter(r => r.routingType === 'unknown').length;
+  return `
+    <div class="routing-summary">
+      <span class="label">Will fetch</span>
+      <span class="group">
+        <span class="chip import">POD</span>
+        <strong>${imports}</strong> import${imports !== 1 ? 's' : ''}
+      </span>
+      <span class="group">
+        <span class="chip export">BOL/POL</span>
+        <strong>${exports_}</strong> export${exports_ !== 1 ? 's' : ''}
+      </span>
+      ${unknown ? `<span class="group">
+        <span class="chip unknown">?</span>
+        <strong>${unknown}</strong> unknown
+      </span>` : ''}
+      <span class="hint">Decided by INV# letter (M/E) · falls back to WO# letter when prefix is non-standard</span>
+    </div>
+  `;
+}
+
 function renderReview() {
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   return hasIssues
@@ -524,6 +579,7 @@ function renderReviewSuccess() {
                 <th>Invoice #</th>
                 ${hasAnyWO() ? '<th>WO #</th>' : ''}
                 <th>Customer</th>
+                <th>Will fetch</th>
                 <th>Validation</th>
               </tr>
             </thead>
@@ -538,6 +594,7 @@ function renderReviewSuccess() {
     : `Show all ${total} rows ▼`;
   return `
     ${topBarOnlyExcel()}
+    ${routingSummaryBand()}
     <div class="review-success-card">
       <div class="check-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -573,6 +630,7 @@ function renderReviewWithIssues() {
 
   return `
     ${topBarOnlyExcel()}
+    ${routingSummaryBand()}
 
     <div class="controls-line" style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:11px 16px;">
       <div style="font-size:0.86rem; color:#78350f;">
@@ -617,6 +675,7 @@ function renderReviewWithIssues() {
             <th>Invoice #</th>
             ${hasAnyWO() ? '<th>WO #</th>' : ''}
             <th>Customer</th>
+            <th>Will fetch</th>
             <th>Validation</th>
           </tr>
         </thead>
