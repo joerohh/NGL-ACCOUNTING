@@ -1237,11 +1237,85 @@ function v2ToggleFetchRow(rowIdx, checked) {
 function v2ClickContinueMerge() {
   setStateV2('merging');   // M4 stub
 }
-function v2RetryAllErrors() {
-  console.log('v2RetryAllErrors — wired in Task 14');
+async function v2RetryAllErrors() {
+  const errors = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
+  if (errors.length === 0) return;
+
+  // Dedup by container
+  const seen = new Set();
+  const containers = [];
+  for (const row of errors) {
+    const key = row.containerNumber.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    containers.push({
+      containerNumber: row.containerNumber,
+      invoiceNumber: row.invoiceNumber,
+    });
+    // Reset row state so the SSE handler re-marks them
+    row.fetchResult = null;
+  }
+
+  v2State.fetchProgress = 0;
+  v2State.fetchTotal = containers.length;
+  v2State.fetchCurrentContainer = '';
+
+  setStateV2('fetching');
+
+  try {
+    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ containers, doc_types: ['pod'] }),
+    });
+    if (!res.ok) throw new Error(`Agent rejected retry: ${res.status}`);
+    const { jobId } = await res.json();
+    v2State.jobId = jobId;
+    openSseStream(jobId);
+  } catch (err) {
+    alert(`Couldn't start mass retry: ${err.message}`);
+    setStateV2('ready');
+  }
 }
-function v2ResumeFetch() {
-  console.log('v2ResumeFetch — wired in Task 15');
+
+async function v2ResumeFetch() {
+  // Find queued rows (selected, no fetchResult, not skipped)
+  const queued = v2State.rows.filter(r => r.selected && !r.fetchResult && !r.skipped);
+  if (queued.length === 0) return;
+
+  // Dedup by container
+  const seen = new Set();
+  const containers = [];
+  for (const row of queued) {
+    const key = row.containerNumber.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    containers.push({
+      containerNumber: row.containerNumber,
+      invoiceNumber: row.invoiceNumber,
+    });
+  }
+
+  // Carry over fetchProgress so the progress label reads "Fetching N+1 / total"
+  v2State.fetchTotal = containers.length;
+  v2State.fetchProgress = 0;
+  v2State.fetchCurrentContainer = '';
+
+  setStateV2('fetching');
+  try {
+    const res = await fetch('http://localhost:8787/jobs/fetch-missing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ containers, doc_types: ['invoice', 'pod'] }),
+    });
+    if (!res.ok) throw new Error(`Agent rejected resume: ${res.status}`);
+    const { jobId } = await res.json();
+    v2State.jobId = jobId;
+    openSseStream(jobId);
+  } catch (err) {
+    alert(`Couldn't resume fetch: ${err.message}`);
+    setStateV2('ready');
+  }
 }
 
 window.v2HandleReadyTab     = v2HandleReadyTab;
