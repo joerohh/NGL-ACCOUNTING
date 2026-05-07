@@ -1944,6 +1944,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .resolve-divider span { background: #fff; padding: 0 8px; position: relative; }
 
 #mergeToolViewV2 .ds-upload {
+  display: block;                    /* <label> is inline by default — block fixes broken dashed border */
   border: 2px dashed #fca5a5; border-radius: 10px;
   background: #fef2f2; padding: 22px 18px;
   text-align: center; cursor: pointer;

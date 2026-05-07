@@ -1033,7 +1033,64 @@ function renderSidebar(rowIdx) {
   `;
 }
 
+function classifyError(row, docName) {
+  // Returns { title, body } for the "What Happened" block based on what the
+  // backend actually told us. Three categories: invoice-not-in-QBO, system
+  // error (network/timeout/auth), or genuine doc-not-found.
+  const fr = row.fetchResult || {};
+  const status = fr.statusText || '';
+  const msg = fr.message || '';
+  const chain = fr.chainAttempted || [];
+
+  if (status === 'Invoice not in QBO') {
+    return {
+      title: 'Invoice not found in QuickBooks',
+      body: `QuickBooks returned no invoice with number <code>${escHtml(row.invoiceNumber || '')}</code>. Verify the INV# in your spreadsheet matches what's in QBO, then Retry — or upload the ${escHtml(docName)} manually.`,
+    };
+  }
+
+  if (status === 'Error') {
+    // System error — categorize by message pattern
+    if (/getaddrinfo|name or service|11001|enotfound|dns/i.test(msg)) {
+      return {
+        title: "Couldn't reach the server",
+        body: 'The agent failed to resolve the TMS or QBO hostname. Check your internet connection, then verify TMS and QBO are connected (Settings → Status). Once they\'re back, click Retry.',
+      };
+    }
+    if (/timed? ?out|timeout/i.test(msg)) {
+      return {
+        title: 'Request timed out',
+        body: 'TMS or QBO took too long to respond. Try Retry once or twice — if it keeps timing out, upload the document manually.',
+      };
+    }
+    if (/login|auth|unauthor|401|403/i.test(msg)) {
+      return {
+        title: 'Login required',
+        body: 'Your TMS or QBO session expired. Open Settings to re-authorize, then click Retry.',
+      };
+    }
+    return {
+      title: 'Error during fetch',
+      body: msg ? escHtml(msg) : 'Something went wrong before TMS could respond. Try Retry, or upload the document manually.',
+    };
+  }
+
+  // Genuine "not found" — chain was actually tried and exhausted
+  const triedTypes = chain.filter(s => s.outcome === 'tms_miss').map(s => s.type);
+  if (triedTypes.length > 0) {
+    return {
+      title: `${escHtml(docName)} not found in TMS`,
+      body: `TMS confirmed it has no ${triedTypes.join(', ')} on file for this container. Upload the ${escHtml(docName)} manually below.`,
+    };
+  }
+  return {
+    title: `${escHtml(docName)} not found`,
+    body: msg ? escHtml(msg) : 'No documents returned for this container. Upload manually below.',
+  };
+}
+
 function renderErrorBody(row, traceHtml, docName) {
+  const { title, body } = classifyError(row, docName);
   return `
     <div class="ds-section">
       <div class="ds-section-label">Customer</div>
@@ -1043,8 +1100,8 @@ function renderErrorBody(row, traceHtml, docName) {
     <div class="ds-section">
       <div class="ds-section-label">What Happened</div>
       <div class="happened-block">
-        <div class="title">${escHtml(docName)} not found in TMS</div>
-        <div class="body">${escHtml(row.fetchResult?.message || 'No documents returned by TMS for this container.')}</div>
+        <div class="title">${title}</div>
+        <div class="body">${body}</div>
       </div>
     </div>
 
@@ -1141,9 +1198,20 @@ function renderRoutingTrace(row) {
     lines.push({ cls: 'success', marker: '✓', text: `Manual upload: <code>${escHtml(row.manualPodFile.name)}</code>` });
   }
 
-  // Final note
+  // Final note — distinguish "we actually tried and exhausted the chain"
+  // from "we never got far enough to try" (system error, invoice missing).
   if (fr?.podPill === 'miss' && !row.manualPodFile) {
-    lines.push({ cls: 'note', marker: '!', text: 'Exhausted chain — manual upload required' });
+    const status = fr?.statusText || '';
+    const triedAny = chain.some(s => s.outcome === 'tms_miss' || s.outcome === 'tms_hit');
+    if (status === 'Invoice not in QBO') {
+      lines.push({ cls: 'note', marker: '!', text: 'Stopped at QBO step — TMS chain never tried' });
+    } else if (status === 'Error' || (chain.length > 0 && chain.every(s => s.outcome === 'tms_error'))) {
+      lines.push({ cls: 'note', marker: '!', text: 'Fetch errored before completing — Retry once connectivity is back' });
+    } else if (triedAny) {
+      lines.push({ cls: 'note', marker: '!', text: 'Exhausted chain — manual upload required' });
+    } else {
+      lines.push({ cls: 'note', marker: '!', text: 'No documents available — upload manually' });
+    }
   }
 
   const linesHtml = lines.map(l =>
