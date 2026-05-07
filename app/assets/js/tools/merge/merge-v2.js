@@ -82,7 +82,7 @@ export function setStateV2(name) {
       if (v2State.jobId) {
         // Fire-and-forget cancel — we don't await it; if it fails, the agent will
         // notice no consumer and tear down on its own
-        fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/cancel`, {
+        fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/pause`, {
           method: 'POST',
         }).catch(() => {});
         v2State.jobId = null;
@@ -1390,11 +1390,39 @@ function handleSseEvent(evt) {
       });
       break;
 
-    case 'job_completed':
+    // Backend exits _process_one_container early on these — no container_complete
+    // follows. Mark the row as a miss so it shows in the Errors tab + nudge progress.
+    case 'not_found':
+      patchRow(evt.containerNumber, {
+        invPill: 'miss', podPill: 'miss', podLabel: '—',
+        statusText: 'Invoice not in QBO',
+        chainAttempted: [],
+        message: `Invoice ${evt.invoiceNumber || ''} not found in QBO`,
+      });
+      v2State.fetchProgress += 1;
+      updateProgressLine();
+      break;
+
+    case 'container_error':
+      patchRow(evt.containerNumber, {
+        invPill: 'miss', podPill: 'miss', podLabel: '—',
+        statusText: 'Error',
+        chainAttempted: [],
+        message: evt.error || 'Unknown error during fetch',
+      });
+      v2State.fetchProgress += 1;
+      updateProgressLine();
+      break;
+
+    case 'login_required':
+      alert(`QBO login required: ${evt.message || 'Please re-authorize via Settings.'}`);
+      finalizeFetch({ cancelled: true });
+      break;
+
+    case 'job_complete':
       finalizeFetch({ cancelled: false });
       break;
 
-    case 'job_cancelled':
     case 'job_paused':
       finalizeFetch({ cancelled: true });
       break;
@@ -1492,13 +1520,13 @@ window.initMergeV2 = initMergeV2;
 async function v2CancelFetch() {
   if (!v2State.jobId) return;
   try {
-    await fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/cancel`, {
+    await fetch(`http://localhost:8787/jobs/${encodeURIComponent(v2State.jobId)}/pause`, {
       method: 'POST',
     });
   } catch (err) {
     console.warn('Cancel POST failed:', err);
   }
-  // Don't transition here — wait for the SSE 'job_cancelled' / 'job_paused' event.
+  // Don't transition here — wait for the SSE 'job_paused' event from the backend.
   // If the SSE stream dies before the event arrives, manually finalize.
   setTimeout(() => {
     if (v2State.subMode === 'fetching') finalizeFetch({ cancelled: true });
@@ -1616,7 +1644,23 @@ async function v2RetryRow(rowIdx) {
             message: evt.message || '',
           };
           es.close(); resolve();
-        } else if (evt.type === 'job_completed' || evt.type === 'job_cancelled') {
+        } else if (evt.type === 'not_found') {
+          row.fetchResult = {
+            invPill: 'miss', podPill: 'miss', podLabel: '—',
+            statusText: 'Invoice not in QBO',
+            chainAttempted: [],
+            message: `Invoice ${evt.invoiceNumber || ''} not found in QBO`,
+          };
+          es.close(); resolve();
+        } else if (evt.type === 'container_error') {
+          row.fetchResult = {
+            invPill: 'miss', podPill: 'miss', podLabel: '—',
+            statusText: 'Error',
+            chainAttempted: [],
+            message: evt.error || 'Unknown error during retry',
+          };
+          es.close(); resolve();
+        } else if (evt.type === 'job_complete' || evt.type === 'job_paused') {
           es.close(); resolve();
         }
       };
