@@ -449,6 +449,79 @@ function rowMarkup(row) {
   </tr>`;
 }
 
+function docPills(row) {
+  const fr = row.fetchResult;
+  if (!fr) {
+    // Queued / not-yet-fetched
+    const expected = row.expectedDoc === 'BOL/POL' ? 'BOL' : (row.expectedDoc === '?' ? '?' : 'POD');
+    return `<div class="doc-row">
+      <span class="doc-pill queued">INV</span>
+      <span class="doc-pill queued">${expected}</span>
+    </div>`;
+  }
+  return `<div class="doc-row">
+    <span class="doc-pill ${fr.invPill}">INV</span>
+    <span class="doc-pill ${fr.podPill}">${escHtml(fr.podLabel)}</span>
+  </div>`;
+}
+
+function fetchStatusCell(row) {
+  if (row.skipped) return `<span class="status-text skipped">Skipped</span>`;
+  if (!row.fetchResult) return `<span class="status-text queued">Queued</span>`;
+  const fr = row.fetchResult;
+  if (fr.podPill === 'miss') return `<span class="status-text issue">${escHtml(fr.statusText || 'Needs PDF')}</span>`;
+  if (fr.podPill === 'fallback') return `<span class="status-text ready">${escHtml(fr.statusText || 'Fetched (fallback)')}</span>`;
+  return `<span class="status-text ready">${escHtml(fr.statusText || 'Fetched')}</span>`;
+}
+
+function fetchActionCell(rowIdx, row) {
+  if (row.fetchResult && row.fetchResult.podPill === 'miss' && !row.skipped) {
+    return `<td><button class="fix-error-btn" onclick="event.stopPropagation(); window.v2OpenSidebar(${rowIdx})">⚠ Fix Error</button></td>`;
+  }
+  return `<td></td>`;
+}
+
+function fetchRowMarkup(rowIdx, row, opts) {
+  const isError = row.fetchResult?.podPill === 'miss' && !row.skipped;
+  const isQueued = !row.fetchResult && !row.skipped;
+  const isActive = isError && opts.activeErrorIdx === rowIdx;
+
+  const trClass = [
+    isError ? 'row-issue' : '',
+    isActive ? 'row-active-error' : '',
+    isQueued ? 'row-queued' : '',
+  ].filter(Boolean).join(' ');
+
+  const checkable = !!row.fetchResult && row.fetchResult.podPill !== 'miss' && !row.skipped;
+  const checkAttrs = `${row.selected && checkable ? 'checked' : ''} ${!checkable ? 'disabled' : ''}`;
+  const checkTitle = isError ? 'Fix the error before this can be merged'
+                   : isQueued ? 'Not yet fetched'
+                   : row.skipped ? 'Skipped — re-click Fix Error to undo'
+                   : '';
+
+  const trAttrs = isError
+    ? `onclick="window.v2OpenSidebar(${rowIdx})" style="cursor:pointer;"`
+    : '';
+
+  const checkColMaybe = opts.includeCheck
+    ? `<td class="check-col" onclick="event.stopPropagation()">
+         <input type="checkbox" class="row-check" ${checkAttrs} title="${checkTitle}"
+                onchange="window.v2ToggleFetchRow(${rowIdx}, this.checked)" />
+       </td>`
+    : '';
+
+  return `<tr class="${trClass}" ${trAttrs} data-row-idx="${rowIdx}">
+    ${checkColMaybe}
+    <td><span class="mono">${escHtml(row.containerNumber)}</span></td>
+    <td><span class="mono mono-sub">${highlightInvLetter(row.invoiceNumber)}</span></td>
+    <td>${row.customer ? escHtml(row.customer) : '<span style="color:#cbd5e1;">—</span>'}</td>
+    <td>${willChipFor(row)}</td>
+    <td>${docPills(row)}</td>
+    <td>${fetchStatusCell(row)}</td>
+    ${fetchActionCell(rowIdx, row)}
+  </tr>`;
+}
+
 function renderTbodyHTML() {
   const rows = getVisibleRows();
   if (rows.length === 0) {
@@ -516,6 +589,29 @@ function updateFetchButton() {
     btn.removeAttribute('disabled');
     btn.removeAttribute('title');
   }
+}
+
+function topBarWithDrop() {
+  const fname = v2State.excelFile ? escHtml(v2State.excelFile.name) : '';
+  const total = v2State.rows.length;
+  return `
+    <div class="top-bar">
+      <div class="file-summary">
+        <div class="icon-box xlsx">XLS</div>
+        <div class="text">
+          <div class="name">${fname}</div>
+          <div class="meta">${total} unique container${total !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <div class="pdf-drop-card" title="Bulk PDF drop wires up in M4">
+        <div class="icon-box pdf">PDF</div>
+        <div class="text">
+          <div class="label-line">PDFs <span class="count-pill">0</span></div>
+          <div class="help">Drop bulk PDFs here for missing or late docs (M4)</div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function routingSummaryBand() {
@@ -685,8 +781,56 @@ function renderReviewWithIssues() {
   `;
 }
 
-// Placeholders — implemented in later milestones
-function renderFetching() { return `<div class="centered-stage"><h1>Fetching (M3)</h1><p class="subtitle">Coming in Milestone 3.</p></div>`; }
+function renderFetching() {
+  const total = v2State.rows.filter(r => r.selected).length || v2State.rows.length;
+  const done = v2State.fetchProgress;
+  const cur = v2State.fetchCurrentContainer || '—';
+  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+
+  // Tabs split by current state
+  const fetchedCount = v2State.rows.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss').length;
+  const failedCount  = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss').length;
+  const allCount     = v2State.rows.length;
+
+  // Body — show all rows (fetched + queued + failed)
+  const bodyRows = v2State.rows.map((row, i) => fetchRowMarkup(i, row, {
+    includeCheck: false,
+    activeErrorIdx: null,
+  })).join('');
+
+  return `
+    ${topBarWithDrop()}
+    ${routingSummaryBand()}
+    <div class="progress-line">
+      <div class="now">
+        <strong>Fetching ${done} / ${total}</strong>
+        &nbsp; <span class="container-name">${escHtml(cur)}</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${percent}%;"></div></div>
+      <button class="cancel-btn" onclick="window.v2CancelFetch()">Cancel</button>
+    </div>
+    <div class="tabs-row">
+      <div class="tabs">
+        <button class="tab active">All <span class="count">${allCount}</span></button>
+        <button class="tab">Fetched <span class="count">${fetchedCount}</span></button>
+        <button class="tab has-issues">Failed <span class="count">${failedCount}</span></button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <input type="text" class="search" placeholder="Search containers…" />
+      <span class="filter-meta">${done} / ${total} fetched · ${failedCount} failed</span>
+    </div>
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead><tr>
+          <th>Container</th><th>Invoice #</th><th>Customer</th>
+          <th>Will fetch</th><th>Documents</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody id="v2FetchTbody">${bodyRows}</tbody>
+      </table>
+    </div>
+  `;
+}
 function renderReady()    { return `<div class="centered-stage"><h1>Ready (M3)</h1><p class="subtitle">Coming in Milestone 3.</p></div>`; }
 function renderMerging()  { return `<div class="centered-stage"><h1>Merging (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
 function renderDone()     { return `<div class="centered-stage"><h1>Done (M4)</h1><p class="subtitle">Coming in Milestone 4.</p></div>`; }
@@ -736,3 +880,7 @@ window.v2HandleSort     = v2HandleSort;
 window.v2ToggleRow      = v2ToggleRow;
 window.v2ToggleAll      = v2ToggleAll;
 window.initMergeV2 = initMergeV2;
+
+window.v2CancelFetch    = () => { console.log('v2CancelFetch — wired in Task 13'); };
+window.v2OpenSidebar    = (idx) => { console.log('v2OpenSidebar', idx, '— wired in Task 12'); };
+window.v2ToggleFetchRow = (idx, checked) => { console.log('v2ToggleFetchRow', idx, checked, '— wired in Task 11'); };
