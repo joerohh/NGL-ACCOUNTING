@@ -91,6 +91,7 @@ export async function agentHealthCheck() {
     // Passive QBO status — just reads current URL, no navigation
     if (!state.activeJobId) {
       const qbo = await agentBridge.checkQBOStatus();
+      state.qboConnected = !!qbo.loggedIn;
       if (qboEl) {
         if (qbo.loggedIn) {
           qboEl.textContent = 'Connected';
@@ -108,8 +109,9 @@ export async function agentHealthCheck() {
       const tmsEl = document.getElementById('tmsStatus');
       const tmsLoginSection = document.getElementById('tmsLoginSection');
       if (tmsLoginSection) tmsLoginSection.style.display = 'none';
+      const tmsData = await agentBridge.checkTMSStatus();
+      state.tmsLoggedIn = !!tmsData.loggedIn;
       if (tmsEl) {
-        const tmsData = await agentBridge.checkTMSStatus();
         if (tmsData.loggedIn) {
           tmsEl.textContent = 'Logged in';
           tmsEl.style.color = '#16a34a';
@@ -140,6 +142,8 @@ export async function agentHealthCheck() {
     }
   } else {
     state.agentConnected = false;
+    state.qboConnected = false;
+    state.tmsLoggedIn = false;
     state._agentCustomersSynced = false;  // re-sync on next connect
     if (dot)        dot.className = 'agent-status-dot offline';
     if (text)       { text.textContent = 'Offline'; text.style.color = '#94a3b8'; }
@@ -181,15 +185,14 @@ function _updateHomeConnections() {
     return;
   }
 
-  // QBO API
-  const qboText = document.getElementById('qboStatus');
-  const qboConnected = qboText && qboText.textContent === 'Connected';
-  setPill('homeQbo', qboConnected ? 'Connected' : 'Not connected', qboConnected, false);
-
-  // TMS browser (fallback path — login prompt only fires in-flow when needed)
-  const tmsText = document.getElementById('tmsStatus');
-  const tmsLoggedIn = tmsText && tmsText.textContent === 'Logged in';
-  setPill('homeTms', tmsLoggedIn ? 'Logged in' : 'Idle', tmsLoggedIn, false);
+  // Read directly from state — agentHealthCheck updates state.qboConnected /
+  // state.tmsLoggedIn after each agent + QBO + TMS poll. (Previously these
+  // were derived by reading textContent of legacy panel DOM nodes that the
+  // v2.55 cutover removed, which always returned null and made these pills
+  // permanently stuck on "Not connected" / "Idle" even when the merge tool
+  // was successfully talking to QBO.)
+  setPill('homeQbo', state.qboConnected ? 'Connected' : 'Not connected', state.qboConnected, false);
+  setPill('homeTms', state.tmsLoggedIn ? 'Logged in' : 'Idle', state.tmsLoggedIn, false);
 }
 
 function agentHeaderBtnClick() {

@@ -12,6 +12,8 @@ export const state = {
   isProcessing: false,
   logCollapsed: true,
   agentConnected: false,
+  qboConnected: false,           // QBO API token valid (set by agentHealthCheck)
+  tmsLoggedIn: false,            // TMS browser session active (set by agentHealthCheck)
   _agentCustomersSynced: false,  // true after first customer sync to agent
   currentUser: null,   // { id, username, displayName, role } — set after login
   activeJobId: null,
