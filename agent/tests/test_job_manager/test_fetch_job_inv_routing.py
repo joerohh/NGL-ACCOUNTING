@@ -56,8 +56,8 @@ async def test_inv_letter_M_uses_import_chain(job_manager, job, container, dest_
 
     # All four import doc types tried in order
     attempted_types = [c["type"] for c in chain]
-    assert attempted_types == ["POD", "BOL", "POL", "IT"], (
-        f"Expected import chain [POD, BOL, POL, IT], got {attempted_types}"
+    assert attempted_types == ["POD", "BL", "POL", "IT"], (
+        f"Expected import chain [POD, BL, POL, IT], got {attempted_types}"
     )
     assert result_type is None
     # All outcomes are tms_miss (mocked TMS returned None)
@@ -73,8 +73,8 @@ async def test_inv_letter_E_uses_export_chain(job_manager, job, container, dest_
     result_type, chain = await job_manager._tms_pod_fallback(job, container, invoice_data, dest_path)
 
     attempted_types = [c["type"] for c in chain]
-    assert attempted_types == ["BOL", "POL", "ITE"], (
-        f"Expected export chain [BOL, POL, ITE], got {attempted_types}"
+    assert attempted_types == ["BL", "POL", "ITE"], (
+        f"Expected export chain [BL, POL, ITE], got {attempted_types}"
     )
     assert result_type is None
 
@@ -92,8 +92,8 @@ async def test_inv_letter_E_first_choice_BOL_succeeds(job_manager, job, containe
 
     result_type, chain = await job_manager._tms_pod_fallback(job, container, invoice_data, dest_path)
 
-    assert result_type == "BOL"
-    assert chain == [{"type": "BOL", "outcome": "tms_hit"}]
+    assert result_type == "BL"
+    assert chain == [{"type": "BL", "outcome": "tms_hit"}]
     assert dest_path.exists()
 
 
@@ -113,7 +113,7 @@ async def test_garbled_inv_falls_back_to_wo_letter(job_manager, job, container, 
 
     attempted_types = [c["type"] for c in chain]
     # WO contains M → import chain
-    assert attempted_types == ["POD", "BOL", "POL", "IT"]
+    assert attempted_types == ["POD", "BL", "POL", "IT"]
 
 
 @pytest.mark.asyncio
@@ -125,7 +125,7 @@ async def test_garbled_inv_garbled_wo_uses_safety_chain(job_manager, job, contai
     result_type, chain = await job_manager._tms_pod_fallback(job, container, invoice_data, dest_path)
 
     attempted_types = [c["type"] for c in chain]
-    assert attempted_types == ["POD", "BOL", "POL", "IT", "ITE"]
+    assert attempted_types == ["POD", "BL", "POL", "IT", "ITE"]
 
 
 @pytest.mark.asyncio
@@ -142,7 +142,7 @@ async def test_inv_overrides_wo_when_they_disagree(job_manager, job, container, 
 
     attempted_types = [c["type"] for c in chain]
     # INV# wins → export chain
-    assert attempted_types == ["BOL", "POL", "ITE"]
+    assert attempted_types == ["BL", "POL", "ITE"]
 
 
 @pytest.mark.asyncio
@@ -165,7 +165,7 @@ async def test_chain_attempted_records_errors_separately_from_misses(
 
     result_type, chain = await job_manager._tms_pod_fallback(job, container, invoice_data, dest_path)
 
-    assert chain[0] == {"type": "BOL", "outcome": "tms_error"}
+    assert chain[0] == {"type": "BL", "outcome": "tms_error"}
     assert chain[1] == {"type": "POL", "outcome": "tms_miss"}
     assert chain[2] == {"type": "ITE", "outcome": "tms_miss"}
     assert result_type is None

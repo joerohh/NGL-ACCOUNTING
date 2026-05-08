@@ -427,7 +427,7 @@ function issuesCount()          { return v2State.rows.filter(r => r.status !== '
 
 function willChipFor(row) {
   if (row.routingType === 'import') return `<span class="will-chip import">POD</span>`;
-  if (row.routingType === 'export') return `<span class="will-chip export">BOL/POL</span>`;
+  if (row.routingType === 'export') return `<span class="will-chip export">BL/POL</span>`;
   return `<span class="will-chip unknown">?</span>`;
 }
 
@@ -482,7 +482,7 @@ function docPills(row) {
   const fr = row.fetchResult;
   if (!fr) {
     // Queued / not-yet-fetched
-    const expected = row.expectedDoc === 'BOL/POL' ? 'BOL' : (row.expectedDoc === '?' ? '?' : 'POD');
+    const expected = row.expectedDoc === 'BL/POL' ? 'BL' : (row.expectedDoc === '?' ? '?' : 'POD');
     return `<div class="doc-row">
       <span class="doc-pill queued">INV</span>
       <span class="doc-pill queued">${expected}</span>
@@ -531,7 +531,7 @@ function fetchRowMarkup(rowIdx, row, opts) {
   const isSkipped   = !!row.skipped;
   const interactive = hasFetch && !isSkipped;
   const checkAttrs  = `${row.selected && interactive ? 'checked' : ''} ${interactive ? '' : 'disabled'}`;
-  const checkTitle  = isErrorRow ? 'This row is missing its POD/BOL. If checked, the merge will include only the invoice page for this container.'
+  const checkTitle  = isErrorRow ? 'This row is missing its POD/BL. If checked, the merge will include only the invoice page for this container.'
                    : isQueued ? 'Not yet fetched'
                    : row.skipped ? 'Skipped — re-click Fix Error to undo'
                    : '';
@@ -690,7 +690,7 @@ function v2HandleBulkPdfDrop(fileList) {
         row.fetchResult = {
           invPill: row.fetchResult?.invPill || 'ok',
           podPill: 'ok',
-          podLabel: row.routingType === 'export' ? 'BOL' : 'POD',
+          podLabel: row.routingType === 'export' ? 'BL' : 'POD',
           statusText: 'Manual upload',
           chainAttempted: row.fetchResult?.chainAttempted || [],
           message: '',
@@ -731,7 +731,7 @@ function routingSummaryBand() {
         <strong>${imports}</strong> import${imports !== 1 ? 's' : ''}
       </span>
       <span class="group">
-        <span class="chip export">BOL/POL</span>
+        <span class="chip export">BL/POL</span>
         <strong>${exports_}</strong> export${exports_ !== 1 ? 's' : ''}
       </span>
       ${unknown ? `<span class="group">
@@ -1122,7 +1122,7 @@ function renderSidebar(rowIdx) {
   const sidebarClass = `detail-sidebar open${isResolved ? ' resolved' : ''}`;
 
   const isExport = row.routingType === 'export';
-  const docName = isExport ? 'BOL or POL' : (row.routingType === 'unknown' ? 'POD, BOL, or POL' : 'POD');
+  const docName = isExport ? 'BL or POL' : (row.routingType === 'unknown' ? 'POD, BL, or POL' : 'POD');
 
   // Count remaining errors (excluding this one and any skipped)
   const remaining = v2State.rows.filter((r, i) =>
@@ -1317,13 +1317,13 @@ function renderRoutingTrace(row) {
   // Header lines: routing decision
   if (row.routingType === 'import') {
     lines.push({ cls: 'note', marker: '→', text: `INV# <code>${escHtml(row.invoiceNumber)}</code> pos-2 → <strong>import</strong>` });
-    lines.push({ cls: 'note', marker: '→', text: 'Plan: try POD → BOL → POL → IT' });
+    lines.push({ cls: 'note', marker: '→', text: 'Plan: try POD → BL → POL → IT' });
   } else if (row.routingType === 'export') {
     lines.push({ cls: 'note', marker: '→', text: `INV# <code>${escHtml(row.invoiceNumber)}</code> pos-2 → <strong>export</strong>` });
-    lines.push({ cls: 'note', marker: '→', text: 'Plan: try BOL → POL → ITE' });
+    lines.push({ cls: 'note', marker: '→', text: 'Plan: try BL → POL → ITE' });
   } else {
     lines.push({ cls: 'note', marker: '→', text: 'INV# prefix non-standard — fell back to safety chain' });
-    lines.push({ cls: 'note', marker: '→', text: 'Plan: try POD → BOL → POL → IT → ITE' });
+    lines.push({ cls: 'note', marker: '→', text: 'Plan: try POD → BL → POL → IT → ITE' });
   }
 
   // Steps from chain_attempted
@@ -1865,7 +1865,7 @@ function handleSseEvent(evt) {
         podLabel: '—',
         statusText: 'Needs PDF',
         chainAttempted: evt.chain_attempted || [],
-        message: evt.message || 'No POD/BOL/POL/IT/ITE found',
+        message: evt.message || 'No POD/BL/POL/IT/ITE found',
       });
       updateLiveCounters();
       break;
@@ -2243,7 +2243,7 @@ function v2HandleSidebarUpload(rowIdx, fileList) {
   row.fetchResult = {
     invPill: 'ok',
     podPill: 'ok',
-    podLabel: row.routingType === 'export' ? 'BOL' : 'POD',  // best-effort label; real type from filename or user
+    podLabel: row.routingType === 'export' ? 'BL' : 'POD',  // best-effort label; real type from filename or user
     statusText: 'Manual upload',
     chainAttempted: row.fetchResult?.chainAttempted || [],
     message: '',

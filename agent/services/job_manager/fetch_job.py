@@ -68,12 +68,16 @@ class FetchJobMixin:
         """Fetch a proof-of-delivery doc from TMS when QBO has none.
 
         Routes by INV# pos-2 letter (primary) → WO# letter (fallback):
-          - INV# pos-2 = 'M' or WO# contains 'M' → import → POD → BOL → POL → IT
-          - INV# pos-2 = 'E' or WO# contains 'X' → export → BOL → POL → ITE
-          - neither parses → unknown → POD → BOL → POL → IT → ITE
+          - INV# pos-2 = 'M' or WO# contains 'M' → import → POD → BL → POL → IT
+          - INV# pos-2 = 'E' or WO# contains 'X' → export → BL → POL → ITE
+          - neither parses → unknown → POD → BL → POL → IT → ITE
+
+        TMS labels its bill-of-lading rows as "BL", not "BOL", and we match document
+        types against TMS's exact uppercase string — so we use "BL" throughout the
+        chain. (v2.59 rename: was "BOL", which always missed against TMS.)
 
         Returns a tuple: (success_doc_type | None, chain_attempted)
-          - success_doc_type: 'POD' | 'BOL' | 'POL' | 'IT' | 'ITE' | None
+          - success_doc_type: 'POD' | 'BL' | 'POL' | 'IT' | 'ITE' | None
           - chain_attempted: list[{'type': str, 'outcome': 'tms_hit' | 'tms_miss' | 'tms_error'}]
             in the order they were tried.
 
@@ -93,19 +97,19 @@ class FetchJobMixin:
         # INV# pos-2 primary
         inv_letter = inv_no[1] if len(inv_no) >= 2 else ""
         if inv_letter == "M":
-            doc_types = ("POD", "BOL", "POL", "IT")
+            doc_types = ("POD", "BL", "POL", "IT")
             wo_kind = "import (by INV#)"
         elif inv_letter == "E":
-            doc_types = ("BOL", "POL", "ITE")
+            doc_types = ("BL", "POL", "ITE")
             wo_kind = "export (by INV#)"
         elif "X" in wo_no:
-            doc_types = ("BOL", "POL", "ITE")
+            doc_types = ("BL", "POL", "ITE")
             wo_kind = "export (by WO#)"
         elif "M" in wo_no:
-            doc_types = ("POD", "BOL", "POL", "IT")
+            doc_types = ("POD", "BL", "POL", "IT")
             wo_kind = "import (by WO#)"
         else:
-            doc_types = ("POD", "BOL", "POL", "IT", "ITE")
+            doc_types = ("POD", "BL", "POL", "IT", "ITE")
             wo_kind = "unknown"
 
         logger.info(
@@ -298,7 +302,7 @@ class FetchJobMixin:
                     await self._emit(job, "pod_missing", {
                         "containerNumber": container.container_number,
                         "message": (
-                            f"No POD/BOL/POL/IT/ITE found in QBO or TMS for "
+                            f"No POD/BL/POL/IT/ITE found in QBO or TMS for "
                             f"container {container.container_number}"
                         ),
                         "chain_attempted": chain_attempted,

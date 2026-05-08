@@ -34,7 +34,7 @@ export const MODES = [
     key: 'per-container-document',
     group: 'per-container',
     title: 'Per Container — Document Only',
-    description: 'One PDF per container, containing only the supporting document (POD, BOL, POL, IT, or ITE).',
+    description: 'One PDF per container, containing only the supporting document (POD, BL, POL, IT, or ITE).',
     subfolder: 'Per Container — Document Only',
   },
   // Single combined output (one PDF total)
@@ -113,7 +113,7 @@ export function perContainerFilename(row, modeKey) {
     return `${stem}${invSuffix}_INV.pdf`;
   }
   if (modeKey === 'per-container-document') {
-    // podLabel is one of POD/BOL/POL/IT/ITE on success or '—' on miss/error.
+    // podLabel is one of POD/BL/POL/IT/ITE on success or '—' on miss/error.
     // Treat the em-dash sentinel as "no label" so we don't emit "FOO_—.pdf".
     const rawLabel = row.fetchResult?.podLabel;
     const docLabel = (rawLabel && rawLabel !== '—')

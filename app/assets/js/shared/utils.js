@@ -147,16 +147,16 @@ export function parseWoType(wo) {
  * Decide the doc-fetch type for a row. INV# prefix is primary, WO# letter
  * is the fallback when the prefix doesn't parse.
  * @param {{invoiceNumber?: string, workOrderNumber?: string}} row
- * @returns {{ type: 'import' | 'export' | 'unknown', expectedDoc: 'POD' | 'BOL/POL' | '?' }}
+ * @returns {{ type: 'import' | 'export' | 'unknown', expectedDoc: 'POD' | 'BL/POL' | '?' }}
  */
 export function routingDecisionFor(row) {
   const fromInv = parseInvType(row.invoiceNumber);
   if (fromInv) {
-    return { type: fromInv, expectedDoc: fromInv === 'import' ? 'POD' : 'BOL/POL' };
+    return { type: fromInv, expectedDoc: fromInv === 'import' ? 'POD' : 'BL/POL' };
   }
   const fromWo = parseWoType(row.workOrderNumber);
   if (fromWo) {
-    return { type: fromWo, expectedDoc: fromWo === 'import' ? 'POD' : 'BOL/POL' };
+    return { type: fromWo, expectedDoc: fromWo === 'import' ? 'POD' : 'BL/POL' };
   }
   return { type: 'unknown', expectedDoc: '?' };
 }
