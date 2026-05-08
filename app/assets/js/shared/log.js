@@ -9,9 +9,18 @@ import { state, invoiceState } from './state.js';
  * Eliminates duplication between merge and invoice log panels.
  */
 function createLogModule(ids, stateObj) {
+  // All DOM lookups are null-guarded — the legacy mergeToolView log panel was
+  // removed in v2.55 cutover, so addLog/clearLog/toggleLog/setProgress become
+  // safe no-ops when the target panel isn't in the DOM. Console still gets the
+  // log via the fallback below so debugging info isn't lost.
   const mod = {
     addLog(level, message) {
       const log = document.getElementById(ids.log);
+      if (!log) {
+        // Panel gone — fall back to console so messages aren't silently lost.
+        console.log(`[${LOG_PREFIXES[level] || level}] ${message}`);
+        return;
+      }
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       const div = document.createElement('div');
       div.style.color = LOG_COLORS[level] || LOG_COLORS.info;
@@ -26,13 +35,16 @@ function createLogModule(ids, stateObj) {
     },
 
     clearLog() {
-      document.getElementById(ids.log).innerHTML = '';
+      const log = document.getElementById(ids.log);
+      if (!log) return;
+      log.innerHTML = '';
       mod.addLog('info', '// Log cleared');
     },
 
     toggleLog() {
       const body = document.getElementById(ids.body);
       const arrow = document.getElementById(ids.arrow);
+      if (!body || !arrow) return;
       stateObj.logCollapsed = !stateObj.logCollapsed;
       if (stateObj.logCollapsed) {
         body.classList.add('collapsed');
@@ -48,6 +60,7 @@ function createLogModule(ids, stateObj) {
       const bar = document.getElementById(ids.bar);
       const lbl = document.getElementById(ids.label);
       const con = document.getElementById(ids.container);
+      if (!con || !bar) return;
       if (pct === null) {
         con.style.display = 'none';
         return;

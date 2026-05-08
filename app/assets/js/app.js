@@ -433,15 +433,12 @@ document.addEventListener('click', function(e) {
 
 
 // ══════════════════════════════════════════════════════════
-//  RESPONSIVE GRID
+//  RESPONSIVE GRID — legacy v1 mainGrid removed in v2.55; left as null-guarded no-op
 // ══════════════════════════════════════════════════════════
 function applyResponsiveLayout() {
   const grid = document.getElementById('mainGrid');
-  if (window.innerWidth < 900) {
-    grid.style.gridTemplateColumns = '1fr';
-  } else {
-    grid.style.gridTemplateColumns = '1fr 1fr';
-  }
+  if (!grid) return;   // v1 layout grid removed in cutover; v2 uses its own layout
+  grid.style.gridTemplateColumns = window.innerWidth < 900 ? '1fr' : '1fr 1fr';
 }
 window.addEventListener('resize', applyResponsiveLayout);
 applyResponsiveLayout();
