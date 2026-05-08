@@ -10,6 +10,7 @@ import { invUpdateGenerateBtn } from './tools/invoice-sender/invoice-sender.js';
 function toggleAgentPanel() {
   const body  = document.getElementById('agentBody');
   const arrow = document.getElementById('agentToggleArrow');
+  if (!body || !arrow) return;   // legacy panel removed in v2.55 — toggle is a no-op
   const isHidden = body.style.display === 'none';
   body.style.display = isHidden ? '' : 'none';
   arrow.classList.toggle('collapsed', !isHidden);
@@ -18,6 +19,8 @@ function toggleAgentPanel() {
 
 export async function agentHealthCheck() {
   const data = await agentBridge.checkHealth();
+  // Legacy panel DOM nodes — may be null after v2.55 cutover. Every assignment below
+  // is guarded so a missing panel becomes a no-op instead of crashing the health loop.
   const dot    = document.getElementById('agentDot');
   const text   = document.getElementById('agentStatusText');
   const clsStatus = document.getElementById('classifierStatus');
@@ -27,21 +30,18 @@ export async function agentHealthCheck() {
 
   if (data && data.status === 'ok') {
     state.agentConnected = true;
-    dot.className = 'agent-status-dot online';
-    text.textContent = 'Connected';
-    text.style.color = '#16a34a';
+    if (dot)  dot.className = 'agent-status-dot online';
+    if (text) { text.textContent = 'Connected'; text.style.color = '#16a34a'; }
     updateHeaderAgentButtons(true);
 
     // Classifier status
     if (data.classifier === 'ready') {
-      clsStatus.textContent = 'Ready';
-      clsStatus.style.color = '#16a34a';
-      clsDetails.style.display = '';
-      clsUsage.textContent = `Calls: ${data.api_calls_today || 0}/${data.api_limit || 200} · ${data.estimated_cost_today || '$0.00'}`;
+      if (clsStatus)  { clsStatus.textContent = 'Ready'; clsStatus.style.color = '#16a34a'; }
+      if (clsDetails) clsDetails.style.display = '';
+      if (clsUsage)   clsUsage.textContent = `Calls: ${data.api_calls_today || 0}/${data.api_limit || 200} · ${data.estimated_cost_today || '$0.00'}`;
     } else {
-      clsStatus.textContent = 'No key';
-      clsStatus.style.color = '#d97706';
-      clsDetails.style.display = 'none';
+      if (clsStatus)  { clsStatus.textContent = 'No key'; clsStatus.style.color = '#d97706'; }
+      if (clsDetails) clsDetails.style.display = 'none';
     }
 
     // Session alert notifications from keep-alive auto-reconnect
@@ -91,12 +91,14 @@ export async function agentHealthCheck() {
     // Passive QBO status — just reads current URL, no navigation
     if (!state.activeJobId) {
       const qbo = await agentBridge.checkQBOStatus();
-      if (qbo.loggedIn) {
-        qboEl.textContent = 'Connected';
-        qboEl.style.color = '#16a34a';
-      } else {
-        qboEl.textContent = 'Not connected';
-        qboEl.style.color = '#d97706';
+      if (qboEl) {
+        if (qbo.loggedIn) {
+          qboEl.textContent = 'Connected';
+          qboEl.style.color = '#16a34a';
+        } else {
+          qboEl.textContent = 'Not connected';
+          qboEl.style.color = '#d97706';
+        }
       }
 
       // Passive TMS browser status (fallback path — rare since v2.34)
@@ -139,15 +141,12 @@ export async function agentHealthCheck() {
   } else {
     state.agentConnected = false;
     state._agentCustomersSynced = false;  // re-sync on next connect
-    dot.className = 'agent-status-dot offline';
-    text.textContent = 'Offline';
-    text.style.color = '#94a3b8';
+    if (dot)        dot.className = 'agent-status-dot offline';
+    if (text)       { text.textContent = 'Offline'; text.style.color = '#94a3b8'; }
     updateHeaderAgentButtons(false);
-    clsStatus.textContent = '--';
-    clsStatus.style.color = '#94a3b8';
-    clsDetails.style.display = 'none';
-    qboEl.textContent = '--';
-    qboEl.style.color = '#94a3b8';
+    if (clsStatus)  { clsStatus.textContent = '--'; clsStatus.style.color = '#94a3b8'; }
+    if (clsDetails) clsDetails.style.display = 'none';
+    if (qboEl)      { qboEl.textContent = '--'; qboEl.style.color = '#94a3b8'; }
     const tmsElOff = document.getElementById('tmsStatus');
     if (tmsElOff) { tmsElOff.textContent = '--'; tmsElOff.style.color = '#94a3b8'; }
     const tmsApiElOff = document.getElementById('tmsApiStatus');
@@ -225,46 +224,45 @@ async function agentOpenTMSLogin() {
     return;
   }
 
+  // Legacy panel DOM nodes — may be null after v2.55 cutover. All updates guarded.
   const btn = document.getElementById('tmsLoginBtn');
   const btnText = document.getElementById('tmsLoginBtnText');
   const tmsEl = document.getElementById('tmsStatus');
-  btn.disabled = true;
-  btnText.textContent = 'Opening Chrome...';
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Opening Chrome...';
 
   addLog('info', '[Agent] Opening TMS login page in Chrome...');
   const result = await agentBridge.openTMSLogin();
 
   if (result.status === 'login_page_opened') {
-    tmsEl.textContent = 'Waiting...';
-    tmsEl.style.color = '#d97706';
-    btnText.textContent = 'Waiting for Google SSO...';
+    if (tmsEl) { tmsEl.textContent = 'Waiting...'; tmsEl.style.color = '#d97706'; }
+    if (btnText) btnText.textContent = 'Waiting for Google SSO...';
     addLog('info', '[Agent] Chrome window opened — sign in with Google, then come back');
 
     try {
       const waitRes = await agentBridge._authFetch(agentBridge.baseUrl + '/tms/wait-for-login', { method: 'POST' });
       const waitData = await waitRes.json();
       if (waitData.status === 'logged_in') {
-        tmsEl.textContent = 'Logged in';
-        tmsEl.style.color = '#16a34a';
-        document.getElementById('tmsLoginSection').style.display = 'none';
+        if (tmsEl) { tmsEl.textContent = 'Logged in'; tmsEl.style.color = '#16a34a'; }
+        const tmsLoginSection = document.getElementById('tmsLoginSection');
+        if (tmsLoginSection) tmsLoginSection.style.display = 'none';
         addLog('success', '[Agent] TMS login successful!');
       } else {
-        tmsEl.textContent = 'Not logged in';
-        tmsEl.style.color = '#d97706';
-        btnText.textContent = 'Open TMS Login';
-        btn.disabled = false;
+        if (tmsEl) { tmsEl.textContent = 'Not logged in'; tmsEl.style.color = '#d97706'; }
+        if (btnText) btnText.textContent = 'Open TMS Login';
+        if (btn) btn.disabled = false;
         addLog('warning', '[Agent] TMS login timed out — try again');
       }
     } catch (e) {
-      btnText.textContent = 'Open TMS Login';
-      btn.disabled = false;
+      if (btnText) btnText.textContent = 'Open TMS Login';
+      if (btn) btn.disabled = false;
       addLog('error', '[Agent] Error waiting for TMS login: ' + e.message);
     }
   } else {
     const errMsg = result.detail || result.error || 'Unknown error';
     addLog('error', '[Agent] Failed to open TMS login: ' + errMsg);
-    btnText.textContent = 'Retry TMS Login';
-    btn.disabled = false;
+    if (btnText) btnText.textContent = 'Retry TMS Login';
+    if (btn) btn.disabled = false;
   }
 }
 
