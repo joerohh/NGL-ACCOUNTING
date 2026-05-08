@@ -23,26 +23,31 @@ A specialized logistics accounting utility with three tools:
 
 ### Web App — `app/`
 ```
-index.html                        (1,045 lines — HTML structure only)
+index.html                        HTML structure only (no inline JS for tool logic)
 assets/
   css/
-    styles.css                    (608 lines — all visual styling)
+    styles.css                    all visual styling
   js/
-    utils.js                      (71 lines — pure helpers: uid, fmtSize, escHtml, findColumnKey)
-    state.js                      (53 lines — global state objects)
-    agent-bridge.js               (~540 lines — REST client, agent panel, QBO login)
-    merge.js                      (~640 lines — Excel/PDF handling, merge modes, logging)
-    invoice-sender.js             (~780 lines — CSV, table, send flow, SSE events)
-    customers.js                  (~500 lines — CRUD, modals, tag inputs, import/export)
-    app.js                        (~150 lines — navigation, init, responsive, drop zones)
+    shared/
+      utils.js                    pure helpers (uid, fmtSize, escHtml, findColumnKey)
+      state.js                    global state objects
+      agent-client.js             REST client (saveBatchOutput, pickFolder, openPath, …)
+      log.js, dom-helpers.js, constants.js
+    agent-ui.js                   persistent agent panel + health check
+    app.js                        navigation, init, drop zones (legacy v1 zones removed)
+    tools/
+      merge/                      merge tool (M4 v2.55+ — single-version, no legacy)
+        merge-v2.js               state machine + render (Empty/Loading/Review/Fetching/Ready/Merge)
+        merge-v2-engine.js        pdf-lib merge functions for the 6 modes
+        merge-v2-output.js        mode metadata + filename + path builders + save flow
+      invoice-sender/             invoice sender (CSV, table, send flow, SSE)
+      customers/                  CRUD, modals, tag inputs, import/export
+      settings/, session-history/, chassis-finder/
   images/
     (logo + hero images)
 ```
 
-**Script load order matters** (all share global scope, no ES modules):
-```
-utils.js → state.js → agent-bridge.js → merge.js → invoice-sender.js → customers.js → app.js
-```
+The web app uses native ES modules. `app.js` is the entry point and statically imports the rest. No build step.
 
 ### Agent Server — `agent/`
 ```
@@ -63,23 +68,24 @@ routers/
 ```
 
 ## Core Workflows
-1. **Auto Merge (Data-Driven):**
-   - Parse .xlsx → Extract "Container Number" + "Invoice Number" columns
-   - Match local PDFs to containers via fuzzy name matching
-   - Merge matches into organized PDFs (per-container, all-in-one, by type)
-2. **Manual Merge (On-the-fly):**
-   - Upload 2+ PDFs → reorder via drag-and-drop → merge and download
-3. **Invoice Sending:**
+1. **Merge Tool (5-state flow):**
+   - Empty → drop Excel manifest
+   - Loading → parse + validate (dedup by INV#, soft-flag missing INV#)
+   - Review → user fixes any issues, picks rows to fetch
+   - Fetching → agent fetches invoices from QBO + docs from TMS (POD → BOL → POL → IT/ITE chain)
+   - Ready → user clicks Continue to Merge → Merge screen with 6 mode cards (Per Container × 3, Combined × 3); merges accumulate as completed cards
+2. **Invoice Sending:**
    - Upload CSV export + PDF attachments → match to customers → send via QBO agent
-4. **Customer Management:**
+3. **Customer Management:**
    - CRUD customer profiles → set email addresses, required docs, send method
 
 ## Key Patterns
-- `state` object in state.js tracks all merge tool state
-- `invoiceState` / `sendState` track invoice sender state
+- `v2State` object inside `merge-v2.js` tracks all merge tool state (rows, jobId, completedModes, outputLocation, etc.)
+- `invoiceState` / `sendState` (in `shared/state.js`) track invoice sender state
 - `agentBridge` object handles all agent communication (REST + SSE)
 - Agent health check runs every 15 seconds
 - Fuzzy Excel column matching via `normalizeHeader()` + `findColumnKey()` with alias arrays
+- Merge outputs land at `[user-chosen location]/Merge Outputs/[Mode]/YYYY-MM/YYYY-MM-DD/...` with same-day overwrite
 - All modals use `.open` CSS class toggle pattern
 
 ## Error Handling

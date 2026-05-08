@@ -6,8 +6,6 @@ import { escHtml } from './shared/utils.js';
 import { addLog } from './shared/log.js';
 import { agentBridge } from './shared/agent-client.js';
 import { invUpdateGenerateBtn } from './tools/invoice-sender/invoice-sender.js';
-import { classifyPdf, renderContainerGroups } from './tools/merge/merge.js';
-import { fetchJobResultsForHistory } from './tools/session-history/session-history.js';
 
 function toggleAgentPanel() {
   const body  = document.getElementById('agentBody');
@@ -22,7 +20,6 @@ export async function agentHealthCheck() {
   const data = await agentBridge.checkHealth();
   const dot    = document.getElementById('agentDot');
   const text   = document.getElementById('agentStatusText');
-  const fetchBtn = document.getElementById('fetchMissingBtn');
   const clsStatus = document.getElementById('classifierStatus');
   const clsDetails = document.getElementById('classifierDetails');
   const clsUsage = document.getElementById('classifierUsage');
@@ -88,9 +85,6 @@ export async function agentHealthCheck() {
       } catch (_) {}
     }
 
-    // Fetch button enabled whenever agent is connected
-    fetchBtn.disabled = false;
-
     // Update Send QBO button state
     invUpdateGenerateBtn();
 
@@ -149,7 +143,6 @@ export async function agentHealthCheck() {
     text.textContent = 'Offline';
     text.style.color = '#94a3b8';
     updateHeaderAgentButtons(false);
-    fetchBtn.disabled = true;
     clsStatus.textContent = '--';
     clsStatus.style.color = '#94a3b8';
     clsDetails.style.display = 'none';
@@ -275,260 +268,6 @@ async function agentOpenTMSLogin() {
   }
 }
 
-async function agentFetchMissing() {
-  if (!state.agentConnected) {
-    addLog('error', '[Agent] Agent server is offline');
-    return;
-  }
-  if (state.excelRows.length === 0) {
-    addLog('error', '[Agent] Upload an Excel manifest first');
-    return;
-  }
-
-  // Read selected doc types from checkboxes
-  const docTypes = [];
-  if (document.getElementById('fetchTypeInvoice')?.checked) docTypes.push('invoice');
-  if (document.getElementById('fetchTypePod')?.checked) docTypes.push('pod');
-  if (document.getElementById('fetchTypeBl')?.checked) docTypes.push('bl');
-
-  if (docTypes.length === 0) {
-    addLog('error', '[Agent] Select at least one document type to fetch');
-    return;
-  }
-
-  // Find containers missing any of the selected doc types
-  const missing = [];
-  for (const row of state.excelRows) {
-    const matched = state.pdfs.filter(p =>
-      p.name.toLowerCase().includes(row.containerNumber.toLowerCase())
-    );
-    const isMissing = docTypes.some(type => !matched.some(p => classifyPdf(p.name) === type));
-    if (isMissing) {
-      missing.push({
-        containerNumber: row.containerNumber,
-        invoiceNumber: row.invoiceNumber || '',
-      });
-    }
-  }
-
-  const typeLabel = docTypes.map(t => t.toUpperCase()).join(' + ');
-  if (missing.length === 0) {
-    addLog('success', `[Agent] All containers have ${typeLabel} — nothing to fetch!`);
-    return;
-  }
-
-  const withInv = missing.filter(m => m.invoiceNumber);
-  addLog('info', `[Agent] Fetching ${typeLabel} for ${missing.length} containers (${withInv.length} with invoice numbers, ${missing.length - withInv.length} will search by container #)`);
-
-  // Show immediate UI feedback BEFORE the server call
-  const fetchBtn = document.getElementById('fetchMissingBtn');
-  const pauseBtn = document.getElementById('pauseJobBtn');
-  const progressArea = document.getElementById('agentProgressArea');
-  const progressList = document.getElementById('agentProgressList');
-  const progressCount = document.getElementById('agentProgressCount');
-  fetchBtn.disabled = true;
-  fetchBtn.innerHTML =
-    '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Starting...';
-  progressArea.style.display = '';
-  progressList.innerHTML = '<div style="color:#94a3b8; font-size:0.78rem; padding:8px 0;">Connecting to agent server...</div>';
-  progressCount.textContent = '';
-
-  // Start the fetch job
-  const result = await agentBridge.fetchMissing(missing, docTypes);
-  if (result.error) {
-    addLog('error', '[Agent] Failed to start fetch: ' + result.error);
-    resetFetchButton();
-    progressArea.style.display = 'none';
-    return;
-  }
-
-  state.activeJobId = result.jobId;
-  addLog('info', `[Agent] Job started — fetching ${result.total} containers`);
-  fetchBtn.innerHTML =
-    '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Fetching...';
-  pauseBtn.style.display = '';
-  progressList.innerHTML = '';
-
-  // Stream progress
-  agentBridge.streamProgress(result.jobId, async (event) => {
-    handleAgentEvent(event, result.jobId);
-  });
-}
-
-function resetFetchButton() {
-  const fetchBtn = document.getElementById('fetchMissingBtn');
-  fetchBtn.disabled = false;
-  fetchBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Auto-Fetch Missing';
-  document.getElementById('pauseJobBtn').style.display = 'none';
-}
-
-async function agentPauseJob() {
-  if (!state.activeJobId) return;
-  const pauseBtn = document.getElementById('pauseJobBtn');
-  pauseBtn.disabled = true;
-  pauseBtn.innerHTML = '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
-  try {
-    const res = await agentBridge._authFetch(agentBridge.baseUrl + '/jobs/' + state.activeJobId + '/pause', { method: 'POST' });
-    const data = await res.json();
-    addLog('info', `[Agent] Job paused at ${data.progress}/${data.total}`);
-  } catch (e) {
-    addLog('error', '[Agent] Failed to pause: ' + e.message);
-  }
-}
-
-async function handleAgentEvent(event, jobId) {
-  const list = document.getElementById('agentProgressList');
-
-  switch (event.type) {
-    case 'container_start':
-      document.getElementById('agentProgressCount').textContent = `(${event.index + 1}/${event.total})`;
-      list.innerHTML += `
-        <div class="agent-progress-item" id="agent-prog-${event.containerNumber}">
-          <span class="status-icon"><svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
-          <span style="font-family:monospace; font-weight:600;">${escHtml(event.containerNumber)}</span>
-          <span style="margin-left:auto; color:#94a3b8;" id="agent-status-${event.containerNumber}">Searching...</span>
-        </div>`;
-      break;
-
-    case 'searching':
-      updateAgentStatus(event.containerNumber, 'Searching QBO...');
-      break;
-
-    case 'downloading_invoice':
-      updateAgentStatus(event.containerNumber, 'Downloading invoice...');
-      break;
-
-    case 'classifying':
-      updateAgentStatus(event.containerNumber, 'Classifying...');
-      break;
-
-    case 'checking_pod':
-      updateAgentStatus(event.containerNumber, 'Checking for POD...');
-      break;
-
-    case 'pod_found': {
-      const src = event.source ? ` (via ${event.source})` : '';
-      addLog('success', `[Agent] POD found for ${event.containerNumber}${src}`);
-      break;
-    }
-
-    case 'tms_pod_searching':
-      updateAgentStatus(event.containerNumber, 'Searching TMS for POD/BOL/POL...');
-      break;
-
-    case 'pod_missing':
-      addLog('warning', `[Agent] POD Missing: ${event.containerNumber} — not found in QBO or TMS`);
-      markPodMissing(event.containerNumber);
-      break;
-
-    case 'not_found':
-      updateAgentStatus(event.containerNumber, 'Not found in QBO', '#dc2626');
-      addLog('warning', `[Agent] Invoice not found in QBO: ${event.invoiceNumber}`);
-      break;
-
-    case 'container_complete': {
-      const r = event.result;
-      let statusText = '';
-      let statusColor = '#16a34a';
-      if (r.invoiceFile) statusText += 'Invoice \u2713 ';
-      if (r.podFile) statusText += 'POD \u2713 ';
-      if (r.podMissing) { statusText += 'POD Missing '; statusColor = '#d97706'; }
-      statusText = statusText.trim();
-      if (!statusText) statusText = 'Done';
-      if (r.error) { statusText = r.error; statusColor = '#dc2626'; }
-      updateAgentStatus(event.containerNumber, statusText, statusColor, true);
-
-      // Inject downloaded files into the web app
-      if (r.invoiceFile) {
-        const blob = await agentBridge.getFile(jobId, r.invoiceFile);
-        if (blob) agentBridge.injectFile(blob, r.invoiceFile);
-      }
-      if (r.podFile) {
-        const blob = await agentBridge.getFile(jobId, r.podFile);
-        if (blob) agentBridge.injectFile(blob, r.podFile);
-      }
-      break;
-    }
-
-    case 'login_required':
-      addLog('error', '[Agent] QBO API session expired — please re-authorize in Settings');
-      document.getElementById('qboStatus').textContent = 'Not connected';
-      document.getElementById('qboStatus').style.color = '#d97706';
-      resetFetchButton();
-      state.activeJobId = null;
-      break;
-
-    case 'job_paused':
-      addLog('info', `[Agent] Job paused at ${event.progress}/${event.total}`);
-      resetFetchButton();
-      state.activeJobId = null;
-      break;
-
-    case 'job_complete': {
-      addLog('info', `[Agent] ──── Fetch Complete ────`);
-      const types = event.docTypes || ['invoice', 'pod'];
-      const parts = [];
-      if (types.includes('invoice')) parts.push(`Invoices: ${event.invoicesDownloaded}`);
-      if (types.includes('pod')) parts.push(`PODs: ${event.podsDownloaded}`);
-      addLog('success', `[Agent] ${parts.join(' · ')}`);
-      if (types.includes('pod') && event.podsMissing > 0)
-        addLog('warning', `[Agent] PODs Missing: ${event.podsMissing} — not found in QBO`);
-      if (event.errors > 0)
-        addLog('error', `[Agent] Errors: ${event.errors}`);
-      resetFetchButton();
-
-      // Push to session history (fetch job results from API)
-      fetchJobResultsForHistory(jobId, 'fetch', event);
-
-      state.activeJobId = null;
-      renderContainerGroups();
-      break;
-    }
-
-    case 'connection_warning':
-      addLog('warning', '[Agent] ' + event.message);
-      break;
-
-    case 'connection_lost':
-      addLog('error', '[Agent] ' + event.message);
-      resetFetchButton();
-      state.activeJobId = null;
-      break;
-  }
-}
-
-function updateAgentStatus(containerNumber, text, color, done) {
-  const el = document.getElementById('agent-status-' + containerNumber);
-  if (!el) return;
-  el.textContent = text;
-  if (color) el.style.color = color;
-  if (done) {
-    const icon = document.querySelector(`#agent-prog-${containerNumber} .status-icon`);
-    if (icon) {
-      const isError = color === '#dc2626';
-      icon.innerHTML = isError
-        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
-        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
-    }
-  }
-}
-
-function markPodMissing(containerNumber) {
-  const groups = document.querySelectorAll('.container-group');
-  for (const group of groups) {
-    const header = group.querySelector('.container-group-header span');
-    if (header && header.textContent.trim() === containerNumber) {
-      if (!group.querySelector('.pod-missing-flag')) {
-        const flag = document.createElement('span');
-        flag.className = 'pod-missing-flag';
-        flag.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> POD Missing';
-        group.querySelector('.container-group-header').appendChild(flag);
-      }
-      break;
-    }
-  }
-}
-
 
 // ══════════════════════════════════════════════════════════
 //  BROWSER NOTIFICATIONS
@@ -573,13 +312,10 @@ window.__nglAgent = {
   },
 
   // Programmatic access to agent functions
-  fetchMissing: agentFetchMissing,
   injectFile: (blob, name) => agentBridge.injectFile(blob, name),
 };
 
 // ── Window assignments for inline HTML handlers ──
 window.toggleAgentPanel = toggleAgentPanel;
 window.agentOpenTMSLogin = agentOpenTMSLogin;
-window.agentFetchMissing = agentFetchMissing;
-window.agentPauseJob = agentPauseJob;
 window.agentHeaderBtnClick = agentHeaderBtnClick;

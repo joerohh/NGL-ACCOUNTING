@@ -82,7 +82,7 @@ export function findColumnKey(headers, aliases) {
   return null;
 }
 
-// ── Merge filename helpers — shared between merge.js (v1) and merge-v2.js (v2 in M4) ──
+// ── Merge filename helpers ──
 
 /** Returns "MM.DD" for today (e.g., "05.06"). */
 export function getDatePrefix() {

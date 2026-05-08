@@ -3,13 +3,11 @@
 // ══════════════════════════════════════════════════════════════════
 import { state, invoiceState } from './shared/state.js';
 import { addLog, invAddLog } from './shared/log.js';
-import { setupDrop } from './shared/dom-helpers.js';
 import { escHtml } from './shared/utils.js';
 import { LS_CUSTOMERS } from './shared/constants.js';
 import { agentBridge } from './shared/agent-client.js';
 import { agentHealthCheck } from './agent-ui.js';
-import { renderPdfQueue, updateUI, handleExcelFile, handlePdfFiles } from './tools/merge/merge.js';
-// Side-effect import: registers window.initMergeV2 / v2SetState / v2TriggerExcel for Settings toggle.
+// Side-effect import: registers window.initMergeV2 / v2SetState / v2TriggerExcel.
 import './tools/merge/merge-v2.js';
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
@@ -300,8 +298,6 @@ function initApp() {
   if (_appInitialized) return;
   _appInitialized = true;
 
-  renderPdfQueue();
-  updateUI();
   addLog('info', '// NGL Transportation Accounting v2.1');
   addLog('info', '// 100% client-side — no files leave your machine');
   addLog('info', '// Drop an Excel manifest + PDFs to merge by container, or just drop PDFs to combine');
@@ -329,9 +325,7 @@ function switchTool(tool) {
 
   // Hide all views
   document.getElementById('homeView').style.display = 'none';
-  document.getElementById('mergeToolView').style.display = 'none';
-  const mtV2 = document.getElementById('mergeToolViewV2');
-  if (mtV2) mtV2.style.display = 'none';
+  document.getElementById('mergeToolViewV2').style.display = 'none';
   document.getElementById('chassisFinderView').style.display = 'none';
   document.getElementById('invoiceSenderView').style.display = 'none';
   document.getElementById('customerView').style.display = 'none';
@@ -343,12 +337,8 @@ function switchTool(tool) {
     document.getElementById('homeView').style.display = '';
     refreshHomeMetrics();
   } else if (tool === 'merge') {
-    if (localStorage.getItem('mergeToolV2') && document.getElementById('mergeToolViewV2')) {
-      document.getElementById('mergeToolViewV2').style.display = '';
-      if (window.initMergeV2) window.initMergeV2();
-    } else {
-      document.getElementById('mergeToolView').style.display = '';
-    }
+    document.getElementById('mergeToolViewV2').style.display = '';
+    if (window.initMergeV2) window.initMergeV2();
   } else if (tool === 'chassis-finder') {
     document.getElementById('chassisFinderView').style.display = '';
     chassisInitDropZones();
@@ -439,26 +429,6 @@ document.addEventListener('click', function(e) {
   if (!e.target.closest('.tool-switcher')) {
     document.querySelectorAll('.tool-switcher-menu').forEach(m => m.classList.remove('open'));
   }
-});
-
-
-// ══════════════════════════════════════════════════════════
-//  DROP ZONE EVENTS  (setupDrop is in shared/dom-helpers.js)
-// ══════════════════════════════════════════════════════════
-setupDrop('excelDropZone', files => {
-  const excel = files.find(f => /\.(xlsx|xls|csv)$/i.test(f.name));
-  if (excel) handleExcelFile(excel);
-  else {
-    const pdfs = files.filter(f => /\.pdf$/i.test(f.name));
-    if (pdfs.length) { addLog('warning', 'Dropped PDFs in the Excel zone — adding to PDF queue'); handlePdfFiles(pdfs); }
-    else addLog('warning', 'Expected an .xlsx, .xls, or .csv file');
-  }
-});
-
-setupDrop('pdfDropZone', files => {
-  const excel = files.find(f => /\.(xlsx|xls|csv)$/i.test(f.name));
-  if (excel) { addLog('info', 'Detected Excel file in PDF zone — processing as manifest'); handleExcelFile(excel); }
-  handlePdfFiles(files.filter(f => /\.pdf$/i.test(f.name)));
 });
 
 

@@ -7,7 +7,6 @@ import { agentHealthCheck } from '../../agent-ui.js';
 
 export async function settingsLoad() {
   loadNotificationState();
-  loadMergeV2State();
 
   // Show/hide admin-only sections
   const user = agentBridge.getCurrentUser();
@@ -604,29 +603,11 @@ async function disconnectQboApi() {
   }
 }
 
-// ── Merge Tool v2 (Beta) toggle ──
-function loadMergeV2State() {
-  const tog = document.getElementById('settingsMergeV2Toggle');
-  if (tog) tog.checked = !!localStorage.getItem('mergeToolV2');
-}
-
-export function setMergeToolV2(enabled) {
-  if (enabled) {
-    localStorage.setItem('mergeToolV2', '1');
-  } else {
-    localStorage.removeItem('mergeToolV2');
-  }
-  alert(enabled
-    ? 'New Merge UI enabled. Reload the app to see it.'
-    : 'New Merge UI disabled. Reload the app to revert.');
-}
-
 // ── Window assignments for inline HTML handlers ──
 window.settingsSaveAndConnect = settingsSaveAndConnect;
 window.settingsLoad = settingsLoad;
 window.runSelectorHealthCheck = runSelectorHealthCheck;
 window.toggleNotifications = toggleNotifications;
-window.setMergeToolV2 = setMergeToolV2;
 window.openAddUserModal = openAddUserModal;
 window.openEditUserModal = openEditUserModal;
 window.saveUser = saveUser;
