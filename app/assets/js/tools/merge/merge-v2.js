@@ -2207,6 +2207,11 @@ async function v2RetryRow(rowIdx) {
             chainAttempted: evt.chain_attempted || [],
             message: '',
           };
+          // Repoint this row's POD at the retry job's folder so the merge engine finds the
+          // newly-downloaded {cn}_pod.pdf. Leave invoiceJobId alone — POD-only retries don't
+          // touch the invoice file. fetchJobId is updated as the legacy fallback.
+          row.docJobId = result.jobId;
+          row.fetchJobId = result.jobId;
           handle.close(); resolve();
         } else if (evt.type === 'pod_missing') {
           row.fetchResult = {
