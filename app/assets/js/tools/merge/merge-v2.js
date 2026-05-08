@@ -1672,6 +1672,8 @@ async function v2ClickFetch() {
   setStateV2('fetching');
 
   try {
+    v2State.jobIncludesInvoice = true;
+    v2State.jobIncludesDoc = true;
     const result = await agentBridge.fetchMissing(containers, ['invoice', 'pod']);
     if (result.error || !result.jobId) {
       throw new Error(result.error || 'Agent did not return a jobId');
@@ -1755,6 +1757,8 @@ async function v2RetryAllErrors() {
   setStateV2('fetching');
 
   try {
+    v2State.jobIncludesInvoice = false;
+    v2State.jobIncludesDoc = true;
     const result = await agentBridge.fetchMissing(containers, ['pod']);
     if (result.error || !result.jobId) {
       throw new Error(result.error || 'Agent did not return a jobId');
@@ -1793,6 +1797,8 @@ async function v2ResumeFetch() {
 
   setStateV2('fetching');
   try {
+    v2State.jobIncludesInvoice = true;
+    v2State.jobIncludesDoc = true;
     const result = await agentBridge.fetchMissing(containers, ['invoice', 'pod']);
     if (result.error || !result.jobId) {
       throw new Error(result.error || 'Agent did not return a jobId');
@@ -1916,8 +1922,16 @@ function patchRow(container, fetchResult) {
     const row = v2State.rows[i];
     if (row.containerNumber.toLowerCase() !== containerLower) continue;
     row.fetchResult = { ...fetchResult };
-    // Snapshot the jobId so the merge engine can find this row's files later, even after
-    // a Resume creates a new jobId or finalizeFetch clears the active one.
+    // Snapshot per-file jobIds so a POD-only retry doesn't clobber the row's pointer to the
+    // folder where the invoice already lives. Each fetchMissing call sets the doc-type flags
+    // below; we only update the corresponding jobId field. Legacy fetchJobId is kept as a
+    // single fallback so older code paths and the engine's haveAnyJob guard still work.
+    if (v2State.jobIncludesInvoice) {
+      row.invoiceJobId = v2State.jobId || row.invoiceJobId || null;
+    }
+    if (v2State.jobIncludesDoc) {
+      row.docJobId = v2State.jobId || row.docJobId || null;
+    }
     row.fetchJobId = v2State.jobId || row.fetchJobId || null;
     rerenderFetchRow(i);
   }
@@ -2165,6 +2179,8 @@ async function v2RetryRow(rowIdx) {
   if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
 
   try {
+    v2State.jobIncludesInvoice = false;
+    v2State.jobIncludesDoc = true;
     const result = await agentBridge.fetchMissing(
       [{ containerNumber: row.containerNumber, invoiceNumber: row.invoiceNumber }],
       ['pod'],

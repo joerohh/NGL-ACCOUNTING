@@ -32,10 +32,13 @@ function blobToArrayBuffer(blob) {
 
 // ── Pre-load both files for one row. Returns { invoiceBuf, docBuf } (either may be null). ──
 //   Manual uploads (row.manualPodFile from sidebar Fix Error or top-bar bulk drop) take
-//   precedence over fetched agent files. Uses row.fetchJobId (set when the SSE event landed)
-//   so rows from different fetch jobs each look in the right downloads/{jobId}/ folder.
+//   precedence over fetched agent files. invoiceJobId / docJobId are tracked separately so
+//   a POD-only retry (which writes a new job folder without an invoice) doesn't clobber the
+//   row's pointer to the original folder where the invoice still lives. Falls back to the
+//   legacy fetchJobId for any rows patched before this split.
 async function preloadRowFiles(fallbackJobId, row) {
-  const jobId = row.fetchJobId || fallbackJobId;
+  const invoiceJobId = row.invoiceJobId || row.fetchJobId || fallbackJobId;
+  const docJobId     = row.docJobId     || row.fetchJobId || fallbackJobId;
   const cn = row.containerNumber;
 
   // Doc: prefer manual upload over fetched file. If errored AND no manual upload, skip.
@@ -44,15 +47,15 @@ async function preloadRowFiles(fallbackJobId, row) {
     docPromise = blobToArrayBuffer(row.manualPodFile);
   } else if (row.fetchResult?.podPill === 'miss') {
     docPromise = Promise.resolve(null);
-  } else if (jobId) {
-    docPromise = fetchAgentFile(jobId, `${cn}_pod.pdf`);
+  } else if (docJobId) {
+    docPromise = fetchAgentFile(docJobId, `${cn}_pod.pdf`);
   } else {
     docPromise = Promise.resolve(null);
   }
 
   // Invoice: always from the agent (no manual-invoice path today).
-  const invoicePromise = jobId
-    ? fetchAgentFile(jobId, `${cn}_invoice.pdf`)
+  const invoicePromise = invoiceJobId
+    ? fetchAgentFile(invoiceJobId, `${cn}_invoice.pdf`)
     : Promise.resolve(null);
 
   const [invoiceBuf, docBuf] = await Promise.all([invoicePromise, docPromise]);
