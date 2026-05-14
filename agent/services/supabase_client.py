@@ -88,8 +88,16 @@ def list_customers(search: str = "", active_only: bool = True) -> list[dict]:
     if active_only:
         params += "&active=eq.true"
     if search:
-        pattern = f"%{search}%"
-        params += f"&or=(code.ilike.{pattern},name.ilike.{pattern})"
+        from urllib.parse import quote
+        # PostgREST `ilike` wants literal `%` wildcards. In a URL those
+        # must be encoded as `%25` — otherwise Supabase sees `%HL` as a
+        # malformed percent-escape and returns 500. The search term
+        # itself is URL-encoded too in case it contains spaces or other
+        # special chars. We hand-roll the URL because httpx's automatic
+        # param encoding would also encode the structural commas/parens
+        # inside the `or=(...)` clause that PostgREST needs literal.
+        safe_search = quote(search, safe="")
+        params += f"&or=(code.ilike.%25{safe_search}%25,name.ilike.%25{safe_search}%25)"
 
     resp = httpx.get(f"{_BASE}/customers?{params}", headers=_HEADERS, timeout=_TIMEOUT)
     _check_response(resp, "list_customers")
