@@ -113,6 +113,12 @@ def init_db() -> None:
     # If Supabase is configured, swap customer functions to cloud DB
     _maybe_use_supabase()
 
+    # v2.69 data fixup — relabel 'invoice'-in-requiredDocs customers as Custom
+    try:
+        migrate_invoice_to_custom()
+    except Exception as e:
+        logger.error("v69 migration failed (non-fatal): %s", e)
+
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
     """Add columns introduced in later versions (idempotent)."""
@@ -198,6 +204,47 @@ def _migrate_if_needed(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()
     if row[0] == 0 and audit_jsonl.exists():
         _migrate_audit_log(conn, audit_jsonl)
+
+
+def migrate_invoice_to_custom() -> None:
+    """v2.69 data fixup: move customers with 'invoice' in requiredDocs to Custom.
+
+    Customers like APEXMA01 / TOPTRA02 carry 'invoice' in their requiredDocs
+    list — a legacy state that the v2.69 UI represents as Custom send method.
+    This migration relabels them so the UI shows their real configuration
+    and the user can edit it normally.
+
+    OEC (qbo_invoice_only_then_pod_email) and portal_upload customers are
+    untouched — their flows don't use requiredDocs the same way.
+
+    Idempotent: customers already on 'custom' or without 'invoice' in
+    requiredDocs are skipped on subsequent runs.
+
+    Routes through the module-level list_customers / update_customer, which
+    _maybe_use_supabase() will have swapped to the Supabase client if
+    configured — so this works for both backends.
+    """
+    customers = list_customers("", False)  # all, including inactive
+    migrated = 0
+    for c in customers:
+        method = c.get("sendMethod", "email")
+        if method in ("qbo_invoice_only_then_pod_email", "portal_upload"):
+            continue
+        required = c.get("requiredDocs") or []
+        if not any(d.lower() == "invoice" for d in required):
+            continue
+        if method == "custom":
+            continue  # already migrated
+        update_customer(c["code"], {
+            "sendMethod": "custom",
+            "requiredDocs": required,
+        })
+        migrated += 1
+        logger.info("v69 migration: %s → custom (requiredDocs=%s)", c["code"], required)
+    if migrated:
+        logger.info("v69 migration: relabeled %d customer(s) onto 'custom' send method", migrated)
+    else:
+        logger.debug("v69 migration: no customers needed relabeling")
 
 
 def _migrate_customers(conn: sqlite3.Connection, json_file: Path) -> None:
