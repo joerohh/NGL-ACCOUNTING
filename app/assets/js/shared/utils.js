@@ -52,7 +52,7 @@ export const CSV_ALIASES = {
   customerName:    ['customername', 'customer', 'name', 'client', 'clientname', 'companyname', 'company'],
   invoiceDate:     ['invoicedate', 'date', 'invdate', 'docdate', 'createdate', 'txndate', 'transactiondate'],
   dueDate:         ['duedate', 'due', 'paymentdue', 'dueby', 'paydate'],
-  amount:          ['amount', 'total', 'balance', 'amountdue', 'openbalance', 'totalamount', 'invoiceamount', 'balancedue', 'bill'],
+  amount:          ['amount', 'total', 'balance', 'amountdue', 'openbalance', 'totalamount', 'invoiceamount', 'balancedue'],
   email:           ['email', 'emailaddress', 'billemail', 'contactemail', 'customeremail', 'billtoemail'],
   poNumber:        ['ponumber', 'po', 'purchaseorder', 'purchaseordernumber', 'pono', 'ponum', 'purchaseordernum'],
   bolNumber:       ['bolnumber', 'bol', 'billoflading', 'blnumber', 'bl', 'billofladingno'],
