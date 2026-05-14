@@ -1,4 +1,6 @@
 cd /d "%~dp0"
+call node "%~dp0check-js.js"
+if errorlevel 1 exit /b 1
 call "%~dp0build-agent.bat"
 if errorlevel 1 exit /b 1
 cd /d "%~dp0"
