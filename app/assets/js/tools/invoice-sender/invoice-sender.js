@@ -458,7 +458,77 @@ function invToggleAll(checked) {
 export function invUpdateGenerateBtn() {
   const hasInvoices = invoiceState.invoices.length > 0;
   const sendBtn = document.getElementById('invSendQboBtn');
-  if (sendBtn) sendBtn.disabled = !hasInvoices || !state.agentConnected;
+  if (!sendBtn) return;
+
+  if (!hasInvoices || !state.agentConnected) {
+    sendBtn.disabled = true;
+    // Reset label if no invoices
+    if (!hasInvoices) {
+      sendBtn.innerHTML =
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>' +
+        '</svg> Send Invoices';
+    }
+    invRenderValidationBanner();
+    return;
+  }
+
+  // v2.62: live ready-count on Send button + pre-send validation banner
+  const ready = invoiceState.invoices.filter(function(i) {
+    return i.validationStatus === 'ready' && i.sendStatus !== 'sent';
+  });
+  const label = ready.length === invoiceState.invoices.length
+    ? 'Send ' + ready.length + ' Invoice' + (ready.length === 1 ? '' : 's')
+    : 'Send ' + ready.length + ' Ready Invoice' + (ready.length === 1 ? '' : 's');
+  sendBtn.disabled = ready.length === 0;
+  sendBtn.innerHTML =
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>' +
+    '</svg> ' + label;
+
+  invRenderValidationBanner();
+}
+
+// v2.62: pre-send validation banner — surfaces blockers above the table
+function invRenderValidationBanner() {
+  let banner = document.getElementById('invPreSendValidationBanner');
+  const noCustomer = invoiceState.invoices.filter(function(i) {
+    return i.customerCode && !i.customerMatch;
+  });
+  const noEmail = invoiceState.invoices.filter(function(i) {
+    return i.customerMatch && (!i.resolvedEmails || i.resolvedEmails.length === 0)
+      && i.sendMethod !== 'portal_upload' && i.sendMethod !== 'portal';
+  });
+  const blockers = noCustomer.length + noEmail.length;
+
+  if (blockers === 0) {
+    if (banner) banner.remove();
+    return;
+  }
+
+  if (!banner) {
+    const tableEl = document.getElementById('invTable');
+    if (!tableEl) return;
+    banner = document.createElement('div');
+    banner.id = 'invPreSendValidationBanner';
+    tableEl.parentNode.insertBefore(banner, tableEl);
+  }
+
+  const parts = [];
+  if (noCustomer.length) parts.push(noCustomer.length + ' unknown customer code');
+  if (noEmail.length) parts.push(noEmail.length + ' missing email');
+  const ready = invoiceState.invoices.filter(function(i) {
+    return i.validationStatus === 'ready' && i.sendStatus !== 'sent';
+  });
+
+  banner.className = 'v62-alert-banner';
+  banner.style.cssText = 'margin: 10px 0 14px;';
+  banner.innerHTML =
+    '<div class="v62-alert-icon">!</div>' +
+    '<div class="v62-alert-text">' +
+      '<strong>' + blockers + ' invoice' + (blockers === 1 ? '' : 's') + ' need' + (blockers === 1 ? 's' : '') + ' attention before sending.</strong>' +
+      '<small>' + escHtml(parts.join(' · ')) + (ready.length ? ' · ' + ready.length + ' ready to send' : '') + '</small>' +
+    '</div>';
 }
 
 // ── Review Modal ──
