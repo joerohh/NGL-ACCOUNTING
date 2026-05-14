@@ -40,8 +40,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ngl.main")
 
-# Bundle version — baked in at build time, visible via /health for diagnosing stale bundles.
-AGENT_VERSION = "2.37.0"
+# Bundle version — resolved dynamically so /health never lies. Resolution order:
+#   1. NGL_VERSION env var (set by Electron's spawn — see desktop/main.js)
+#   2. desktop/VERSION file (works in dev and when the file is bundled)
+#   3. literal "dev" fallback so an unset version is obvious
+def _resolve_agent_version() -> str:
+    env_v = os.getenv("NGL_VERSION", "").strip()
+    if env_v:
+        return env_v
+    # Try the desktop/VERSION file relative to this module's location.
+    # Works in dev (../desktop/VERSION) and when the file ships next to the exe.
+    here = os.path.dirname(os.path.abspath(__file__))
+    for candidate in (
+        os.path.join(here, "..", "desktop", "VERSION"),
+        os.path.join(here, "VERSION"),  # PyInstaller _internal/ bundle case
+    ):
+        try:
+            with open(candidate, "r", encoding="utf-8") as fh:
+                v = fh.read().strip()
+                if v:
+                    return v
+        except OSError:
+            continue
+    return "dev"
+
+
+AGENT_VERSION = _resolve_agent_version()
 
 
 # ── Global exception handler — prevents silent crashes ──────────────

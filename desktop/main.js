@@ -68,6 +68,11 @@ let agentIsExternal = false; // true if agent was already running when Electron 
 function startAgent() {
   log(`isDev=${isDev} agentExe=${agentExe} agentDir=${agentDir} appDir=${appDir}`);
   log(`agentExe exists: ${agentExe ? fs.existsSync(agentExe) : "N/A"}`);
+  // Tell the agent which version of the desktop app launched it.
+  // The agent reports this back via /health so Electron can detect a
+  // version mismatch (e.g. leftover stale agent on port 8787).
+  const ourVersion = app.getVersion();
+
   if (isDev) {
     // Dev mode: run Python directly from the agent folder
     const venvPython = path.join(
@@ -77,6 +82,10 @@ function startAgent() {
       cwd: path.join(__dirname, "..", "agent"),
       stdio: "pipe",
       windowsHide: true,
+      env: {
+        ...process.env,
+        NGL_VERSION: ourVersion,
+      },
     });
   } else {
     // Production: run the PyInstaller-bundled exe
@@ -91,6 +100,7 @@ function startAgent() {
         NGL_AGENT_DIR: agentExeDir,
         // Web app location (resources/app/)
         NGL_APP_DIR: appDir,
+        NGL_VERSION: ourVersion,
       },
     });
   }
@@ -385,18 +395,42 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Check if agent is already running (e.g. started from terminal)
-  const agentAlreadyRunning = await new Promise((resolve) => {
+  // Check if agent is already running (e.g. started from terminal). If it is,
+  // fetch its /health response so we can compare versions before trusting it.
+  const existing = await new Promise((resolve) => {
     const req = http.get(`${AGENT_URL}/health`, (res) => {
-      resolve(res.statusCode === 200);
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        if (res.statusCode !== 200) { resolve(null); return; }
+        try { resolve(JSON.parse(body)); }
+        catch { resolve({ unknown: true }); }
+      });
     });
-    req.on("error", () => resolve(false));
-    req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    req.on("error", () => resolve(null));
+    req.setTimeout(2000, () => { req.destroy(); resolve(null); });
     req.end();
   });
 
-  if (agentAlreadyRunning) {
-    log("Agent already running on port 8787 — skipping spawn");
+  if (existing) {
+    const ourVersion = app.getVersion();
+    const theirVersion = existing.version || "(unknown)";
+    if (theirVersion !== ourVersion) {
+      log(`Version mismatch: bundled v${ourVersion} but port 8787 reports v${theirVersion}`);
+      dialog.showErrorBox(
+        "NGL Accounting — Another version is running",
+        `An older version of NGL Accounting (v${theirVersion}) is still running in the background.\n\n`
+        + `This version is v${ourVersion}. To avoid using the wrong agent, please close the running copy first.\n\n`
+        + `How to close it:\n`
+        + `  1. Open Task Manager (Ctrl + Shift + Esc)\n`
+        + `  2. Look for "ngl-agent.exe" or "python.exe"\n`
+        + `  3. Right-click → End task\n`
+        + `  4. Relaunch NGL Accounting`
+      );
+      app.quit();
+      return;
+    }
+    log(`Agent already running on port 8787 (matching v${theirVersion}) — skipping spawn`);
     agentIsExternal = true;
   } else {
     startAgent();
