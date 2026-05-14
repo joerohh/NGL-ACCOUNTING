@@ -585,8 +585,6 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .tag-pill.doc-invoice { background: #fff7ed; color: #ea580c; border-color: #fed7aa; }
 .tag-pill.doc-bol { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
 .tag-pill.doc-pol { background: #fdf4ff; color: #a855f7; border-color: #e9d5ff; }
-.doc-mode-btn { background: #f8fafc; color: #64748b; font-weight: 500; }
-.doc-mode-btn.doc-mode-active { background: #ea580c; color: #fff; font-weight: 600; }
 .doc-check-label {
   display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:6px;
   border:1px solid #e2e8f0; font-size:0.82rem; font-weight:500; color:#334155; cursor:pointer;
@@ -2497,3 +2495,69 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 }
 .v64-rcp-drift div { margin: 3px 0; }
 .v64-rcp-drift strong { color: #78350f; }
+
+/* ════════════════════════════════════════════════════════════════
+   CUSTOMER MANAGER v69 — Dup-code warning + Invoice-info banner
+   Mirrors the fix-3-customer-manager.html mockup palette.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Duplicate customer-code warning under the Code field */
+.v69-dup-warning {
+  display: none;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-left: 3px solid #dc2626;
+  border-radius: 8px;
+  padding: 10px 12px 11px;
+  margin-top: 8px;
+}
+.v69-dup-warning.is-active {
+  display: block;
+}
+.v69-dup-warning-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.83rem; font-weight: 700; color: #b91c1c;
+  margin-bottom: 4px;
+}
+.v69-dup-warning-title .v69-warn-icon {
+  color: #dc2626;
+}
+.v69-dup-warning-text {
+  font-size: 0.78rem; color: #7f1d1d;
+  line-height: 1.45;
+  margin-left: 22px;
+}
+.v69-dup-warning-link {
+  color: #c2410c; font-weight: 700; text-decoration: none;
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 0.78rem;
+  padding: 0; margin-left: 4px;
+  display: inline-flex; align-items: center; gap: 2px;
+}
+.v69-dup-warning-link:hover {
+  color: #9a3412; text-decoration: underline;
+}
+
+/* Static info banner where the Invoice checkbox helper sits */
+.v69-invoice-info-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.v69-invoice-info-banner .v69-info-icon {
+  color: #2563eb; flex-shrink: 0; line-height: 1.2;
+}
+.v69-invoice-info-banner .v69-info-text {
+  font-size: 0.78rem; color: #1e3a8a; line-height: 1.45;
+}
+.v69-invoice-info-banner .v69-info-text strong {
+  color: #1e40af; font-weight: 700;
+}
+
+/* Hint line under the Send Method dropdown — refreshed per-method copy */
+.v69-send-method-hint {
+  font-size: 0.73rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;
+}
