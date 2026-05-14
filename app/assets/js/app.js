@@ -10,6 +10,8 @@ import { agentHealthCheck } from './agent-ui.js';
 // Side-effect import: registers window.initMergeV2 / v2SetState / v2TriggerExcel.
 import './tools/merge/merge-v2.js';
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
+// Side-effect import: registers window.invShowResultsView / invRenderResults (v2.62 results view)
+import './tools/invoice-sender/invoice-sender-results.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
 import { renderSessionHistory } from './tools/session-history/session-history.js';

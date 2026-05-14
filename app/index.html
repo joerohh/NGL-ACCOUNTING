@@ -1115,6 +1115,40 @@
     </div>
   </div>
 
+  <!-- v2.62 Results view (Fix 1 + Fix 2). Hidden until send completes. -->
+  <div id="invSendResults" class="v62-results-body" style="display:none; margin-top:20px;">
+    <div id="invSendResultsMain">
+      <div id="invSendAlertBanner" class="v62-alert-banner" style="display:none;">
+        <div class="v62-alert-icon">!</div>
+        <div class="v62-alert-text">
+          <strong id="invSendBannerTitle"></strong>
+          <small id="invSendBannerSubtitle"></small>
+        </div>
+        <button id="invSendBulkRetryBtn" class="v62-bulk-retry-btn" disabled>
+          ↻ Retry All Fixed (<span id="invSendBulkCount">0</span>)
+        </button>
+      </div>
+
+      <div class="v62-tabs">
+        <button class="v62-tab has-issues active" data-tab="needs-attention">
+          ⚠ Needs Attention <span class="count" id="invTabIssueCount">0</span>
+        </button>
+        <button class="v62-tab" data-tab="sent">
+          ✓ Sent <span class="count" id="invTabSentCount">0</span>
+        </button>
+        <button class="v62-tab" data-tab="all">
+          All Invoices <span class="count" id="invTabAllCount">0</span>
+        </button>
+      </div>
+
+      <div id="invResultsTableWrap"></div>
+    </div>
+
+    <div id="invDetailPanel" class="v62-detail-panel">
+      <div id="invDetailPanelInner" class="v62-panel-inner"></div>
+    </div>
+  </div>
+
 </main>
 </div><!-- /invoiceSenderView -->
 
