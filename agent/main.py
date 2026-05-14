@@ -21,7 +21,7 @@ from config import (
     TMS_SELECTORS_FILE,
     WEB_UPDATE_URL, WEBAPP_CACHE_DIR,
 )
-from routers import auth, jobs, files, qbo, customers, audit, tms, settings, chassis
+from routers import auth, jobs, files, qbo, customers, audit, tms, settings, chassis, retry
 from services.shared_browser import SharedBrowser
 from services.qbo_api import QBOApiClient
 from services.tms_api import TMSApiClient
@@ -301,6 +301,7 @@ async def lifespan(app: FastAPI):
     settings.set_tms_browser(tms_browser)
     settings.set_job_manager(job_manager)
     chassis.set_job_manager(job_manager)
+    retry.set_job_manager(job_manager)
     tms.set_tms_api(tms_api)
     job_manager.set_tms_api(tms_api)
     job_manager.set_tms_data(tms_data)
@@ -464,6 +465,7 @@ app.include_router(audit.router)
 app.include_router(tms.router)
 app.include_router(settings.router)
 app.include_router(chassis.router)
+app.include_router(retry.router)
 
 
 @app.get("/health")
