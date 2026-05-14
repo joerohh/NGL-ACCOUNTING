@@ -27,11 +27,20 @@ def build_invoice_email_html(
     # Build reference line — container number only
     ref_line = f"&gt;&gt;&gt; {container}" if container else ""
 
-    # Format amount
-    try:
-        amount_display = f"${float(amount):,.2f}"
-    except (ValueError, TypeError):
-        amount_display = f"${amount}" if amount else ""
+    # Format amount — ONLY accept clean numeric values. If the caller
+    # passes a non-numeric string (e.g. a customer code that landed in
+    # the amount field because of an Excel column-mapping mishap), drop
+    # the amount box entirely rather than rendering "$HLLOGI01".
+    amount_display = ""
+    if amount is not None and amount != "":
+        try:
+            amount_display = f"${float(amount):,.2f}"
+        except (ValueError, TypeError):
+            amount_display = ""
+            logger.warning(
+                "build_invoice_email_html: non-numeric amount %r — hiding amount box",
+                amount,
+            )
 
     # Due date display
     due_display = ""
@@ -87,7 +96,7 @@ def build_invoice_email_html(
     </td>
   </tr>
 
-  <!-- Amount box — peach/tan background matching QBO style -->
+  {f'''<!-- Amount box — peach/tan background matching QBO style -->
   <tr>
     <td style="padding:0 30px 24px;">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#fde8cd; border-radius:6px;">
@@ -101,7 +110,7 @@ def build_invoice_email_html(
         </tr>
       </table>
     </td>
-  </tr>
+  </tr>''' if amount_display else ''}
 
   <!-- Message body -->
   <tr>
