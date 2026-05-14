@@ -44,20 +44,25 @@ class RetryInvoiceMixin:
         if not self._email_sender:
             return {"status": "error", "error": "Email sender not configured", "attachments_sent": 0}
 
-        # If the frontend passed invoice_number as the fallback for invoice_id
-        # (because the row didn't carry a QBO entity Id), resolve to the real
-        # QBO Id now. QBO entity IDs are short numeric strings; invoice numbers
-        # are alphanumeric like LM26040864F.
+        # Resolve invoice_id and capture the QBO invoice dict for downstream
+        # use (amount, due date, etc.). v64.x: always fetch — even when the
+        # row carried a QBO Id — so the retry email matches the normal-send
+        # email (uses QBO's authoritative TotalAmt + DueDate, not the row's).
+        qbo_invoice = None
         if invoice_id == invoice_number or not invoice_id.isdigit():
-            looked_up = await self._qbo_api.search_invoice(invoice_number)
-            if not looked_up or not looked_up.get("Id"):
+            qbo_invoice = await self._qbo_api.search_invoice(invoice_number)
+            if not qbo_invoice or not qbo_invoice.get("Id"):
                 return {
                     "status": "error",
                     "error": f"Invoice {invoice_number} not found in QuickBooks",
                     "attachments_sent": 0,
                 }
-            invoice_id = looked_up["Id"]
+            invoice_id = qbo_invoice["Id"]
             logger.info("retry_invoice: resolved %s → QBO Id %s", invoice_number, invoice_id)
+        else:
+            # Frontend passed a QBO Id directly — still fetch invoice details
+            # so we get TotalAmt + DueDate for the email body.
+            qbo_invoice = await self._qbo_api.search_invoice(invoice_number)
 
         # Build email_attachments list: invoice PDF + caller files
         email_attachments = []
@@ -95,12 +100,33 @@ class RetryInvoiceMixin:
 
         subject = invoice.get("subject") or f"[NGL_INV] {invoice_number} - Container#{container}"
 
-        # Build HTML body
+        # Pull the QBO payment portal link for the "Review and pay invoice"
+        # button. Falls back to "" on failure — template hides the button.
+        invoice_link = ""
+        try:
+            invoice_link = await self._qbo_api.get_invoice_link(invoice_id)
+        except Exception as e:
+            logger.warning("retry_invoice: could not get invoice link: %s", e)
+
+        # Prefer QBO's authoritative amount/due date over the row's cached
+        # values. Falls back to the row when QBO didn't return anything.
+        qbo_amount = ""
+        qbo_due_date = ""
+        if isinstance(qbo_invoice, dict):
+            qbo_amount = str(qbo_invoice.get("TotalAmt") or "")
+            qbo_due_date = qbo_invoice.get("DueDate", "")
+        amount_for_email = qbo_amount or invoice.get("amount", "")
+        due_for_email = qbo_due_date
+
+        # Build HTML body — mirror send_qbo_api so retry emails match normal
+        # sends (Review and pay button, due date, etc.).
         body = build_invoice_email_html(
             invoice_number=invoice_number,
             container=container,
             customer_name=customer.get("name", ""),
-            amount=invoice.get("amount", ""),
+            amount=amount_for_email,
+            due_date=due_for_email,
+            invoice_link=invoice_link,
         )
 
         # Send

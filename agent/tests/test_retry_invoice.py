@@ -15,9 +15,15 @@ from services.qbo_api import QBOApiClient
 def _make_mgr():
     """Build a JobManager with mocked dependencies."""
     qbo = MagicMock(spec=QBOApiClient)
-    qbo.search_invoice = AsyncMock(return_value={"Id": "qbo-123", "DocNumber": "LM26040864F"})
+    qbo.search_invoice = AsyncMock(return_value={
+        "Id": "qbo-123",
+        "DocNumber": "LM26040864F",
+        "TotalAmt": 1250.00,
+        "DueDate": "2026-06-13",
+    })
     qbo.download_invoice_pdf = AsyncMock(return_value=b"%PDF-1.4\ninvoice bytes")
     qbo.upload_attachment = AsyncMock(return_value={"Id": "att-1"})
+    qbo.get_invoice_link = AsyncMock(return_value="https://qbo.example/portal/invoice/qbo-123")
 
     email = MagicMock()
     email.send_invoice_email = AsyncMock(return_value={"sent": True, "error": None})
@@ -177,3 +183,72 @@ def test_retry_customer_not_found_returns_error(tmp_path):
 
     assert result["status"] == "error"
     email.send_invoice_email.assert_not_called()
+
+
+def test_retry_email_includes_qbo_review_and_pay_button(tmp_path, fake_customer):
+    """Regression: Lorena reported the Try Again email was missing the green
+    'Review and pay invoice' button that normal sends include. Root cause:
+    retry_invoice was not calling get_invoice_link or passing invoice_link to
+    build_invoice_email_html. After the fix, the email body must contain the
+    QBO portal link."""
+    pod = tmp_path / "pod.pdf"
+    pod.write_bytes(b"%PDF-1.4\nfake pod")
+
+    mgr, qbo, email = _make_mgr()
+
+    with patch("services.job_manager.retry_invoice.get_customer", return_value=fake_customer):
+        result = asyncio.run(mgr.retry_invoice(
+            invoice={
+                "invoice_number": "LM26040864F",
+                "invoice_id": "qbo-123",
+                "container_number": "TRHU4593053",
+                "customer_code": "APEXMA01",
+                "amount": "1250.00",
+                "subject": None,
+                "do_sender_email": None,
+            },
+            files=[{"slot": "POD", "path": str(pod), "verified_by": "filename"}],
+        ))
+
+    assert result["status"] == "sent"
+    # get_invoice_link must have been called with the resolved QBO Id
+    qbo.get_invoice_link.assert_called_once_with("qbo-123")
+    # The link must end up rendered in the email body as the QBO portal URL
+    call_kwargs = email.send_invoice_email.call_args.kwargs or email.send_invoice_email.call_args[1]
+    body = call_kwargs["body"]
+    assert "https://qbo.example/portal/invoice/qbo-123" in body, \
+        "Review and pay link missing from email body"
+    assert "Review and pay invoice" in body, \
+        "Review and pay button label missing from email body"
+
+
+def test_retry_email_uses_qbo_amount_not_row_amount(tmp_path, fake_customer):
+    """The retry should prefer QBO's authoritative TotalAmt over the row's
+    cached amount. Prevents the '$HLLOGI01' bug at the source: even if the
+    row's amount is garbage (e.g. customer code from a misparsed Excel),
+    the email shows the right dollar value."""
+    pod = tmp_path / "pod.pdf"
+    pod.write_bytes(b"%PDF-1.4\nfake pod")
+
+    mgr, qbo, email = _make_mgr()
+    # _make_mgr returns TotalAmt=1250.00 from QBO
+
+    with patch("services.job_manager.retry_invoice.get_customer", return_value=fake_customer):
+        result = asyncio.run(mgr.retry_invoice(
+            invoice={
+                "invoice_number": "LM26040864F",
+                "invoice_id": "qbo-123",
+                "container_number": "TRHU4593053",
+                "customer_code": "APEXMA01",
+                "amount": "HLLOGI01",   # row's amount is GARBAGE (the bug we saw)
+                "subject": None, "do_sender_email": None,
+            },
+            files=[{"slot": "POD", "path": str(pod), "verified_by": "filename"}],
+        ))
+
+    assert result["status"] == "sent"
+    call_kwargs = email.send_invoice_email.call_args.kwargs or email.send_invoice_email.call_args[1]
+    body = call_kwargs["body"]
+    # Must show QBO's actual amount, not the garbage
+    assert "$1,250.00" in body, "Expected QBO TotalAmt $1,250.00 to render in email body"
+    assert "$HLLOGI01" not in body, "Row's garbage amount must NOT leak into email body"
