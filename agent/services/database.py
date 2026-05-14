@@ -227,20 +227,23 @@ def migrate_invoice_to_custom() -> None:
     customers = list_customers("", False)  # all, including inactive
     migrated = 0
     for c in customers:
-        method = c.get("sendMethod", "email")
-        if method in ("qbo_invoice_only_then_pod_email", "portal_upload"):
-            continue
-        required = c.get("requiredDocs") or []
-        if not any(d.lower() == "invoice" for d in required):
-            continue
-        if method == "custom":
-            continue  # already migrated
-        update_customer(c["code"], {
-            "sendMethod": "custom",
-            "requiredDocs": required,
-        })
-        migrated += 1
-        logger.info("v69 migration: %s → custom (requiredDocs=%s)", c["code"], required)
+        try:
+            method = c.get("sendMethod", "email")
+            if method in ("qbo_invoice_only_then_pod_email", "portal_upload"):
+                continue
+            required = c.get("requiredDocs") or []
+            if not any(d.lower() == "invoice" for d in required):
+                continue
+            if method == "custom":
+                continue  # already migrated
+            update_customer(c["code"], {
+                "sendMethod": "custom",
+                "requiredDocs": required,
+            })
+            migrated += 1
+            logger.info("v69 migration: %s → custom (requiredDocs=%s)", c["code"], required)
+        except Exception as e:
+            logger.warning("v69 migration: skipped %s due to error: %s", c.get("code"), e)
     if migrated:
         logger.info("v69 migration: relabeled %d customer(s) onto 'custom' send method", migrated)
     else:

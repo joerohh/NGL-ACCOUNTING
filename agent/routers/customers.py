@@ -18,7 +18,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 # Pydantic models
 # ---------------------------------------------------------------------------
 
-VALID_SEND_METHODS = {"email", "qbo_invoice_only_then_pod_email", "portal_upload", "portal"}
+VALID_SEND_METHODS = {"email", "qbo_invoice_only_then_pod_email", "portal_upload", "portal", "custom"}
 
 
 class CustomerCreate(BaseModel):

@@ -169,6 +169,13 @@ function custCloseModal() {
 
   document.getElementById('custModal').classList.remove('open');
   custState.editingCode = null;
+
+  // v69: remove any runtime-injected portal_upload option (from custEdit)
+  const sel = document.getElementById('custSendMethod');
+  ['portal_upload', 'portal'].forEach(v => {
+    const opt = sel.querySelector(`option[value="${v}"]`);
+    if (opt) opt.remove();
+  });
 }
 
 // Module-level cache of the most recent duplicate hit, so the
@@ -259,6 +266,18 @@ async function custEdit(code) {
 
   // Set send method + conditional fields
   const method = customer.sendMethod || 'email';
+  // v69: legacy portal_upload customers need the option re-added at runtime
+  // (Task 5 removed it from the static HTML markup but the backend still
+  // routes existing customers configured this way).
+  if (method === 'portal_upload' || method === 'portal') {
+    const sel = document.getElementById('custSendMethod');
+    if (!sel.querySelector(`option[value="${method}"]`)) {
+      const opt = document.createElement('option');
+      opt.value = method;
+      opt.textContent = method === 'portal_upload' ? 'Portal Upload (legacy)' : 'Portal (legacy)';
+      sel.appendChild(opt);
+    }
+  }
   document.getElementById('custSendMethod').value = method;
   _custClearMethodFields();
 
@@ -301,8 +320,8 @@ async function custSave() {
   const bccEmails = custGetTags('custBccTags');
   const sendMethod = document.getElementById('custSendMethod').value;
   // For OEC/portal, required docs don't apply — the routing handles it
-  const isStandard = (sendMethod === 'email' || sendMethod === 'qbo_standard');
-  const requiredDocs = isStandard ? custGetDocRules() : [];
+  const usesDocRules = (sendMethod === 'email' || sendMethod === 'qbo_standard' || sendMethod === 'custom');
+  const requiredDocs = usesDocRules ? custGetDocRules() : [];
 
   // Collect method-specific fields
   const data = { code, name, emails, ccEmails, bccEmails, sendMethod, requiredDocs, notes };
