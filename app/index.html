@@ -541,6 +541,16 @@
           <label class="modal-field-label">Customer Code *</label>
           <input type="text" class="modal-input" id="custCodeInput" placeholder="e.g. HTNSAM01" style="text-transform:uppercase;">
         </div>
+        <div id="custDupWarning" class="v69-dup-warning">
+          <div class="v69-dup-warning-title">
+            <span class="v69-warn-icon">⚠</span>
+            <span>Customer code "<span id="custDupCode"></span>" is already in use.</span>
+          </div>
+          <div class="v69-dup-warning-text">
+            That code belongs to <strong id="custDupName"></strong>. Want to edit that customer instead?
+            <button type="button" class="v69-dup-warning-link" onclick="custJumpToExisting()">View existing →</button>
+          </div>
+        </div>
         <div>
           <label class="modal-field-label">Customer Name *</label>
           <input type="text" class="modal-input" id="custNameInput" placeholder="e.g. HTNS AMERICA INC.">
@@ -573,10 +583,11 @@
         <select class="modal-input" id="custSendMethod" onchange="custSendMethodChanged()">
           <option value="email">Standard QBO Email</option>
           <option value="qbo_invoice_only_then_pod_email">QBO Invoice Only + POD Email</option>
-          <option value="portal_upload">Portal Upload</option>
+          <option value="custom">Custom</option>
+          <!-- portal_upload intentionally hidden in v2.69 — backend still routes it -->
         </select>
-        <div style="font-size:0.73rem; color:#94a3b8; margin-top:4px;" id="custSendMethodHint">
-          Send all attachments via QuickBooks Online email.
+        <div class="v69-send-method-hint" id="custSendMethodHint">
+          Send all attachments on the QBO invoice via QuickBooks email.
         </div>
       </div>
 
@@ -627,50 +638,45 @@
         </div>
       </div>
 
-      <!-- Required Documents — only for standard QBO email -->
-      <div id="custDocRulesSection" style="margin-bottom:16px;">
+      <!-- Required Documents — only visible when sendMethod === 'custom' -->
+      <div id="custDocRulesSection" style="display:none; margin-bottom:16px;">
         <label class="modal-field-label">Required Documents</label>
-        <!-- Toggle: All vs Specific -->
-        <div style="display:flex; gap:0; margin-bottom:10px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;">
-          <button type="button" id="custDocModeAll" class="doc-mode-btn doc-mode-active" onclick="custSetDocMode('all')"
-                  style="flex:1; padding:8px 12px; font-size:0.82rem; border:none; cursor:pointer; transition:all 0.2s;">
-            Send All Attachments
-          </button>
-          <button type="button" id="custDocModeSpecific" class="doc-mode-btn" onclick="custSetDocMode('specific')"
-                  style="flex:1; padding:8px 12px; font-size:0.82rem; border:none; border-left:1px solid #e2e8f0; cursor:pointer; transition:all 0.2s;">
-            Require Specific Docs
-          </button>
-        </div>
-        <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:8px;" id="custDocModeHint">
-          All attachments on the invoice will be included when sending.
-        </div>
-        <!-- Specific docs panel (hidden by default) -->
-        <div id="custDocSpecificPanel" style="display:none;">
-          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
-            <label class="doc-check-label"><input type="checkbox" value="invoice" onchange="custDocCheckChanged()"> Invoice</label>
-            <label class="doc-check-label"><input type="checkbox" value="pod" onchange="custDocCheckChanged()"> POD</label>
-            <label class="doc-check-label"><input type="checkbox" value="pol" onchange="custDocCheckChanged()"> POL</label>
-            <label class="doc-check-label"><input type="checkbox" value="bol" onchange="custDocCheckChanged()"> BOL</label>
-            <label class="doc-check-label"><input type="checkbox" value="pl" onchange="custDocCheckChanged()"> PL</label>
-            <label class="doc-check-label"><input type="checkbox" value="do" onchange="custDocCheckChanged()"> DO</label>
+
+        <!-- Static helper banner that anchors the Invoice checkbox -->
+        <div class="v69-invoice-info-banner">
+          <span class="v69-info-icon">ℹ</span>
+          <div class="v69-info-text">
+            <strong>The invoice PDF is always sent automatically</strong> — checking Invoice below is for inclusion tracking. Any other ticked docs must be present in QBO (or fetchable from TMS) before the invoice will send.
           </div>
-          <!-- OR-group builder -->
-          <div id="custOrGroupSection" style="display:none; border-top:1px solid #e2e8f0; padding-top:8px;">
-            <div style="font-size:0.78rem; font-weight:600; color:#475569; margin-bottom:6px;">Either / Or Groups</div>
-            <div id="custOrGroupList" style="margin-bottom:6px;"></div>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <select id="custOrLeft" class="modal-input" style="flex:1; padding:4px 8px; font-size:0.78rem;"></select>
-              <span style="font-size:0.78rem; color:#94a3b8; font-weight:600;">OR</span>
-              <select id="custOrRight" class="modal-input" style="flex:1; padding:4px 8px; font-size:0.78rem;"></select>
-              <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem; white-space:nowrap;" onclick="custAddOrGroup()">Link</button>
-            </div>
-            <div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">
-              Link two docs as "either/or" — the invoice will pass if <em>at least one</em> is attached.
-            </div>
-          </div>
-          <!-- Rules summary -->
-          <div id="custDocRuleSummary" style="margin-top:8px; padding:8px 10px; background:#f8fafc; border-radius:6px; font-size:0.78rem; color:#475569; display:none;"></div>
         </div>
+
+        <!-- Doc picker checkboxes -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
+          <label class="doc-check-label"><input type="checkbox" value="invoice" onchange="custDocCheckChanged()"> Invoice</label>
+          <label class="doc-check-label"><input type="checkbox" value="pod" onchange="custDocCheckChanged()"> POD</label>
+          <label class="doc-check-label"><input type="checkbox" value="pol" onchange="custDocCheckChanged()"> POL</label>
+          <label class="doc-check-label"><input type="checkbox" value="bol" onchange="custDocCheckChanged()"> BOL</label>
+          <label class="doc-check-label"><input type="checkbox" value="pl" onchange="custDocCheckChanged()"> PL</label>
+          <label class="doc-check-label"><input type="checkbox" value="do" onchange="custDocCheckChanged()"> DO</label>
+        </div>
+
+        <!-- OR-group builder (unchanged from prior version) -->
+        <div id="custOrGroupSection" style="display:none; border-top:1px solid #e2e8f0; padding-top:8px;">
+          <div style="font-size:0.78rem; font-weight:600; color:#475569; margin-bottom:6px;">Either / Or Groups</div>
+          <div id="custOrGroupList" style="margin-bottom:6px;"></div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <select id="custOrLeft" class="modal-input" style="flex:1; padding:4px 8px; font-size:0.78rem;"></select>
+            <span style="font-size:0.78rem; color:#94a3b8; font-weight:600;">OR</span>
+            <select id="custOrRight" class="modal-input" style="flex:1; padding:4px 8px; font-size:0.78rem;"></select>
+            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem; white-space:nowrap;" onclick="custAddOrGroup()">Link</button>
+          </div>
+          <div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">
+            Link two docs as "either/or" — the invoice will pass if <em>at least one</em> is attached.
+          </div>
+        </div>
+
+        <!-- Rules summary -->
+        <div id="custDocRuleSummary" style="margin-top:8px; padding:8px 10px; background:#f8fafc; border-radius:6px; font-size:0.78rem; color:#475569; display:none;"></div>
       </div>
 
       <!-- Attachment info for OEC flow (hidden by default) -->
