@@ -20,6 +20,7 @@ from services.job_manager.send_qbo_api import SendQBOApiMixin
 from services.job_manager.send_oec import SendOECFlowMixin
 from services.job_manager.send_portal import SendPortalUploadMixin
 from services.job_manager.chassis_job import ChassisJobMixin
+from services.job_manager.retry_invoice import RetryInvoiceMixin
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -287,6 +288,7 @@ class JobManager(
     SendOECFlowMixin,
     SendPortalUploadMixin,
     ChassisJobMixin,
+    RetryInvoiceMixin,
 ):
     """Manages background fetch & send jobs — coordinates QBO API + Claude classifier."""
 
