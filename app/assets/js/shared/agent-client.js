@@ -758,6 +758,35 @@ export const agentBridge = {
       return await res.json();
     } catch (e) { return { error: e.message }; }
   },
+
+  async verifyFile(slot, file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    // Note: DO NOT set Content-Type — browser sets multipart boundary automatically.
+    const res = await fetch(
+      this.baseUrl + '/jobs/verify-file?slot=' + encodeURIComponent(slot),
+      { method: 'POST', body: fd, headers: this._authHeaders() }
+    );
+    if (!res.ok) throw new Error('verify-file ' + res.status + ': ' + (await res.text()));
+    return res.json();
+  },
+
+  async retryInvoice(invoice, slotFiles) {
+    // invoice: { invoice_number, invoice_id, container_number, customer_code, amount, subject, do_sender_email }
+    // slotFiles: [{ slot: 'POD', file: File, verifiedBy: 'filename'|'ai'|'manual' }]
+    const fd = new FormData();
+    fd.append('invoice', JSON.stringify(invoice));
+    fd.append('slots', JSON.stringify(slotFiles.map(s => ({ slot: s.slot, verified_by: s.verifiedBy || 'manual' }))));
+    slotFiles.forEach(sf => {
+      fd.append(sf.slot.toLowerCase() + '_file', sf.file);
+    });
+    const res = await fetch(
+      this.baseUrl + '/jobs/retry-invoice',
+      { method: 'POST', body: fd, headers: this._authHeaders() }
+    );
+    if (!res.ok) throw new Error('retry-invoice ' + res.status + ': ' + (await res.text()));
+    return res.json();
+  },
 };
 
 // Expose on window for dynamically generated inline onclick handlers

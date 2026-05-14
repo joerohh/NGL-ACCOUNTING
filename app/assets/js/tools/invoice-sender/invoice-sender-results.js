@@ -361,3 +361,232 @@ document.addEventListener('keydown', (e) => {
 window.invOpenPanelForInvoice = openPanelForInvoice;
 window.invClosePanel = closePanel;
 window.invRenderPanel = renderPanel;
+
+// ── Task 10: Fix-It drop zones (Fix 2) ────────────────────────────
+
+const FILENAME_PATTERNS = {
+  POD: /\b(pod|proof.?of.?delivery|delivery.?receipt)\b/i,
+  BOL: /\b(bol|bill.?of.?lading|b\.?l)\b/i,
+  POL: /\b(pol|proof.?of.?loading)\b/i,
+  DO:  /\b(d\.?o\.?|delivery.?order)\b/i,
+  PL:  /\b(p\.?l\.?|packing.?list)\b/i,
+};
+
+function matchesByFilename(filename, slot) {
+  const pat = FILENAME_PATTERNS[slot.toUpperCase()];
+  if (!pat) return false;
+  return pat.test(filename);
+}
+
+function allSlotsAttached(state, missingSlots) {
+  return missingSlots.every(s => {
+    const a = state.attached[s];
+    return a && (a.stage === 'attached' || a.stage === 'attached_manual');
+  });
+}
+
+function renderFixItSection(row, missingSlots) {
+  const container = document.getElementById('invFixItContainer');
+  if (!container) return;
+  const state = sendState.retry[row.invoiceNumber];
+  if (!state) return;
+
+  // Pure transient error (no missing docs) → just retry/skip buttons, no drop zones
+  if (missingSlots.length === 0) {
+    container.innerHTML = `
+      <div class="v62-fix-it-section">
+        <div class="v62-fix-it-title">⚡ Fix it</div>
+        <div class="v62-fix-it-subtitle">Nothing to attach — temporary QuickBooks hiccup. Just hit Retry.</div>
+        <div class="v62-panel-actions">
+          <button class="v62-btn-retry" onclick="window.invStartRetry('${escHtml(row.invoiceNumber)}')">↻ Try Again</button>
+          <button class="v62-btn-skip" onclick="window.invSkipRow('${escHtml(row.invoiceNumber)}')">Skip</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Missing-doc path: drop zones + retry/skip
+  const allReady = allSlotsAttached(state, missingSlots);
+  const zonesHtml = missingSlots.map(slot => renderDropZone(row.invoiceNumber, slot)).join('');
+
+  container.innerHTML = `
+    <div class="v62-fix-it-section">
+      <div class="v62-fix-it-title">📎 Fix it</div>
+      <div class="v62-fix-it-subtitle">Drop the missing file${missingSlots.length > 1 ? 's' : ''} below. Accepts PDF, JPG, PNG, HEIC.</div>
+      ${zonesHtml}
+      <div class="v62-panel-actions">
+        <button class="v62-btn-retry" ${allReady ? '' : 'disabled'} onclick="window.invStartRetry('${escHtml(row.invoiceNumber)}')">↻ Retry Send</button>
+        <button class="v62-btn-skip" onclick="window.invSkipRow('${escHtml(row.invoiceNumber)}')">Skip</button>
+      </div>
+    </div>
+  `;
+
+  missingSlots.forEach(slot => bindDropZone(row.invoiceNumber, slot));
+}
+
+function renderDropZone(invoiceNumber, slot) {
+  const state = sendState.retry[invoiceNumber];
+  const att = state.attached[slot];
+
+  if (!att) {
+    return `
+      <div class="v62-drop-zone" data-invoice="${escHtml(invoiceNumber)}" data-slot="${escHtml(slot)}">
+        <div class="dz-icon">📎</div>
+        <div class="dz-title">Drop ${escHtml(slot)} here</div>
+        <div class="dz-subtitle">PDF / JPG / PNG / HEIC · or click to browse</div>
+      </div>`;
+  }
+  if (att.stage === 'uploading') {
+    return `
+      <div class="v62-drop-zone uploading">
+        <div class="v62-dz-status-row">
+          <div class="v62-dz-status-icon"><span class="v62-small-spinner"></span></div>
+          <div class="v62-dz-info">
+            <div class="v62-dz-file-name">${escHtml(att.name)}</div>
+            <div class="v62-dz-file-status">Reading file…</div>
+          </div>
+        </div>
+      </div>`;
+  }
+  if (att.stage === 'verifying') {
+    return `
+      <div class="v62-drop-zone verifying">
+        <div class="v62-dz-status-row">
+          <div class="v62-dz-status-icon"><span class="v62-small-spinner"></span></div>
+          <div class="v62-dz-info">
+            <div class="v62-dz-file-name">${escHtml(att.name)}</div>
+            <div class="v62-dz-file-status">🔍 Verifying document type with Claude AI…</div>
+          </div>
+        </div>
+      </div>`;
+  }
+  if (att.stage === 'mismatch') {
+    return `
+      <div class="v62-drop-zone mismatch" data-invoice="${escHtml(invoiceNumber)}" data-slot="${escHtml(slot)}">
+        <div class="v62-dz-status-row">
+          <div class="v62-dz-status-icon">⚠</div>
+          <div class="v62-dz-info">
+            <div class="v62-dz-file-name">${escHtml(att.name)}</div>
+            <div class="v62-dz-file-status">Looks like a ${escHtml(att.detectedAs || 'different doc')}, not a ${escHtml(slot)}</div>
+          </div>
+          <button class="v62-dz-replace-btn" onclick="window.invClearAttachment('${escHtml(invoiceNumber)}','${escHtml(slot)}')">Replace</button>
+        </div>
+        <div style="margin-top:8px; font-size:0.76rem; color:#78350f;">
+          <a href="#" onclick="window.invForceAttach('${escHtml(invoiceNumber)}','${escHtml(slot)}'); return false;" style="color:#c2410c;">Use anyway →</a>
+        </div>
+      </div>`;
+  }
+  if (att.stage === 'attached' || att.stage === 'attached_manual') {
+    let label;
+    if (att.stage === 'attached_manual') label = '✓ Manually confirmed · ready to retry';
+    else if (att.verifiedBy === 'ai') label = `✓ ${slot} verified by AI · ready to retry`;
+    else label = `✓ ${slot} verified by filename · ready to retry`;
+    return `
+      <div class="v62-drop-zone attached">
+        <div class="v62-dz-status-row">
+          <div class="v62-dz-status-icon">✓</div>
+          <div class="v62-dz-info">
+            <div class="v62-dz-file-name">${escHtml(att.name)}</div>
+            <div class="v62-dz-file-status">${escHtml(label)}</div>
+          </div>
+          <button class="v62-dz-replace-btn" onclick="window.invClearAttachment('${escHtml(invoiceNumber)}','${escHtml(slot)}')">Replace</button>
+        </div>
+      </div>`;
+  }
+  return '';
+}
+
+function bindDropZone(invoiceNumber, slot) {
+  const zone = document.querySelector(
+    `.v62-drop-zone[data-invoice="${CSS.escape(invoiceNumber)}"][data-slot="${CSS.escape(slot)}"]`
+  );
+  if (!zone) return;
+  const handleFile = (file) => acceptFile(invoiceNumber, slot, file);
+
+  zone.onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/*';
+    inp.onchange = (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); };
+    inp.click();
+  };
+  zone.ondragover = (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag-over'); };
+  zone.ondragleave = () => zone.classList.remove('drag-over');
+  zone.ondrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  };
+}
+
+async function acceptFile(invoiceNumber, slot, file) {
+  const state = sendState.retry[invoiceNumber];
+  if (!state) return;
+  state.attached[slot] = { name: file.name, file, stage: 'uploading' };
+  renderPanel();
+
+  // Tier 1: filename match — instant attach, no API call
+  if (matchesByFilename(file.name, slot)) {
+    state.attached[slot] = { name: file.name, file, stage: 'attached', verifiedBy: 'filename' };
+    renderPanel();
+    return;
+  }
+
+  // Tier 2: Claude AI fallback
+  state.attached[slot] = { name: file.name, file, stage: 'verifying' };
+  renderPanel();
+  try {
+    const result = await window.agentBridge.verifyFile(slot, file);
+    if (result.matches_slot) {
+      state.attached[slot] = { name: file.name, file, stage: 'attached', verifiedBy: 'ai' };
+    } else {
+      state.attached[slot] = {
+        name: file.name, file, stage: 'mismatch',
+        detectedAs: result.detected_as || result.doc_type || 'unknown',
+      };
+    }
+  } catch (err) {
+    // On API failure, fall through to attached-manual — let user proceed
+    console.warn('[v62] verifyFile failed', err);
+    state.attached[slot] = { name: file.name, file, stage: 'attached_manual', verifiedBy: 'manual' };
+  }
+  renderPanel();
+}
+
+function clearAttachment(invoiceNumber, slot) {
+  const state = sendState.retry[invoiceNumber];
+  if (!state) return;
+  delete state.attached[slot];
+  renderPanel();
+}
+
+function forceAttach(invoiceNumber, slot) {
+  const state = sendState.retry[invoiceNumber];
+  if (!state) return;
+  const cur = state.attached[slot];
+  if (!cur) return;
+  state.attached[slot] = { ...cur, stage: 'attached_manual', verifiedBy: 'manual' };
+  renderPanel();
+}
+
+function skipRow(invoiceNumber) {
+  const row = invoiceState.invoices.find(r => r.invoiceNumber === invoiceNumber);
+  if (row) {
+    row.sendStatus = 'skipped';
+    row.errorMessage = 'Skipped by user';
+  }
+  // Persist via the existing status saver if present
+  if (typeof window.invSaveSendStatus === 'function') {
+    window.invSaveSendStatus(invoiceNumber, 'skipped', { errorMessage: 'Skipped by user' });
+  }
+  // Close panel + re-render results
+  if (typeof window.invClosePanel === 'function') window.invClosePanel();
+  if (typeof window.invRenderResults === 'function') window.invRenderResults();
+}
+
+window.invRenderFixItSection = renderFixItSection;
+window.invClearAttachment = clearAttachment;
+window.invForceAttach = forceAttach;
+window.invSkipRow = skipRow;
