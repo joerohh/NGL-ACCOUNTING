@@ -189,7 +189,11 @@ class SendQBOApiMixin:
         # requiredDocs here — no need to fail the invoice send because POD isn't
         # on the QBO record yet.
         is_oec = customer.get("sendMethod") == "qbo_invoice_only_then_pod_email"
-        required_docs = [] if is_oec else customer.get("requiredDocs", [])
+        required_docs = (
+            []
+            if is_oec
+            else [d for d in customer.get("requiredDocs", []) if d.lower() != "invoice"]
+        )
         await self._emit_send(job, "checking_attachments", {
             "invoiceNumber": invoice.invoice_number,
         })
