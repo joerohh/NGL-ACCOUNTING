@@ -2456,3 +2456,44 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   animation: v62-spin 0.7s linear infinite;
 }
 @keyframes v62-spin { to { transform: rotate(360deg); } }
+
+/* ════════════════════════════════════════════════════════════════
+   v64 — Send Diagnostic panel: "Will send to" block
+   ════════════════════════════════════════════════════════════════ */
+.v64-panel-recipients { margin: 14px 0; }
+.v64-rcp-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #64748b; font-weight: 700; margin-bottom: 6px;
+}
+.v64-rcp-loading { font-size: 0.82rem; color: #94a3b8; font-style: italic; padding: 8px 10px; }
+.v64-rcp-box {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 10px 12px; font-size: 0.82rem;
+}
+.v64-rcp-section { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
+.v64-rcp-section + .v64-rcp-section { border-top: 1px solid #f1f5f9; margin-top: 4px; padding-top: 8px; }
+.v64-rcp-tag {
+  background: #e2e8f0; color: #475569; font-weight: 700;
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 4px; min-width: 28px; text-align: center;
+  flex-shrink: 0; margin-top: 2px;
+}
+.v64-rcp-list { margin: 0; padding: 0 0 0 6px; list-style: none; flex: 1; }
+.v64-rcp-list li {
+  padding: 2px 0; color: #1e293b;
+  font-family: 'SF Mono', Consolas, monospace; font-size: 0.78rem;
+  word-break: break-all;
+}
+.v64-rcp-none { color: #94a3b8; font-style: italic; font-size: 0.78rem; }
+.v64-rcp-warn {
+  background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+  padding: 8px 11px; border-radius: 8px; font-size: 0.8rem;
+}
+.v64-rcp-drift {
+  margin-top: 8px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  padding: 10px 12px; border-radius: 8px; font-size: 0.8rem;
+  line-height: 1.5;
+}
+.v64-rcp-drift div { margin: 3px 0; }
+.v64-rcp-drift strong { color: #78350f; }

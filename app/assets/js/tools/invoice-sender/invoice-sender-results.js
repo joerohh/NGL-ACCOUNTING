@@ -344,6 +344,10 @@ function renderPanel() {
       <span class="label">CONTAINER:</span> ${escHtml(row.containerNumber || '—')}<br>
       <span class="label">CUSTOMER:</span> ${escHtml(row.customerCode || '')} ${escHtml(row.customerName || '')}
     </div>
+    <div id="invPanelRecipients" class="v64-panel-recipients">
+      <div class="v64-rcp-label">Will send to:</div>
+      <div class="v64-rcp-loading">Checking the live customer record…</div>
+    </div>
     <div class="${diag.cls}">
       <div class="v62-error-title">${escHtml(diag.title)}</div>
       <div class="v62-error-explanation">${escHtml(diag.explanation)}</div>
@@ -358,6 +362,91 @@ function renderPanel() {
   if (typeof window.invRenderFixItSection === 'function') {
     window.invRenderFixItSection(row, diag.missingSlots);
   }
+
+  // v64: pull the LIVE recipient list from the agent and surface it.
+  // This is what Retry/Send will actually use — so if it disagrees with
+  // what the user just edited in Customer Manager, the drift becomes
+  // obvious BEFORE they click. Fire-and-forget on the same panel.
+  renderLiveRecipients(row, invoiceNumber);
+}
+
+async function renderLiveRecipients(row, invoiceNumber) {
+  const el = document.getElementById('invPanelRecipients');
+  if (!el) return;
+  // Only render if the panel is still showing this row when the fetch returns.
+  const stillActive = () => sendState.activePanelInvoiceId === invoiceNumber && document.getElementById('invPanelRecipients') === el;
+
+  const code = row.customerCode || '';
+  if (!code) {
+    if (!stillActive()) return;
+    el.innerHTML = `
+      <div class="v64-rcp-label">Will send to:</div>
+      <div class="v64-rcp-warn">No customer code on this invoice — nothing will be sent.</div>
+    `;
+    return;
+  }
+
+  let live = null;
+  try {
+    if (window.agentBridge && typeof window.agentBridge.getCustomer === 'function') {
+      live = await window.agentBridge.getCustomer(code);
+    }
+  } catch (_) { live = null; }
+
+  if (!stillActive()) return;
+
+  if (!live) {
+    el.innerHTML = `
+      <div class="v64-rcp-label">Will send to:</div>
+      <div class="v64-rcp-warn">Couldn't reach the customer record — the send will fail until this is fixed.</div>
+    `;
+    return;
+  }
+
+  const to = Array.isArray(live.emails) ? live.emails : [];
+  const cc = Array.isArray(live.ccEmails) ? live.ccEmails.slice() : [];
+  // Agent always adds ar@ngltrans.net as a fixed Cc on the send (see retry_invoice.py).
+  if (!cc.some(e => (e || '').toLowerCase() === 'ar@ngltrans.net')) cc.unshift('ar@ngltrans.net');
+  const bcc = Array.isArray(live.bccEmails) ? live.bccEmails : [];
+
+  // Drift detection: compare the live list to the row's cached resolvedEmails.
+  const cachedTo = Array.isArray(row.resolvedEmails) ? row.resolvedEmails : [];
+  const normSet = (xs) => new Set((xs || []).map(s => String(s || '').trim().toLowerCase()).filter(Boolean));
+  const liveSet = normSet(to);
+  const cachedSet = normSet(cachedTo);
+  const added = [...cachedSet].filter(e => !liveSet.has(e));   // in your CM but agent won't send
+  const removed = [...liveSet].filter(e => !cachedSet.has(e)); // agent will send to but not in your CM
+
+  const renderList = (xs) => xs.length === 0
+    ? '<span class="v64-rcp-none">(none)</span>'
+    : '<ul class="v64-rcp-list">' + xs.map(e => `<li>${escHtml(e)}</li>`).join('') + '</ul>';
+
+  let driftHtml = '';
+  if (added.length > 0 || removed.length > 0) {
+    const addedHtml = added.length > 0
+      ? `<div><strong>In Customer Manager but agent doesn't have:</strong> ${added.map(e => escHtml(e)).join(', ')}</div>`
+      : '';
+    const removedHtml = removed.length > 0
+      ? `<div><strong>Agent will send to (not visible in your CM list):</strong> ${removed.map(e => escHtml(e)).join(', ')}</div>`
+      : '';
+    driftHtml = `
+      <div class="v64-rcp-drift">
+        ⚠ The agent's recipient list doesn't match what you see in Customer Manager.
+        ${addedHtml}${removedHtml}
+        <div style="margin-top:6px; font-size:0.78rem;">Open Customer Manager, re-save HLLOGI01 (and check the toast says "Saved to cloud"), then come back and try again.</div>
+      </div>
+    `.replace(/HLLOGI01/g, escHtml(code));
+  }
+
+  el.innerHTML = `
+    <div class="v64-rcp-label">Will send to:</div>
+    <div class="v64-rcp-box">
+      <div class="v64-rcp-section"><span class="v64-rcp-tag">To</span>${renderList(to)}</div>
+      <div class="v64-rcp-section"><span class="v64-rcp-tag">Cc</span>${renderList(cc)}</div>
+      ${bcc.length > 0 ? `<div class="v64-rcp-section"><span class="v64-rcp-tag">Bcc</span>${renderList(bcc)}</div>` : ''}
+    </div>
+    ${driftHtml}
+  `;
 }
 
 // Hook ESC key to close panel
