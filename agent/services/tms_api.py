@@ -9,6 +9,7 @@ Endpoints used:
   - GET  {documents[].file_url}  (Bearer-authed file download)
 """
 
+import asyncio
 import logging
 import time
 from typing import Optional
@@ -20,6 +21,18 @@ from config import TMS_API_BASE_URL, TMS_API_CLIENT_ID, TMS_API_CLIENT_SECRET
 logger = logging.getLogger("ngl.tms_api")
 
 REFRESH_BUFFER_S = 60  # refresh token if < 1min remaining
+
+# Errors that may resolve on their own within a few seconds (DNS blip,
+# transient TLS, brief connection refusal). Mirrors the policy used by
+# QBOApiClient.get_invoice_link — keep these in sync.
+_TRANSIENT_NETWORK_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
+_DOWNLOAD_RETRY_ATTEMPTS = 3
+_DOWNLOAD_RETRY_BACKOFF_SECONDS = (1.0, 3.0)  # delays before attempts 2 and 3
 
 
 class TMSApiClient:
@@ -82,20 +95,52 @@ class TMSApiClient:
 
     async def download_document(self, file_url: str) -> Optional[bytes]:
         """Download a TMS document. file_url points to public CloudFront/S3
-        (no auth header needed; sending Bearer can confuse the CDN)."""
+        (no auth header needed; sending Bearer can confuse the CDN).
+
+        Retries up to 3 times with 1s/3s backoff on transient network
+        failures (DNS, connect, read timeout). Without this, a single
+        flaky DNS lookup against storage.ngltrans.net silently drops the
+        POD from the email — exactly what bit Joseph's machine on
+        2026-05-14 even though the safety cascade had found the POD URL.
+        """
         if not file_url:
             return None
-        try:
-            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-                r = await client.get(file_url)
+
+        last_error: Optional[Exception] = None
+        for attempt in range(_DOWNLOAD_RETRY_ATTEMPTS):
+            try:
+                async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                    r = await client.get(file_url)
                 if r.status_code != 200:
+                    # Non-200 = permanent (404, 403…). Don't waste retries.
                     logger.warning("[TMS_API] download HTTP %s for %s",
                                    r.status_code, file_url)
                     return None
+                if attempt > 0:
+                    logger.info("[TMS_API] download_document recovered on attempt %d for %s",
+                                attempt + 1, file_url)
                 return r.content
-        except Exception as e:
-            logger.warning("[TMS_API] download_document(%s) failed: %s", file_url, e)
-            return None
+            except _TRANSIENT_NETWORK_ERRORS as e:
+                last_error = e
+                if attempt < _DOWNLOAD_RETRY_ATTEMPTS - 1:
+                    backoff = _DOWNLOAD_RETRY_BACKOFF_SECONDS[attempt]
+                    logger.warning(
+                        "[TMS_API] download_document attempt %d/%d failed for %s (%s) — retrying in %.1fs",
+                        attempt + 1, _DOWNLOAD_RETRY_ATTEMPTS,
+                        file_url, type(e).__name__, backoff,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+            except Exception as e:
+                # Non-transient (decode error, etc.) — return None now.
+                logger.warning("[TMS_API] download_document(%s) failed: %s", file_url, e)
+                return None
+
+        logger.error(
+            "[TMS_API] download_document FAILED for %s after %d attempts — POD/supporting doc will be missing from the email. Last error: %s",
+            file_url, _DOWNLOAD_RETRY_ATTEMPTS, last_error,
+        )
+        return None
 
     @staticmethod
     def extract_pod_url(wo: dict) -> Optional[str]:
