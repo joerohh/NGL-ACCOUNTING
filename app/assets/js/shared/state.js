@@ -53,6 +53,10 @@ export const sendState = {
   startTime: null,       // Date.now() when send job starts
   completedCount: 0,     // invoices fully processed (for ETA calc)
   eventSource: null,     // SSE EventSource for send job progress
+  // v2.62 — Results view (Fix 1 + Fix 2)
+  currentTab: 'needs-attention',   // 'needs-attention' | 'sent' | 'all'
+  activePanelInvoiceId: null,
+  retry: {},                       // { [invoiceNumber]: { panelStage, attached: { POD: {name, file, stage, verifiedBy?, detectedAs?} } } }
 };
 
 // ── Chassis finder state ──
