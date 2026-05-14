@@ -70,28 +70,43 @@ function custRenderTableData(customers) {
 // ── Send Method show/hide ──
 function custSendMethodChanged() {
   const method = document.getElementById('custSendMethod').value;
-  const podSection = document.getElementById('custPodEmailSection');
-  const portalSection = document.getElementById('custPortalSection');
+
+  // Section visibility — one source of truth: the dropdown.
+  const showRequiredDocs = method === 'custom';
+  const showPodEmail = method === 'qbo_invoice_only_then_pod_email';
+  const showPortal = method === 'portal_upload';  // legacy customers only
+  const showOecDocInfo = method === 'qbo_invoice_only_then_pod_email';
+
+  document.getElementById('custDocRulesSection').style.display = showRequiredDocs ? '' : 'none';
+  document.getElementById('custPodEmailSection').style.display = showPodEmail ? '' : 'none';
+  document.getElementById('custPortalSection').style.display = showPortal ? '' : 'none';
+  document.getElementById('custDocInfoOec').style.display = showOecDocInfo ? '' : 'none';
+
+  // Per-method hint copy
   const hint = document.getElementById('custSendMethodHint');
-  const docRulesSection = document.getElementById('custDocRulesSection');
-  const docInfoOec = document.getElementById('custDocInfoOec');
-  const docInfoPortal = document.getElementById('custDocInfoPortal');
-
-  podSection.style.display = (method === 'qbo_invoice_only_then_pod_email') ? '' : 'none';
-  portalSection.style.display = (method === 'portal_upload') ? '' : 'none';
-
-  // Show/hide doc rules vs info panels based on method
-  const isStandard = (method === 'email' || method === 'qbo_standard');
-  docRulesSection.style.display = isStandard ? '' : 'none';
-  docInfoOec.style.display = (method === 'qbo_invoice_only_then_pod_email') ? '' : 'none';
-  docInfoPortal.style.display = (method === 'portal_upload') ? '' : 'none';
-
-  if (method === 'qbo_invoice_only_then_pod_email') {
-    hint.textContent = 'Send ONLY the invoice via QBO, then email the POD separately.';
+  if (method === 'email') {
+    hint.textContent = 'Send all attachments on the QBO invoice via QuickBooks email.';
+  } else if (method === 'qbo_invoice_only_then_pod_email') {
+    hint.textContent = 'Send invoice via QBO, then POD via Gmail as a follow-up email.';
+  } else if (method === 'custom') {
+    hint.textContent = 'Send invoice plus only the documents you tick below. TMS auto-fills missing supporting docs when possible.';
   } else if (method === 'portal_upload') {
-    hint.textContent = 'Merge invoice + POD and upload to a carrier portal (no QBO email).';
-  } else {
-    hint.textContent = 'Send all attachments via QuickBooks Online email.';
+    hint.textContent = 'Merge invoice + POD into one PDF and upload to the TranzAct portal.';
+  }
+
+  // First switch into Custom in an Add flow: pre-tick Invoice so the
+  // user lands in a valid (invoice-only) configuration by default.
+  if (method === 'custom') {
+    const invBox = document.querySelector('#custDocRulesSection input[type="checkbox"][value="invoice"]');
+    const anyChecked = Array.from(
+      document.querySelectorAll('#custDocRulesSection input[type="checkbox"]')
+    ).some(cb => cb.checked);
+    if (invBox && !anyChecked) {
+      invBox.checked = true;
+      if (typeof custDocCheckChanged === 'function') {
+        custDocCheckChanged();
+      }
+    }
   }
 }
 
@@ -130,6 +145,8 @@ function custOpenModal(code) {
   custClearTags('custBccTags');
   _custClearMethodFields();
   custClearDocRules();
+  // v69: dropdown drives section visibility — refresh now that default 'email' is set
+  custSendMethodChanged();
 
   document.getElementById('custModal').classList.add('open');
 }
@@ -322,27 +339,6 @@ function custClearTags(containerId) {
 }
 
 // ── Required Docs: checkbox + OR-group logic ──
-function custSetDocMode(mode) {
-  custState.docMode = mode;
-  const allBtn = document.getElementById('custDocModeAll');
-  const specBtn = document.getElementById('custDocModeSpecific');
-  const panel = document.getElementById('custDocSpecificPanel');
-  const hint = document.getElementById('custDocModeHint');
-
-  if (mode === 'all') {
-    allBtn.classList.add('doc-mode-active');
-    specBtn.classList.remove('doc-mode-active');
-    panel.style.display = 'none';
-    hint.textContent = 'All attachments on the invoice will be included when sending.';
-  } else {
-    specBtn.classList.add('doc-mode-active');
-    allBtn.classList.remove('doc-mode-active');
-    panel.style.display = 'block';
-    hint.textContent = 'Only checked documents are required. Invoice will be blocked if any are missing.';
-  }
-  custDocCheckChanged();
-}
-
 function custDocCheckChanged() {
   // Show/hide OR-group section when 2+ checkboxes are checked
   const checked = _custGetCheckedDocs();
@@ -454,13 +450,13 @@ function custSetDocRules(rules) {
   custState.orGroups = [];
 
   if (!rules || rules.length === 0) {
-    custSetDocMode('all');
+    // v69: Send-All / Specific toggle removed — handled by dropdown
     // Uncheck all
     document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]').forEach(cb => cb.checked = false);
     return;
   }
 
-  custSetDocMode('specific');
+  // v69: Send-All / Specific toggle removed — handled by dropdown
   // Uncheck all first
   document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]').forEach(cb => cb.checked = false);
 
@@ -489,7 +485,7 @@ function custClearDocRules() {
   custState.orGroups = [];
   custState.docMode = 'all';
   document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]').forEach(cb => cb.checked = false);
-  custSetDocMode('all');
+  // v69: Send-All / Specific toggle removed — handled by dropdown
 }
 
 // ── Import/Export ──
@@ -697,7 +693,6 @@ function custShowToast(message, type = 'success') {
   }, 4000);
 }
 
-window.custSetDocMode = custSetDocMode;
 window.custDocCheckChanged = custDocCheckChanged;
 window.custAddOrGroup = custAddOrGroup;
 window.custRemoveOrGroup = custRemoveOrGroup;
