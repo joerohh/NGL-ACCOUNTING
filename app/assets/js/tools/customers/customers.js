@@ -353,7 +353,7 @@ function custDocCheckChanged() {
 }
 
 function _custGetCheckedDocs() {
-  const checkboxes = document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]');
+  const checkboxes = document.querySelectorAll('#custDocRulesSection input[type="checkbox"]');
   return Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 }
 
@@ -452,13 +452,13 @@ function custSetDocRules(rules) {
   if (!rules || rules.length === 0) {
     // v69: Send-All / Specific toggle removed — handled by dropdown
     // Uncheck all
-    document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#custDocRulesSection input[type="checkbox"]').forEach(cb => cb.checked = false);
     return;
   }
 
   // v69: Send-All / Specific toggle removed — handled by dropdown
   // Uncheck all first
-  document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#custDocRulesSection input[type="checkbox"]').forEach(cb => cb.checked = false);
 
   for (const rule of rules) {
     if (rule.includes('/')) {
@@ -467,12 +467,12 @@ function custSetDocRules(rules) {
       custState.orGroups.push(parts);
       // Check both checkboxes
       parts.forEach(p => {
-        const cb = document.querySelector(`#custDocSpecificPanel input[type="checkbox"][value="${p}"]`);
+        const cb = document.querySelector(`#custDocRulesSection input[type="checkbox"][value="${p}"]`);
         if (cb) cb.checked = true;
       });
     } else {
       // Single requirement
-      const cb = document.querySelector(`#custDocSpecificPanel input[type="checkbox"][value="${rule.toLowerCase()}"]`);
+      const cb = document.querySelector(`#custDocRulesSection input[type="checkbox"][value="${rule.toLowerCase()}"]`);
       if (cb) cb.checked = true;
     }
   }
@@ -484,7 +484,7 @@ function custSetDocRules(rules) {
 function custClearDocRules() {
   custState.orGroups = [];
   custState.docMode = 'all';
-  document.querySelectorAll('#custDocSpecificPanel input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#custDocRulesSection input[type="checkbox"]').forEach(cb => cb.checked = false);
   // v69: Send-All / Specific toggle removed — handled by dropdown
 }
 
