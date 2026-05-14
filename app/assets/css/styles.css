@@ -2225,3 +2225,234 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   margin-bottom: 16px;
   display: flex; align-items: center; gap: 10px;
 }
+
+/* ─── v2.62 Invoice Sender — Results view (Fix 1 + Fix 2) ─── */
+
+#invoiceSenderView .v62-alert-banner {
+  display: flex; align-items: center; gap: 12px;
+  background: #fff7ed; border: 1px solid #fed7aa;
+  border-radius: 8px; padding: 12px 14px;
+  margin-bottom: 14px;
+}
+#invoiceSenderView .v62-alert-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #ea580c; color: white; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+#invoiceSenderView .v62-alert-text { flex: 1; }
+#invoiceSenderView .v62-alert-text strong { color: #9a3412; font-size: 0.92rem; }
+#invoiceSenderView .v62-alert-text small {
+  display: block; color: #78350f; font-size: 0.78rem; margin-top: 2px;
+}
+#invoiceSenderView .v62-bulk-retry-btn {
+  background: #ea580c; color: white; border: none;
+  padding: 8px 14px; border-radius: 6px; cursor: pointer;
+  font-weight: 600; font-size: 0.85rem;
+}
+#invoiceSenderView .v62-bulk-retry-btn:disabled {
+  background: #fbbf24; opacity: 0.6; cursor: not-allowed;
+}
+#invoiceSenderView .v62-bulk-retry-btn:hover:not(:disabled) { background: #c2410c; }
+
+#invoiceSenderView .v62-tabs {
+  display: flex; gap: 4px; border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 12px;
+}
+#invoiceSenderView .v62-tab {
+  background: none; border: none; padding: 9px 14px;
+  font-size: 0.85rem; font-weight: 500; color: #64748b; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+#invoiceSenderView .v62-tab:hover { color: #1e293b; }
+#invoiceSenderView .v62-tab.active { color: #ea580c; border-bottom-color: #ea580c; }
+#invoiceSenderView .v62-tab.has-issues.active { color: #dc2626; border-bottom-color: #dc2626; }
+#invoiceSenderView .v62-tab .count {
+  display: inline-block; background: #e2e8f0; color: #475569;
+  font-size: 0.72rem; padding: 1px 7px; border-radius: 10px;
+  margin-left: 5px; font-weight: 600;
+}
+#invoiceSenderView .v62-tab.has-issues .count { background: #fee2e2; color: #b91c1c; }
+#invoiceSenderView .v62-tab.active .count { background: #ffedd5; color: #9a3412; }
+
+#invoiceSenderView .v62-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+}
+#invoiceSenderView .v62-badge.missing-doc { background: #fef2f2; color: #b91c1c; }
+#invoiceSenderView .v62-badge.api-error { background: #fff7ed; color: #c2410c; }
+#invoiceSenderView .v62-badge.sent { background: #f0fdf4; color: #15803d; }
+#invoiceSenderView .v62-badge.in-progress { background: #eff6ff; color: #1d4ed8; }
+#invoiceSenderView .v62-badge.skipped { background: #f1f5f9; color: #64748b; }
+
+#invoiceSenderView .v62-action-btn {
+  padding: 5px 10px; border-radius: 5px; font-size: 0.78rem; font-weight: 600;
+  border: 1px solid; cursor: pointer; background: white;
+}
+#invoiceSenderView .v62-action-btn.retry {
+  color: #c2410c; border-color: #fdba74;
+}
+#invoiceSenderView .v62-action-btn.retry:hover { background: #fff7ed; }
+#invoiceSenderView .v62-action-btn.attach {
+  color: #b91c1c; border-color: #fca5a5;
+}
+#invoiceSenderView .v62-action-btn.attach:hover { background: #fef2f2; }
+
+#invoiceSenderView .v62-results-body {
+  display: grid; grid-template-columns: 1fr 0px; gap: 0; transition: grid-template-columns 0.18s ease;
+}
+#invoiceSenderView .v62-results-body.panel-open { grid-template-columns: 1fr 420px; }
+#invoiceSenderView .v62-detail-panel {
+  border-left: 1px solid #e2e8f0; background: #fafafa;
+  overflow: hidden; max-height: calc(100vh - 180px);
+}
+#invoiceSenderView .v62-panel-inner { padding: 16px; overflow-y: auto; max-height: 100%; }
+#invoiceSenderView .v62-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+#invoiceSenderView .v62-panel-title { font-weight: 700; font-size: 0.92rem; }
+#invoiceSenderView .v62-panel-close {
+  background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #94a3b8;
+  width: 28px; height: 28px;
+}
+#invoiceSenderView .v62-panel-close:hover { color: #1e293b; }
+#invoiceSenderView .v62-panel-invoice-id {
+  font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;
+}
+#invoiceSenderView .v62-panel-meta {
+  font-size: 0.78rem; color: #475569; margin-bottom: 12px; line-height: 1.6;
+}
+#invoiceSenderView .v62-panel-meta .label { color: #94a3b8; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }
+
+#invoiceSenderView .v62-error-box {
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 14px;
+}
+#invoiceSenderView .v62-error-box.warn { background: #fff7ed; border-color: #fed7aa; }
+#invoiceSenderView .v62-error-title {
+  font-weight: 700; color: #b91c1c; font-size: 0.92rem; margin-bottom: 6px;
+}
+#invoiceSenderView .v62-error-box.warn .v62-error-title { color: #c2410c; }
+#invoiceSenderView .v62-error-explanation { font-size: 0.82rem; color: #1e293b; line-height: 1.5; }
+
+#invoiceSenderView .v62-checks-list {
+  list-style: none; padding: 0; margin: 12px 0;
+  font-size: 0.82rem; line-height: 1.7;
+}
+#invoiceSenderView .v62-checks-list li {
+  display: flex; align-items: flex-start; gap: 7px;
+}
+#invoiceSenderView .v62-checks-list .icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%; font-size: 0.65rem; font-weight: 700;
+  margin-top: 2px; flex-shrink: 0;
+}
+#invoiceSenderView .v62-checks-list .icon.ok { background: #dcfce7; color: #15803d; }
+#invoiceSenderView .v62-checks-list .icon.fail { background: #fee2e2; color: #b91c1c; }
+#invoiceSenderView .v62-checks-list .icon.warn { background: #fef3c7; color: #b45309; }
+
+#invoiceSenderView .v62-next-step {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+  padding: 10px 12px; font-size: 0.82rem; color: #1e3a8a; line-height: 1.5; margin: 12px 0;
+}
+
+#invoiceSenderView .v62-fix-it-section {
+  border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 14px;
+}
+#invoiceSenderView .v62-fix-it-title {
+  font-weight: 700; color: #0f172a; font-size: 0.88rem; margin-bottom: 4px;
+}
+#invoiceSenderView .v62-fix-it-subtitle { font-size: 0.78rem; color: #64748b; margin-bottom: 10px; }
+
+#invoiceSenderView .v62-drop-zone {
+  border: 2px dashed #cbd5e1; border-radius: 8px; padding: 18px;
+  text-align: center; cursor: pointer; transition: all 0.15s; margin-bottom: 10px;
+  background: white;
+}
+#invoiceSenderView .v62-drop-zone:hover,
+#invoiceSenderView .v62-drop-zone.drag-over { border-color: #ea580c; background: #fff7ed; }
+#invoiceSenderView .v62-drop-zone .dz-icon { font-size: 1.6rem; color: #ea580c; margin-bottom: 4px; }
+#invoiceSenderView .v62-drop-zone .dz-title { font-weight: 600; color: #1e293b; }
+#invoiceSenderView .v62-drop-zone .dz-subtitle { color: #94a3b8; font-size: 0.78rem; margin-top: 2px; }
+
+#invoiceSenderView .v62-drop-zone.uploading,
+#invoiceSenderView .v62-drop-zone.verifying,
+#invoiceSenderView .v62-drop-zone.attached,
+#invoiceSenderView .v62-drop-zone.mismatch {
+  border-style: solid; padding: 12px 14px; text-align: left;
+}
+#invoiceSenderView .v62-drop-zone.uploading { background: #eff6ff; border-color: #93c5fd; }
+#invoiceSenderView .v62-drop-zone.verifying { background: #faf5ff; border-color: #c4b5fd; }
+#invoiceSenderView .v62-drop-zone.attached { background: #f0fdf4; border-color: #86efac; }
+#invoiceSenderView .v62-drop-zone.mismatch { background: #fff7ed; border-color: #fdba74; }
+
+#invoiceSenderView .v62-dz-status-row { display: flex; align-items: center; gap: 10px; }
+#invoiceSenderView .v62-dz-status-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700;
+}
+#invoiceSenderView .v62-drop-zone.uploading .v62-dz-status-icon { background: #3b82f6; }
+#invoiceSenderView .v62-drop-zone.verifying .v62-dz-status-icon { background: #8b5cf6; }
+#invoiceSenderView .v62-drop-zone.attached .v62-dz-status-icon { background: #16a34a; }
+#invoiceSenderView .v62-drop-zone.mismatch .v62-dz-status-icon { background: #d97706; }
+#invoiceSenderView .v62-dz-info { flex: 1; min-width: 0; }
+#invoiceSenderView .v62-dz-file-name { font-weight: 600; font-size: 0.86rem; }
+#invoiceSenderView .v62-dz-file-status { font-size: 0.76rem; }
+#invoiceSenderView .v62-drop-zone.uploading .v62-dz-file-name { color: #1e3a8a; }
+#invoiceSenderView .v62-drop-zone.verifying .v62-dz-file-name { color: #5b21b6; }
+#invoiceSenderView .v62-drop-zone.attached .v62-dz-file-name { color: #14532d; }
+#invoiceSenderView .v62-drop-zone.mismatch .v62-dz-file-name { color: #78350f; }
+#invoiceSenderView .v62-dz-replace-btn {
+  margin-left: auto; padding: 4px 10px; border-radius: 5px; font-size: 0.72rem;
+  font-weight: 600; cursor: pointer; border: 1px solid; background: white;
+}
+#invoiceSenderView .v62-drop-zone.attached .v62-dz-replace-btn {
+  color: #15803d; border-color: #86efac;
+}
+#invoiceSenderView .v62-drop-zone.mismatch .v62-dz-replace-btn {
+  color: #c2410c; border-color: #fdba74;
+}
+
+#invoiceSenderView .v62-panel-actions { display: flex; gap: 8px; margin-top: 12px; }
+#invoiceSenderView .v62-btn-retry {
+  flex: 1; background: #16a34a; color: white; border: none;
+  padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: 0.86rem; cursor: pointer;
+}
+#invoiceSenderView .v62-btn-retry:disabled { background: #94a3b8; cursor: not-allowed; }
+#invoiceSenderView .v62-btn-retry:hover:not(:disabled) { background: #15803d; }
+#invoiceSenderView .v62-btn-skip {
+  background: none; color: #64748b; border: 1px solid #cbd5e1;
+  padding: 9px 14px; border-radius: 6px; font-weight: 500; font-size: 0.86rem; cursor: pointer;
+}
+#invoiceSenderView .v62-btn-skip:hover { background: #f8fafc; }
+
+#invoiceSenderView .v62-retry-progress {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+  padding: 14px; margin-top: 14px;
+}
+#invoiceSenderView .v62-retry-progress-title {
+  font-weight: 700; color: #1e3a8a; font-size: 0.88rem; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 7px;
+}
+#invoiceSenderView .v62-retry-steps { font-size: 0.82rem; line-height: 1.9; }
+
+#invoiceSenderView .v62-success-state { text-align: center; padding: 24px 12px; }
+#invoiceSenderView .v62-big-check {
+  width: 48px; height: 48px; border-radius: 50%; background: #16a34a;
+  color: white; display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; margin: 0 auto 10px;
+}
+#invoiceSenderView .v62-success-state h3 { color: #14532d; font-size: 1rem; margin-bottom: 4px; }
+#invoiceSenderView .v62-success-state p { color: #475569; font-size: 0.82rem; }
+#invoiceSenderView .v62-success-state .v62-auto-advance-note {
+  margin-top: 12px; font-size: 0.76rem; color: #94a3b8; font-style: italic;
+}
+
+#invoiceSenderView .v62-small-spinner {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #cbd5e1; border-right-color: transparent;
+  animation: v62-spin 0.7s linear infinite;
+}
+@keyframes v62-spin { to { transform: rotate(360deg); } }
