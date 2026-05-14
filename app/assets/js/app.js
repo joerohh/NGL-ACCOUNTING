@@ -235,8 +235,23 @@ async function startup() {
     statusEls.forEach(el => { if (el) { el.textContent = text; el.style.color = color; } });
   }
 
-  const health = await agentBridge.checkHealth();
-  if (health) {
+  // Poll the agent until it comes online — Electron starts the agent process
+  // in parallel with the webview, and a cold-start PyInstaller boot can take
+  // 5-10 seconds. A one-shot check would race and leave the user with a stale
+  // "offline" banner + a hidden Google login button.
+  async function waitForAgent(deadlineMs) {
+    const start = Date.now();
+    setAgentStatus('Connecting to agent...', '#94a3b8');
+    while (Date.now() - start < deadlineMs) {
+      const h = await agentBridge.checkHealth();
+      if (h) return true;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return false;
+  }
+
+  const connected = await waitForAgent(30000);
+  if (connected) {
     setAgentStatus('Agent connected', '#16a34a');
     state.agentConnected = true;
   } else {
