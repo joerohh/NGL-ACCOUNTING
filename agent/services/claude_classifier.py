@@ -104,6 +104,88 @@ def _validate_pdf(pdf_path: Path) -> bool:
         return False
 
 
+def _validate_image(image_path: Path) -> bool:
+    """Check that a file is a valid JPEG, PNG, or HEIC/HEIF image (by magic bytes)."""
+    try:
+        with open(image_path, "rb") as f:
+            head = f.read(16)
+        if len(head) < 12:
+            return False
+        # JPEG: starts with FF D8 FF
+        if head[:3] == b"\xff\xd8\xff":
+            return True
+        # PNG: 89 50 4E 47 0D 0A 1A 0A
+        if head[:8] == b"\x89PNG\r\n\x1a\n":
+            return True
+        # HEIC/HEIF: bytes 4-8 are "ftyp", followed by a brand (heic/heix/mif1/msf1/heif)
+        if head[4:8] == b"ftyp" and head[8:12] in (
+            b"heic", b"heix", b"mif1", b"msf1", b"heif",
+        ):
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _image_media_type(image_path: Path) -> Optional[str]:
+    """Map an image file suffix to its Anthropic vision API media_type. Returns None if unsupported."""
+    suffix = image_path.suffix.lower()
+    if suffix in (".jpg", ".jpeg"):
+        return "image/jpeg"
+    if suffix == ".png":
+        return "image/png"
+    if suffix in (".heic", ".heif"):
+        return "image/heic"
+    return None
+
+
+_CLASSIFIER_PROMPT = (
+    "You are a logistics document classifier. Analyze this document image and respond with ONLY a JSON object (no other text):\n\n"
+    '{"type": "invoice" | "pod" | "bol" | "other", "confidence": 0.0-1.0, "container_number": "extracted number or null"}\n\n'
+    "Rules:\n"
+    '- "invoice" = billing document, freight invoice, carrier invoice\n'
+    '- "pod" = proof of delivery, delivery receipt, signed delivery confirmation\n'
+    '- "bol" = bill of lading (treat as POD for our purposes)\n'
+    '- "other" = anything else\n'
+    "- Extract any container number visible (format like ABCD1234567)\n"
+    "- Confidence should reflect how certain you are about the classification"
+)
+
+
+def _parse_classifier_response(raw_text: str, filename: str) -> ClassificationResult:
+    """Parse the JSON response from Claude into a ClassificationResult.
+
+    Preserves the BOL→POD collapse (TMS fetch flow depends on it).
+    """
+    raw = raw_text.strip()
+    # Handle potential markdown code blocks
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+    data = json.loads(raw)
+    doc_type = data.get("type", "other").lower()
+    confidence = float(data.get("confidence", 0.0))
+    container_hint = data.get("container_number")
+
+    # BOL counts as POD
+    if doc_type == "bol":
+        doc_type = "pod"
+
+    needs_review = confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
+
+    logger.info(
+        "Classified %s → %s (%.0f%% confidence, container hint: %s)",
+        filename, doc_type, confidence * 100, container_hint,
+    )
+
+    return ClassificationResult(
+        doc_type=doc_type,
+        confidence=confidence,
+        container_hint=container_hint,
+        needs_review=needs_review,
+    )
+
+
 class UsageTracker:
     """Tracks daily Claude API usage to enforce cost caps."""
 
@@ -172,12 +254,12 @@ class ClaudeClassifier:
 
     async def classify(self, pdf_path: Path) -> ClassificationResult:
         """
-        Classify a PDF document as invoice, POD, or other.
+        Classify a document (PDF, JPG, PNG, or HEIC) as invoice, POD, or other.
 
         Cost-saving order:
           1. Try filename-based classification (FREE)
           2. Check daily API cap
-          3. Send first page to Claude as an image (PAID)
+          3. Route by file suffix to PDF or vision-image API call (PAID)
         """
         # ── Step 1: Try filename bypass (FREE) ──
         filename_guess = _classify_by_filename(pdf_path.name)
@@ -205,7 +287,25 @@ class ClaudeClassifier:
                 skipped_api=True,
             )
 
-        # ── Step 3: Validate PDF ──
+        # ── Step 3: Route by file suffix ──
+        suffix = pdf_path.suffix.lower()
+        if suffix == ".pdf":
+            return await self._call_claude_pdf(pdf_path)
+        if suffix in (".jpg", ".jpeg", ".png", ".heic", ".heif"):
+            return await self._call_claude_vision(pdf_path)
+
+        logger.warning(
+            "Unsupported file type for classification: %s (suffix=%s)",
+            pdf_path.name, suffix,
+        )
+        return ClassificationResult(
+            doc_type="other",
+            confidence=0.0,
+            needs_review=True,
+        )
+
+    async def _call_claude_pdf(self, pdf_path: Path) -> ClassificationResult:
+        """Validate a PDF, convert its first page to PNG, and classify via vision API."""
         if not _validate_pdf(pdf_path):
             logger.warning("Invalid or corrupted PDF: %s", pdf_path.name)
             return ClassificationResult(
@@ -214,7 +314,6 @@ class ClaudeClassifier:
                 needs_review=True,
             )
 
-        # ── Step 4: Convert first page to image (at lower DPI to save tokens) ──
         png_bytes = _pdf_first_page_to_png(pdf_path)
         if not png_bytes:
             return ClassificationResult(
@@ -243,17 +342,7 @@ class ClaudeClassifier:
                             },
                             {
                                 "type": "text",
-                                "text": (
-                                    "You are a logistics document classifier. Analyze this document image and respond with ONLY a JSON object (no other text):\n\n"
-                                    '{"type": "invoice" | "pod" | "bol" | "other", "confidence": 0.0-1.0, "container_number": "extracted number or null"}\n\n'
-                                    "Rules:\n"
-                                    '- "invoice" = billing document, freight invoice, carrier invoice\n'
-                                    '- "pod" = proof of delivery, delivery receipt, signed delivery confirmation\n'
-                                    '- "bol" = bill of lading (treat as POD for our purposes)\n'
-                                    '- "other" = anything else\n'
-                                    "- Extract any container number visible (format like ABCD1234567)\n"
-                                    "- Confidence should reflect how certain you are about the classification"
-                                ),
+                                "text": _CLASSIFIER_PROMPT,
                             },
                         ],
                     }
@@ -265,37 +354,84 @@ class ClaudeClassifier:
             output_tokens = getattr(response.usage, "output_tokens", 0)
             self._usage.record_call(input_tokens, output_tokens)
 
-            raw = response.content[0].text.strip()
-
-            # Handle potential markdown code blocks
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-            data = json.loads(raw)
-            doc_type = data.get("type", "other").lower()
-            confidence = float(data.get("confidence", 0.0))
-            container_hint = data.get("container_number")
-
-            # BOL counts as POD
-            if doc_type == "bol":
-                doc_type = "pod"
-
-            needs_review = confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
-
-            logger.info(
-                "Classified %s → %s (%.0f%% confidence, container hint: %s)",
-                pdf_path.name, doc_type, confidence * 100, container_hint,
-            )
-
-            return ClassificationResult(
-                doc_type=doc_type,
-                confidence=confidence,
-                container_hint=container_hint,
-                needs_review=needs_review,
-            )
+            return _parse_classifier_response(response.content[0].text, pdf_path.name)
 
         except Exception as e:
             logger.error("Claude classification failed for %s: %s", pdf_path.name, e)
+            return ClassificationResult(
+                doc_type="other",
+                confidence=0.0,
+                needs_review=True,
+            )
+
+    async def _call_claude_vision(self, image_path: Path) -> ClassificationResult:
+        """Validate and classify a JPG/PNG/HEIC image directly via the vision API."""
+        if not _validate_image(image_path):
+            logger.warning("Invalid or corrupted image: %s", image_path.name)
+            return ClassificationResult(
+                doc_type="other",
+                confidence=0.0,
+                needs_review=True,
+            )
+
+        media_type = _image_media_type(image_path)
+        if media_type is None:
+            logger.warning(
+                "Unsupported image suffix for %s — falling through to 'other'",
+                image_path.name,
+            )
+            return ClassificationResult(
+                doc_type="other",
+                confidence=0.0,
+                needs_review=True,
+            )
+
+        try:
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+        except Exception as e:
+            logger.error("Failed to read image %s: %s", image_path.name, e)
+            return ClassificationResult(
+                doc_type="other",
+                confidence=0.0,
+                needs_review=True,
+            )
+
+        b64_image = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+        try:
+            response = await self._client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=200,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": b64_image,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": _CLASSIFIER_PROMPT,
+                            },
+                        ],
+                    }
+                ],
+            )
+
+            input_tokens = getattr(response.usage, "input_tokens", 0)
+            output_tokens = getattr(response.usage, "output_tokens", 0)
+            self._usage.record_call(input_tokens, output_tokens)
+
+            return _parse_classifier_response(response.content[0].text, image_path.name)
+
+        except Exception as e:
+            logger.error("Claude classification failed for %s: %s", image_path.name, e)
             return ClassificationResult(
                 doc_type="other",
                 confidence=0.0,
