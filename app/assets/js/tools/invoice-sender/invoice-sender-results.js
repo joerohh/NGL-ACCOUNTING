@@ -590,3 +590,202 @@ window.invRenderFixItSection = renderFixItSection;
 window.invClearAttachment = clearAttachment;
 window.invForceAttach = forceAttach;
 window.invSkipRow = skipRow;
+
+// ── Task 11: Retry orchestration + auto-advance + bulk retry ──────
+
+async function startRetry(invoiceNumber) {
+  const row = invoiceState.invoices.find(r => r.invoiceNumber === invoiceNumber);
+  const state = sendState.retry[invoiceNumber];
+  if (!row || !state) return;
+
+  state.panelStage = 'retrying';
+  renderPanel();
+  paintRetryProgress(/* in-flight */ true);
+
+  // Build slotFiles from attached state
+  const slotFiles = Object.entries(state.attached)
+    .filter(([_, a]) => a && (a.stage === 'attached' || a.stage === 'attached_manual'))
+    .map(([slot, a]) => ({
+      slot,
+      file: a.file,
+      verifiedBy: a.verifiedBy || 'manual',
+    }));
+
+  // Resolve QBO invoice_id with fallback
+  // TODO: rows don't currently carry a QBO invoice_id; backend resolves
+  // invoice_id from invoice_number when this field is empty/unknown.
+  // (rows may carry qboInvoiceId if a successful lookup happened earlier;
+  // otherwise the agent resolves invoice_id from invoice_number on the backend side.)
+  const invoicePayload = {
+    invoice_number: row.invoiceNumber,
+    invoice_id: row.qboInvoiceId || row.invoiceId || row.invoiceNumber,
+    container_number: row.containerNumber || '',
+    customer_code: row.customerCode || '',
+    amount: row.amount || '',
+    subject: row.subject || row.subjectOverride || null,
+    do_sender_email: row.doSenderEmail || null,
+  };
+
+  try {
+    const result = await window.agentBridge.retryInvoice(invoicePayload, slotFiles);
+    if (result.status === 'sent') {
+      // Mark row sent locally + persist
+      row.sendStatus = 'sent';
+      row.sentAt = new Date().toLocaleTimeString();
+      row.errorMessage = '';
+      row.missingDocs = [];
+      if (typeof window.invSaveSendStatus === 'function') {
+        window.invSaveSendStatus(invoiceNumber, 'sent', { sentAt: row.sentAt });
+      }
+      state.panelStage = 'success';
+      renderPanel();
+      renderSuccessAndAdvance(invoiceNumber);
+    } else {
+      state.panelStage = 'fix';
+      renderPanel();
+      alert('Retry failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (err) {
+    state.panelStage = 'fix';
+    renderPanel();
+    alert('Retry error: ' + err.message);
+  }
+  // Refresh table + bulk button state
+  if (typeof window.invRenderResults === 'function') window.invRenderResults();
+  updateBulkRetryButton();
+}
+
+function paintRetryProgress(inflight) {
+  const stepsEl = document.getElementById('invRetrySteps');
+  if (!stepsEl) return;
+  const steps = [
+    '⟳ Sending email with attachments…',
+    '⟳ Saving file to QuickBooks in background…',
+  ];
+  stepsEl.innerHTML = steps.map(s => `<div>${escHtml(s)}</div>`).join('');
+}
+
+function renderSuccessStage(row) {
+  const inner = document.getElementById('invDetailPanelInner');
+  if (!inner) return;
+  inner.innerHTML = `
+    <div class="v62-panel-header">
+      <span class="v62-panel-title">Send Diagnostic</span>
+      <button class="v62-panel-close" onclick="window.invClosePanel()">×</button>
+    </div>
+    <div class="v62-success-state">
+      <div class="v62-big-check">✓</div>
+      <h3>${escHtml(row.invoiceNumber)} sent successfully!</h3>
+      <p>Email delivered.</p>
+      <div class="v62-auto-advance-note">Moving to the next failure in 1.5s…</div>
+    </div>
+  `;
+}
+
+function renderRetryingStage(row) {
+  const inner = document.getElementById('invDetailPanelInner');
+  if (!inner) return;
+  inner.innerHTML = `
+    <div class="v62-panel-header">
+      <span class="v62-panel-title">Retrying Send</span>
+      <button class="v62-panel-close" onclick="window.invClosePanel()">×</button>
+    </div>
+    <div class="v62-panel-invoice-id">${escHtml(row.invoiceNumber)}</div>
+    <div class="v62-panel-meta">
+      <span class="label">CONTAINER:</span> ${escHtml(row.containerNumber || '—')}<br>
+      <span class="label">CUSTOMER:</span> ${escHtml(row.customerCode || '')} ${escHtml(row.customerName || '')}
+    </div>
+    <div class="v62-retry-progress">
+      <div class="v62-retry-progress-title"><span class="v62-small-spinner"></span> Retrying…</div>
+      <div class="v62-retry-steps" id="invRetrySteps">
+        <div>⟳ Sending email with attachments…</div>
+        <div>⟳ Saving file to QuickBooks in background…</div>
+      </div>
+    </div>
+  `;
+}
+
+// Patch renderPanel so 'retrying' and 'success' stages get their own renderers.
+// We do this by wrapping the existing renderPanel which only handles 'fix' stage.
+// Hook order: renderPanel() is called by openPanelForInvoice + renderResults.
+// We override window.invRenderPanel to check panelStage and dispatch.
+const _origRenderPanel = window.invRenderPanel;
+window.invRenderPanel = function v62RenderPanel() {
+  const invoiceNumber = sendState.activePanelInvoiceId;
+  if (!invoiceNumber) return;
+  const row = invoiceState.invoices.find(r => r.invoiceNumber === invoiceNumber);
+  if (!row) return;
+  const state = sendState.retry[invoiceNumber];
+  if (state && state.panelStage === 'retrying') {
+    renderRetryingStage(row);
+    return;
+  }
+  if (state && state.panelStage === 'success') {
+    renderSuccessStage(row);
+    return;
+  }
+  if (typeof _origRenderPanel === 'function') _origRenderPanel();
+};
+// Replace the in-module renderPanel reference too (used by acceptFile et al.)
+function renderPanel() { window.invRenderPanel(); }
+
+function renderSuccessAndAdvance(currentInvoiceNumber) {
+  setTimeout(() => {
+    const failures = getFailedRows().filter(r => r.invoiceNumber !== currentInvoiceNumber);
+    if (failures.length > 0) {
+      openPanelForInvoice(failures[0].invoiceNumber);
+    } else if (typeof window.invClosePanel === 'function') {
+      window.invClosePanel();
+    }
+    if (typeof window.invRenderResults === 'function') window.invRenderResults();
+  }, 1500);
+}
+
+// ── Bulk retry ────────────────────────────────────────────────────
+
+function getReadyToRetryRows() {
+  return getFailedRows().filter(r => {
+    const s = sendState.retry[r.invoiceNumber];
+    if (!s) return false;
+    // Transient error (no missingDocs) → always retriable
+    if (isErrored(r) && !isMissingDocs(r)) return true;
+    // Missing-docs error → need every slot attached
+    const missing = (r.missingDocs || []).map(d => SLOT_LABELS[String(d).toLowerCase()] || String(d).toUpperCase());
+    if (missing.length === 0) return false; // no specifics, can't bulk-retry
+    return missing.every(slot => {
+      const a = s.attached[slot];
+      return a && (a.stage === 'attached' || a.stage === 'attached_manual');
+    });
+  });
+}
+
+function updateBulkRetryButton() {
+  const btn = document.getElementById('invSendBulkRetryBtn');
+  const cnt = document.getElementById('invSendBulkCount');
+  if (!btn || !cnt) return;
+  const ready = getReadyToRetryRows();
+  cnt.textContent = ready.length;
+  btn.disabled = ready.length === 0;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = `Retrying ${ready.length}…`;
+    for (const row of ready) {
+      // openPanel so user sees progress
+      openPanelForInvoice(row.invoiceNumber);
+      await startRetry(row.invoiceNumber);
+    }
+    // Restore button text
+    btn.innerHTML = `↻ Retry All Fixed (<span id="invSendBulkCount">0</span>)`;
+    updateBulkRetryButton();
+  };
+}
+
+// Call updateBulkRetryButton whenever results re-render.
+const _origRenderResults_t11 = window.invRenderResults;
+window.invRenderResults = function v62RenderResultsWithBulk() {
+  if (typeof _origRenderResults_t11 === 'function') _origRenderResults_t11();
+  updateBulkRetryButton();
+};
+
+window.invStartRetry = startRetry;
+window.invUpdateBulkRetryButton = updateBulkRetryButton;
