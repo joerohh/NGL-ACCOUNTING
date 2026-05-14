@@ -849,6 +849,7 @@ function invUpdateInvoiceSendStatus(invoiceNumber, status, extra) {
     inv.sendStatus = status;
     if (extra.sentAt) inv.sentAt = extra.sentAt;
     if (extra.errorMessage) inv.errorMessage = extra.errorMessage;
+    if (extra.missingDocs !== undefined) inv.missingDocs = extra.missingDocs;
     invSaveSendStatus(invoiceNumber, status, extra);
     invRenderTable();
   }
@@ -891,6 +892,10 @@ const _sendEventHandlers = {
       ' | No Attachments: ' + (event.noAttachments || 0));
     invSaveLastRunSummary(event);
     invShowSendResults(event);
+    // v2.62: open the new results view (tabbed table + side panel)
+    if (typeof window.invShowResultsView === 'function') {
+      window.invShowResultsView();
+    }
     // Push to session history
     if (sendState.jobId) fetchJobResultsForHistory(sendState.jobId, 'send', event);
   },
@@ -959,7 +964,10 @@ const _sendEventHandlers = {
     sendState.missingDocs++;
     sendState.completedCount++;
     invAddLog('warning', '  MISSING DOCS: ' + event.missing.join(', '));
-    invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped_no_attachments', { errorMessage: 'Missing: ' + event.missing.join(', ') });
+    invUpdateInvoiceSendStatus(event.invoiceNumber, 'missing_docs', {
+      errorMessage: 'Missing: ' + event.missing.join(', '),
+      missingDocs: event.missing || [],
+    });
   },
   opening_send_form(event) {
     invAddLog('info', '  Opening Review & Send form...');
@@ -995,7 +1003,7 @@ const _sendEventHandlers = {
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'sent', { errorMessage: 'Duplicate — already sent' });
     } else if (event.reason === 'no_attachments') {
       invAddLog('warning', '  SKIPPED: ' + event.invoiceNumber + ' (' + event.reason + ')');
-      invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped_no_attachments');
+      invUpdateInvoiceSendStatus(event.invoiceNumber, 'missing_docs', { missingDocs: [] });
     } else {
       invAddLog('warning', '  SKIPPED: ' + event.invoiceNumber + ' (' + event.reason + ')');
       invUpdateInvoiceSendStatus(event.invoiceNumber, 'skipped', { errorMessage: event.reason });
