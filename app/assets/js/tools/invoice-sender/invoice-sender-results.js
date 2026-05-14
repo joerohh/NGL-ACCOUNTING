@@ -204,3 +204,160 @@ function renderRow(r) {
 window.invShowResultsView = showResultsView;
 window.invHideResultsView = hideResultsView;
 window.invRenderResults = renderResults;
+
+// ── Task 9: Diagnostic side panel (Fix 1) ─────────────────────────
+
+function buildDiagnostic(row) {
+  if (isMissingDocs(row)) {
+    const missing = (row.missingDocs || []).map(d => SLOT_LABELS[String(d).toLowerCase()] || String(d).toUpperCase());
+    if (missing.length === 0) {
+      return {
+        cls: 'v62-error-box',
+        title: 'Missing documents',
+        explanation: "We couldn't find one of the documents this customer requires. The invoice was paused before sending so you can attach the missing file and retry.",
+        checks: [
+          { status: 'ok', text: 'Found invoice in QuickBooks' },
+          { status: 'ok', text: `Verified container number matches (${row.containerNumber || '—'})` },
+          { status: 'fail', text: 'Required document not attached in QuickBooks' },
+          { status: 'fail', text: 'No matching document on the TMS work order' },
+        ],
+        nextStep: `<strong>What to do:</strong> Open this row, drop the missing file in the Fix-It area, then hit Retry.`,
+        missingSlots: [],
+      };
+    }
+    const docs = missing.join(' and ');
+    const isPlural = missing.length > 1;
+    return {
+      cls: 'v62-error-box',
+      title: isPlural ? `${docs} are missing` : `${docs} is missing`,
+      explanation: isPlural
+        ? `This customer requires ${docs}, but they're not attached in QuickBooks and not available on the TMS work order. Drop the files below — once attached, you can retry the send.`
+        : `We couldn't find the ${docs} — QuickBooks has no ${docs} attachment, and the TMS work order doesn't show one either. Drop the file below and we'll attach it, then retry the send.`,
+      checks: [
+        { status: 'ok', text: 'Found invoice in QuickBooks' },
+        { status: 'ok', text: `Verified container number matches (${row.containerNumber || '—'})` },
+        { status: 'ok', text: 'Connected to TMS work order' },
+        ...missing.map(d => ({ status: 'fail', text: `No ${d} attached in QuickBooks` })),
+        ...missing.map(d => ({ status: 'fail', text: `No ${d} listed on the TMS work order` })),
+      ],
+      nextStep: `<strong>What to do:</strong> Drop the ${docs} file${isPlural ? 's' : ''} below. We'll check the filename, run Claude AI if needed, attach to your email, save a copy to QuickBooks, and re-send the invoice.`,
+      missingSlots: missing,
+    };
+  }
+
+  if (isErrored(row)) {
+    const msg = (row.errorMessage || '').toLowerCase();
+    const isTimeout = msg.includes('timeout') || msg.includes('did not respond') || msg.includes('didn');
+    if (isTimeout) {
+      return {
+        cls: 'v62-error-box warn',
+        title: "QuickBooks didn't respond",
+        explanation: `We tried to read this invoice's attachments, but QuickBooks took too long. This is almost always temporary — just hit Retry and it usually goes through.`,
+        checks: [
+          { status: 'ok', text: 'Found invoice in QuickBooks' },
+          { status: 'ok', text: `Verified container number matches (${row.containerNumber || '—'})` },
+          { status: 'fail', text: row.errorMessage || 'Request timed out' },
+        ],
+        nextStep: `<strong>What to do:</strong> Just retry — most QBO timeouts clear up on their own within a minute.`,
+        missingSlots: [],
+      };
+    }
+    return {
+      cls: 'v62-error-box',
+      title: 'Send error',
+      explanation: row.errorMessage || 'Something went wrong while sending this invoice.',
+      checks: [
+        { status: 'fail', text: row.errorMessage || 'Unknown error' },
+      ],
+      nextStep: `<strong>What to do:</strong> Check the error details above. If it looks transient, hit Retry.`,
+      missingSlots: [],
+    };
+  }
+  return null;
+}
+
+function openPanelForInvoice(invoiceNumber) {
+  const row = invoiceState.invoices.find(r => r.invoiceNumber === invoiceNumber);
+  if (!row) return;
+  sendState.activePanelInvoiceId = invoiceNumber;
+  if (!sendState.retry[invoiceNumber]) {
+    sendState.retry[invoiceNumber] = { panelStage: 'fix', attached: {} };
+  }
+  const el = document.getElementById('invSendResults');
+  if (el) el.classList.add('panel-open');
+  renderPanel();
+}
+
+function closePanel() {
+  sendState.activePanelInvoiceId = null;
+  const el = document.getElementById('invSendResults');
+  if (el) el.classList.remove('panel-open');
+  const inner = document.getElementById('invDetailPanelInner');
+  if (inner) inner.innerHTML = '';
+}
+
+function renderPanel() {
+  const invoiceNumber = sendState.activePanelInvoiceId;
+  if (!invoiceNumber) return;
+  const row = invoiceState.invoices.find(r => r.invoiceNumber === invoiceNumber);
+  if (!row) return;
+  const state = sendState.retry[invoiceNumber] || { panelStage: 'fix', attached: {} };
+  const inner = document.getElementById('invDetailPanelInner');
+  if (!inner) return;
+
+  // Stages other than 'fix' are filled in by Task 11 (retry/success).
+  // For Task 9 we only render the 'fix' stage.
+
+  const diag = buildDiagnostic(row);
+  if (!diag) {
+    inner.innerHTML = `
+      <div class="v62-panel-header">
+        <span class="v62-panel-title">Send Diagnostic</span>
+        <button class="v62-panel-close" onclick="window.invClosePanel()">×</button>
+      </div>
+      <div style="padding:12px 0; color:#64748b;">No diagnostic available for this row.</div>
+    `;
+    return;
+  }
+
+  const checksHtml = diag.checks.map(c => {
+    const ic = c.status === 'ok' ? '✓' : c.status === 'warn' ? '!' : '✕';
+    return `<li><span class="icon ${c.status}">${ic}</span>${escHtml(c.text)}</li>`;
+  }).join('');
+
+  inner.innerHTML = `
+    <div class="v62-panel-header">
+      <span class="v62-panel-title">Send Diagnostic</span>
+      <button class="v62-panel-close" onclick="window.invClosePanel()">×</button>
+    </div>
+    <div class="v62-panel-invoice-id">${escHtml(row.invoiceNumber)}</div>
+    <div class="v62-panel-meta">
+      <span class="label">CONTAINER:</span> ${escHtml(row.containerNumber || '—')}<br>
+      <span class="label">CUSTOMER:</span> ${escHtml(row.customerCode || '')} ${escHtml(row.customerName || '')}
+    </div>
+    <div class="${diag.cls}">
+      <div class="v62-error-title">${escHtml(diag.title)}</div>
+      <div class="v62-error-explanation">${escHtml(diag.explanation)}</div>
+    </div>
+    <strong style="font-size:0.82rem; color:#0f172a;">What we checked:</strong>
+    <ul class="v62-checks-list">${checksHtml}</ul>
+    <div class="v62-next-step">${diag.nextStep}</div>
+    <div id="invFixItContainer"></div>
+  `;
+
+  // Task 10 fills this when it lands. Until then, no-op.
+  if (typeof window.invRenderFixItSection === 'function') {
+    window.invRenderFixItSection(row, diag.missingSlots);
+  }
+}
+
+// Hook ESC key to close panel
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && sendState.activePanelInvoiceId) {
+    closePanel();
+  }
+});
+
+window.invOpenPanelForInvoice = openPanelForInvoice;
+window.invClosePanel = closePanel;
+window.invRenderPanel = renderPanel;
