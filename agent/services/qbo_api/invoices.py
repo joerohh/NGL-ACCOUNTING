@@ -1,5 +1,6 @@
 """QBO API invoice operations — query, verify, send."""
 
+import asyncio
 import logging
 import re
 from typing import Optional
@@ -7,6 +8,18 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger("ngl.qbo_api.invoices")
+
+# Errors that may resolve on their own within a few seconds (DNS blip,
+# transient TLS error, brief connection refusal). For these we retry with
+# a short backoff before giving up.
+_TRANSIENT_NETWORK_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
+_GET_INVOICE_LINK_RETRY_ATTEMPTS = 3
+_GET_INVOICE_LINK_RETRY_BACKOFF_SECONDS = (1.0, 3.0)  # delays before attempts 2 and 3
 
 # Container number pattern: 4 letters + 7 digits (e.g., ECMU7540543)
 CONTAINER_PATTERN = re.compile(r"[A-Z]{4}\d{7}")
@@ -36,7 +49,14 @@ class QBOInvoicesMixin:
         """Get the customer-facing payment/review link for an invoice.
 
         Uses ?include=invoiceLink to fetch the QBO portal URL.
-        Returns the link URL or empty string if unavailable.
+        Returns the link URL, or empty string if QBO doesn't have one OR
+        if all retry attempts hit a transient network failure.
+
+        Retries: this call sits in the hot path of every send (normal +
+        Try Again). If it fails the resulting email is missing the
+        "Review and pay invoice" button, which users notice immediately.
+        We try up to 3 times with backoff to ride out transient DNS
+        blips that previously killed the button on Joseph's machine.
         """
         token = await self._token_manager.get_access_token()
         if not token:
@@ -44,23 +64,57 @@ class QBOInvoicesMixin:
 
         realm = self._token_manager.realm_id or self._realm_id
         url = f"{self._base_url}/v3/company/{realm}/invoice/{invoice_id}?include=invoiceLink"
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.get(
-                    url,
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/json",
-                    },
-                    timeout=15,
+
+        last_error: Optional[Exception] = None
+        for attempt in range(_GET_INVOICE_LINK_RETRY_ATTEMPTS):
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.get(
+                        url,
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Accept": "application/json",
+                        },
+                        timeout=15,
+                    )
+                if resp.status_code == 200:
+                    link = resp.json().get("Invoice", {}).get("InvoiceLink", "")
+                    if link:
+                        logger.info(
+                            "Got invoice link for %s%s",
+                            invoice_id,
+                            "" if attempt == 0 else f" (after {attempt + 1} attempts)",
+                        )
+                    return link or ""
+                # Non-200 — don't retry (probably a permanent issue like
+                # 401/403/404). Drop out of the loop and return "".
+                logger.warning(
+                    "get_invoice_link non-200 for %s: HTTP %s",
+                    invoice_id, resp.status_code,
                 )
-            if resp.status_code == 200:
-                link = resp.json().get("Invoice", {}).get("InvoiceLink", "")
-                if link:
-                    logger.info("Got invoice link for %s", invoice_id)
-                return link or ""
-        except Exception as e:
-            logger.warning("Failed to get invoice link: %s", e)
+                return ""
+            except _TRANSIENT_NETWORK_ERRORS as e:
+                last_error = e
+                if attempt < _GET_INVOICE_LINK_RETRY_ATTEMPTS - 1:
+                    backoff = _GET_INVOICE_LINK_RETRY_BACKOFF_SECONDS[attempt]
+                    logger.warning(
+                        "get_invoice_link attempt %d/%d failed for %s (%s) — retrying in %.1fs",
+                        attempt + 1, _GET_INVOICE_LINK_RETRY_ATTEMPTS,
+                        invoice_id, type(e).__name__, backoff,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+                # Out of retries on a transient error
+            except Exception as e:
+                # Non-transient (e.g. JSON decode error) — don't retry
+                logger.warning("get_invoice_link failed for %s: %s", invoice_id, e)
+                return ""
+
+        # All retries exhausted on transient errors
+        logger.error(
+            "get_invoice_link FAILED for %s after %d attempts — the sent email will be missing the 'Review and pay invoice' button. Last error: %s",
+            invoice_id, _GET_INVOICE_LINK_RETRY_ATTEMPTS, last_error,
+        )
         return ""
 
     async def verify_invoice_details(self, invoice_data: dict,
