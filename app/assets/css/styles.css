@@ -603,6 +603,11 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   background: #f8fafc; color: #334155; border-color: #e2e8f0;
   font-size: 0.78rem; text-transform: none; cursor: default;
 }
+.tag-pill.email-more {
+  background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;
+  font-size: 0.72rem; text-transform: none; cursor: help;
+  font-weight: 600;
+}
 .tag-input-wrap {
   display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
   border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;

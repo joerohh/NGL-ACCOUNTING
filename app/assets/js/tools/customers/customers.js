@@ -45,7 +45,14 @@ function custRenderTableData(customers) {
     <tr>
       <td><strong style="font-family:monospace; font-size:0.82rem;">${escHtml(c.code)}</strong></td>
       <td>${escHtml(c.name)}${_custMethodBadge(c.sendMethod)}</td>
-      <td>${(c.emails || []).map(e => '<span class="tag-pill email-tag">' + escHtml(e) + '</span>').join(' ')}</td>
+      <td>${(() => {
+        const list = c.emails || [];
+        if (list.length === 0) return '';
+        const first = '<span class="tag-pill email-tag">' + escHtml(list[0]) + '</span>';
+        if (list.length === 1) return first;
+        const tooltip = list.slice(1).join(', ');
+        return first + ' <span class="tag-pill email-more" title="' + escHtml(tooltip) + '">+' + (list.length - 1) + ' more</span>';
+      })()}</td>
       <td>${(c.sendMethod === 'qbo_invoice_only_then_pod_email' || c.sendMethod === 'portal_upload')
         ? '<span class="tag-pill" style="background:#f1f5f9;color:#94a3b8;">N/A</span>'
         : (c.requiredDocs || []).length === 0
