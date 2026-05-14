@@ -44,6 +44,21 @@ class RetryInvoiceMixin:
         if not self._email_sender:
             return {"status": "error", "error": "Email sender not configured", "attachments_sent": 0}
 
+        # If the frontend passed invoice_number as the fallback for invoice_id
+        # (because the row didn't carry a QBO entity Id), resolve to the real
+        # QBO Id now. QBO entity IDs are short numeric strings; invoice numbers
+        # are alphanumeric like LM26040864F.
+        if invoice_id == invoice_number or not invoice_id.isdigit():
+            looked_up = await self._qbo_api.search_invoice(invoice_number)
+            if not looked_up or not looked_up.get("Id"):
+                return {
+                    "status": "error",
+                    "error": f"Invoice {invoice_number} not found in QuickBooks",
+                    "attachments_sent": 0,
+                }
+            invoice_id = looked_up["Id"]
+            logger.info("retry_invoice: resolved %s → QBO Id %s", invoice_number, invoice_id)
+
         # Build email_attachments list: invoice PDF + caller files
         email_attachments = []
 
