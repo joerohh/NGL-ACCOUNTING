@@ -305,8 +305,17 @@ function renderPanel() {
   const inner = document.getElementById('invDetailPanelInner');
   if (!inner) return;
 
-  // Stages other than 'fix' are filled in by Task 11 (retry/success).
-  // For Task 9 we only render the 'fix' stage.
+  // Stage dispatch: 'retrying' and 'success' are defined below by Task 11.
+  // The fallthrough is the 'fix' stage rendered inline.
+  if (state.panelStage === 'retrying' && typeof window.invRenderRetryingStage === 'function') {
+    window.invRenderRetryingStage(row);
+    return;
+  }
+  if (state.panelStage === 'success' && typeof window.invRenderSuccessStage === 'function') {
+    window.invRenderSuccessStage(row);
+    return;
+  }
+
 
   const diag = buildDiagnostic(row);
   if (!diag) {
@@ -705,29 +714,10 @@ function renderRetryingStage(row) {
   `;
 }
 
-// Patch renderPanel so 'retrying' and 'success' stages get their own renderers.
-// We do this by wrapping the existing renderPanel which only handles 'fix' stage.
-// Hook order: renderPanel() is called by openPanelForInvoice + renderResults.
-// We override window.invRenderPanel to check panelStage and dispatch.
-const _origRenderPanel = window.invRenderPanel;
-window.invRenderPanel = function v62RenderPanel() {
-  const invoiceNumber = sendState.activePanelInvoiceId;
-  if (!invoiceNumber) return;
-  const row = invoiceState.invoices.find(r => r.invoiceNumber === invoiceNumber);
-  if (!row) return;
-  const state = sendState.retry[invoiceNumber];
-  if (state && state.panelStage === 'retrying') {
-    renderRetryingStage(row);
-    return;
-  }
-  if (state && state.panelStage === 'success') {
-    renderSuccessStage(row);
-    return;
-  }
-  if (typeof _origRenderPanel === 'function') _origRenderPanel();
-};
-// Replace the in-module renderPanel reference too (used by acceptFile et al.)
-function renderPanel() { window.invRenderPanel(); }
+// Expose the stage renderers so renderPanel() (declared earlier) can dispatch
+// to them by panelStage. Done via window.* to avoid forward-reference TDZ issues.
+window.invRenderRetryingStage = renderRetryingStage;
+window.invRenderSuccessStage = renderSuccessStage;
 
 function renderSuccessAndAdvance(currentInvoiceNumber) {
   setTimeout(() => {
