@@ -74,15 +74,34 @@ export async function agentHealthCheck() {
             agentBridge._custWrite(merged);
           }
         }
-        // Step 2: Push any localStorage-only entries back to agent
+        // Step 2: Push any localStorage-only entries back to agent.
+        // v64: do NOT swallow errors here — when this push fails silently,
+        // user edits to customers (emails, etc.) live on in localStorage
+        // but never reach the agent's DB. The next send/retry then uses
+        // the agent's stale record. We log + show a one-time warning toast.
         const allCust = Object.values(agentBridge._custRead());
         if (allCust.length > 0) {
-          agentBridge._authFetch(agentBridge.baseUrl + '/customers/import', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customers: allCust }),
-          }).catch(() => {});
+          try {
+            const importRes = await agentBridge._authFetch(agentBridge.baseUrl + '/customers/import', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customers: allCust }),
+            });
+            if (!importRes.ok) {
+              const errText = await importRes.text().catch(() => '');
+              console.error('[CustomerSync] Push to agent failed:', importRes.status, errText);
+              addLog('error', '[CustomerSync] Failed to push customers to agent (HTTP ' + importRes.status + '). Open Customer Manager and re-save any recently edited customers — until then, send/retry will use the agent\'s old data.');
+            } else {
+              const result = await importRes.json().catch(() => ({}));
+              console.log('[CustomerSync] Pushed', allCust.length, 'customers to agent:', result);
+            }
+          } catch (err) {
+            console.error('[CustomerSync] Push to agent threw:', err);
+            addLog('error', '[CustomerSync] Could not reach the agent to sync customers (' + (err && err.message ? err.message : 'unknown error') + '). Customer Manager edits will not take effect until this is resolved.');
+          }
         }
-      } catch (_) {}
+      } catch (e) {
+        console.error('[CustomerSync] Bidirectional sync threw:', e);
+      }
     }
 
     // Update Send QBO button state
