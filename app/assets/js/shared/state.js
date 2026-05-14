@@ -73,4 +73,5 @@ export const custState = {
   editingCode: null,   // null = creating, string = editing
   docMode: 'all',      // 'all' or 'specific'
   orGroups: [],        // e.g. [['bol','pol'], ['pl','do']]
+  customers: [],       // cached list, refreshed by custLoadCustomers (v69: dup-code check)
 };

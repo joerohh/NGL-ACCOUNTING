@@ -539,7 +539,7 @@
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
         <div>
           <label class="modal-field-label">Customer Code *</label>
-          <input type="text" class="modal-input" id="custCodeInput" placeholder="e.g. HTNSAM01" style="text-transform:uppercase;">
+          <input type="text" class="modal-input" id="custCodeInput" placeholder="e.g. HTNSAM01" style="text-transform:uppercase;" oninput="custCheckDuplicateCode()">
           <div id="custDupWarning" class="v69-dup-warning">
             <div class="v69-dup-warning-title">
               <span class="v69-warn-icon">⚠</span>

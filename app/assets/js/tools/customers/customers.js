@@ -9,6 +9,9 @@ export async function custLoadCustomers() {
   const search = (document.getElementById('custSearchInput')?.value || '').trim();
   const activeOnly = document.getElementById('custActiveFilter')?.value === 'active';
   const data = await agentBridge.getCustomers(search, activeOnly);
+  // v69: cache the loaded list so custCheckDuplicateCode() can detect
+  // collisions without re-querying the agent on every keystroke.
+  custState.customers = data.customers || [];
   custRenderTableData(data.customers);
   document.getElementById('custCount').textContent = data.total + ' customer' + (data.total !== 1 ? 's' : '');
 }
@@ -130,6 +133,12 @@ function _custClearMethodFields() {
 
 // ── Modal open/close ──
 function custOpenModal(code) {
+  // v69: clear the duplicate-code warning + cached hit on open so we
+  // never inherit stale state from a prior modal session.
+  const warnEl = document.getElementById('custDupWarning');
+  if (warnEl) warnEl.classList.remove('is-active');
+  _custDupHit = null;
+
   custState.editingCode = code || null;
   document.getElementById('custModalTitle').textContent = code ? 'Edit Customer' : 'Add Customer';
   document.getElementById('custSaveBtn').textContent = code ? 'Update Customer' : 'Save Customer';
@@ -152,13 +161,81 @@ function custOpenModal(code) {
 }
 
 function custCloseModal() {
+  // v69: clear the duplicate-code warning + cached hit so a re-open
+  // never inherits stale state from a prior session.
+  const warnEl = document.getElementById('custDupWarning');
+  if (warnEl) warnEl.classList.remove('is-active');
+  _custDupHit = null;
+
   document.getElementById('custModal').classList.remove('open');
   custState.editingCode = null;
+}
+
+// Module-level cache of the most recent duplicate hit, so the
+// "View existing →" link knows which customer to open without
+// re-querying the agent.
+let _custDupHit = null;
+
+function custCheckDuplicateCode() {
+  const inputEl = document.getElementById('custCodeInput');
+  const warnEl = document.getElementById('custDupWarning');
+  const codeOut = document.getElementById('custDupCode');
+  const nameOut = document.getElementById('custDupName');
+
+  const typedRaw = (inputEl.value || '').trim();
+  const typed = typedRaw.toUpperCase();
+
+  // Hide the warning whenever the field is empty or matches the
+  // customer currently being edited (so editing your own code doesn't
+  // trigger a false positive).
+  if (!typed) {
+    warnEl.classList.remove('is-active');
+    _custDupHit = null;
+    return;
+  }
+  if (custState.editingCode && custState.editingCode.toUpperCase() === typed) {
+    warnEl.classList.remove('is-active');
+    _custDupHit = null;
+    return;
+  }
+
+  // Match against the in-memory customer list. custState.customers is
+  // refreshed every time the Customers view is rendered, so this is
+  // up-to-date as long as the user hasn't been on the modal for hours.
+  const list = (custState && custState.customers) || [];
+  const hit = list.find(c => (c.code || '').toUpperCase() === typed);
+
+  if (hit) {
+    codeOut.textContent = typedRaw;
+    nameOut.textContent = hit.name || '(no name)';
+    warnEl.classList.add('is-active');
+    _custDupHit = hit;
+  } else {
+    warnEl.classList.remove('is-active');
+    _custDupHit = null;
+  }
+}
+
+function custJumpToExisting() {
+  if (!_custDupHit) return;
+  const targetCode = _custDupHit.code;
+  custCloseModal();
+  // Tiny delay so the close animation finishes before we re-open.
+  setTimeout(() => {
+    if (typeof custEdit === 'function') {
+      custEdit(targetCode);
+    }
+  }, 200);
 }
 
 async function custEdit(code) {
   const customer = await agentBridge.getCustomer(code);
   if (!customer) return;
+
+  // v69: reset dup-code warning + cached hit when opening edit modal.
+  const warnEl = document.getElementById('custDupWarning');
+  if (warnEl) warnEl.classList.remove('is-active');
+  _custDupHit = null;
 
   custState.editingCode = code;
   document.getElementById('custModalTitle').textContent = 'Edit Customer';
@@ -203,6 +280,19 @@ async function custEdit(code) {
 }
 
 async function custSave() {
+  // v69: block save if dup-code warning is showing
+  const _dupWarn = document.getElementById('custDupWarning');
+  if (_dupWarn && _dupWarn.classList.contains('is-active')) {
+    if (typeof window.invShowToast === 'function') {
+      window.invShowToast('Customer code already exists. Choose a different code or open the existing customer.', 'error');
+    } else if (typeof custShowToast === 'function') {
+      custShowToast('Customer code already exists. Choose a different code or open the existing customer.', 'error');
+    } else {
+      alert('Customer code already exists. Choose a different code or open the existing customer.');
+    }
+    return;
+  }
+
   const code = document.getElementById('custCodeInput').value.trim().toUpperCase();
   const name = document.getElementById('custNameInput').value.trim();
   const notes = document.getElementById('custNotesInput').value.trim();
@@ -700,3 +790,6 @@ window.custOpenImportModal = custOpenImportModal;
 window.custCloseImportModal = custCloseImportModal;
 window.custHandleImportFile = custHandleImportFile;
 window.custExport = custExport;
+// v69: live duplicate-code detection
+window.custCheckDuplicateCode = custCheckDuplicateCode;
+window.custJumpToExisting = custJumpToExisting;
