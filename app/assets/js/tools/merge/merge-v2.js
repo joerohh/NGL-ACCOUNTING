@@ -203,11 +203,13 @@ function findCustomerColumn(headers) {
 // (Excel serial). Returns '' for empty/unparseable values.
 function formatInvoiceDate(raw) {
   if (raw === '' || raw === null || raw === undefined) return '';
-  // JS Date
+  // JS Date — use UTC getters because SheetJS with cellDates:true returns
+  // dates anchored to UTC midnight; local-time getters would show the prior
+  // day in any negative-UTC-offset timezone.
   if (raw instanceof Date && !isNaN(raw.getTime())) {
-    const mm = String(raw.getMonth() + 1).padStart(2, '0');
-    const dd = String(raw.getDate()).padStart(2, '0');
-    const yyyy = raw.getFullYear();
+    const mm = String(raw.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(raw.getUTCDate()).padStart(2, '0');
+    const yyyy = raw.getUTCFullYear();
     return `${mm}/${dd}/${yyyy}`;
   }
   // Excel serial number (days since 1899-12-30)
