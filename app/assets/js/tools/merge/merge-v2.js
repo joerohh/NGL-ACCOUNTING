@@ -1088,9 +1088,13 @@ function renderReady() {
     </div>
   `;
 
-  // Toolbar — adds the mass-retry button when on the Errors tab with errors present
-  const massRetry = (v2State.activeTab === 'errors' && errors.length > 0)
+  // Toolbar — adds the mass-retry + download-errors buttons when on the Errors tab with errors present.
+  const showErrorActions = v2State.activeTab === 'errors' && errors.length > 0;
+  const massRetry = showErrorActions
     ? `<button class="mass-retry-btn" onclick="window.v2RetryAllErrors()">↻ Retry all errors</button>`
+    : '';
+  const downloadErrorsBtn = showErrorActions
+    ? `<button class="download-errors-btn" onclick="window.v2DownloadErrors()">📥 Download errors (${errors.length})</button>`
     : '';
 
   const toolbarHtml = `
@@ -1098,6 +1102,7 @@ function renderReady() {
       <input type="text" class="search" placeholder="Search containers…"
              value="${escHtml(v2State.searchQuery)}"
              oninput="window.v2HandleReadySearch(this.value)" />
+      ${downloadErrorsBtn}
       ${massRetry}
       <span class="filter-meta">${visibleRows.length} of ${all.length}${errors.length ? ` · ${errors.length} need fixing` : ''}${queued.length ? ` · ${queued.length} queued` : ''}</span>
     </div>
