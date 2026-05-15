@@ -1440,6 +1440,12 @@ function renderMerge() {
   const locText = v2State.outputLocation
     ? shortenPath(v2State.outputLocation)
     : 'Desktop (default)';
+  // Download-errors button: shown when at least one merge has completed and there are still error rows.
+  const mergeErrorCount = getErrorRows().length;
+  const completedAny = Object.keys(v2State.completedModes || {}).length > 0;
+  const downloadErrorsBtn = (mergeErrorCount > 0 && completedAny)
+    ? `<button class="download-errors-btn" onclick="window.v2DownloadErrors()">📥 Download errors (${mergeErrorCount})</button>`
+    : '';
   const headerHtml = `
     <div class="merge-screen-header">
       <h2>Choose a merge format</h2>
@@ -1448,6 +1454,7 @@ function renderMerge() {
         <span class="label-prefix">Output:</span>
         <span class="path-text">${escHtml(locText)}</span>
       </button>
+      ${downloadErrorsBtn}
     </div>
   `;
 
