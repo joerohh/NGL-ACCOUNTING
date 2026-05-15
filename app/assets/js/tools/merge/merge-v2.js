@@ -2280,6 +2280,67 @@ async function v2RetryRow(rowIdx) {
 }
 window.v2RetryRow = v2RetryRow;
 
+// ── Error export helpers ──
+
+// Returns the current set of error rows: rows whose fetch produced a POD miss
+// or an invoice miss, and which the user did not manually skip.
+function getErrorRows() {
+  return v2State.rows.filter(r =>
+    !r.skipped &&
+    r.fetchResult &&
+    (r.fetchResult.podPill === 'miss' || r.fetchResult.invPill === 'miss')
+  );
+}
+
+// Maps error rows to the 9-column structure for the Excel export.
+function buildErrorExportRows(errorRows) {
+  return errorRows.map(r => {
+    const fr = r.fetchResult || {};
+    const invMiss = fr.invPill === 'miss';
+    const podMiss = fr.podPill === 'miss';
+    const whatsMissing =
+      invMiss && podMiss ? 'Invoice + POD missing'
+      : invMiss          ? 'Invoice missing'
+      : podMiss          ? 'POD missing'
+                         : '';
+    const chain = Array.isArray(fr.chainAttempted) ? fr.chainAttempted.join(' → ') : '';
+    return {
+      'Row #':            r.rowNum,
+      'Invoice Date':     r.invoiceDate || '',
+      'Customer':         r.customer || '',
+      'Container #':      r.containerNumber || '',
+      'INV #':            r.invoiceNumber || '',
+      'WO #':             r.workOrderNumber || '',
+      "What's missing":   whatsMissing,
+      'Where we looked':  chain,
+      'Status detail':    fr.statusText || '',
+    };
+  });
+}
+
+function downloadErrorsXlsx() {
+  const errorRows = getErrorRows();
+  if (errorRows.length === 0) {
+    // No-op if somehow called with zero errors (button should be hidden anyway).
+    return;
+  }
+
+  const sheetData = buildErrorExportRows(errorRows);
+  const ws = XLSX.utils.json_to_sheet(sheetData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Errors');
+
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const filename = `merge-errors-${yyyy}-${mm}-${dd}.xlsx`;
+
+  XLSX.writeFile(wb, filename);
+}
+
+window.v2DownloadErrors = downloadErrorsXlsx;
+
 function v2HandleSidebarUpload(rowIdx, fileList) {
   const row = v2State.rows[rowIdx];
   if (!row) return;
