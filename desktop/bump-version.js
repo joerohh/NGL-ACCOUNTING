@@ -18,6 +18,17 @@ if (process.argv.includes("--bump")) {
 }
 
 const ver = fs.readFileSync(versionFile, "utf8").trim();
-pkg.version = ver + ".0";
+// electron-builder requires strict 3-part SemVer (X.Y.Z), no more, no less.
+// VERSION may be stored as 2-part (X.Y, the historical format for the X.Y.0
+// release cycle) or 3-part (X.Y.Z, used for patch releases like 2.69.1).
+const parts = ver.split(".");
+if (parts.length === 2) {
+  pkg.version = ver + ".0";
+} else if (parts.length === 3) {
+  pkg.version = ver;
+} else {
+  console.error("  [ERROR] Unexpected VERSION format: " + ver + " (expected X.Y or X.Y.Z)");
+  process.exit(1);
+}
 fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 console.log("  [INFO] Set package version to " + pkg.version);
