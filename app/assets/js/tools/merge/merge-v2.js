@@ -1000,8 +1000,11 @@ window.v2HandleFetchTab = v2HandleFetchTab;
 function renderReady() {
   const all = v2State.rows;
   const queued = all.filter(r => !r.fetchResult && !r.skipped);
-  const errors = all.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
-  const ready  = all.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss' && !r.skipped);
+  // Error/ready sets use the canonical error definition (POD-miss OR invoice-miss).
+  // See getErrorRows() — the export and these filters must agree so the Errors-tab count,
+  // the button label, and the downloaded xlsx all line up.
+  const errors = all.filter(r => !r.skipped && r.fetchResult && (r.fetchResult.podPill === 'miss' || r.fetchResult.invPill === 'miss'));
+  const ready  = all.filter(r => !r.skipped && r.fetchResult && r.fetchResult.podPill !== 'miss' && r.fetchResult.invPill !== 'miss');
 
   // Active tab — Errors-default-when-errors rule
   if (errors.length > 0 && v2State.activeTab !== 'errors' && v2State.activeTab !== 'queued') {
