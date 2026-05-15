@@ -198,6 +198,33 @@ function findCustomerColumn(headers) {
   return findColumnKey(headers, CSV_ALIASES.customerCode);
 }
 
+// Normalize an Excel DATE cell to "MM/DD/YYYY".
+// SheetJS may give us a JS Date (when cellDates is true), a string, or a number
+// (Excel serial). Returns '' for empty/unparseable values.
+function formatInvoiceDate(raw) {
+  if (raw === '' || raw === null || raw === undefined) return '';
+  // JS Date
+  if (raw instanceof Date && !isNaN(raw.getTime())) {
+    const mm = String(raw.getMonth() + 1).padStart(2, '0');
+    const dd = String(raw.getDate()).padStart(2, '0');
+    const yyyy = raw.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  }
+  // Excel serial number (days since 1899-12-30)
+  if (typeof raw === 'number' && isFinite(raw)) {
+    const ms = Math.round((raw - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    if (!isNaN(d.getTime())) {
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      const yyyy = d.getUTCFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    }
+  }
+  // String — pass through trimmed
+  return String(raw).trim();
+}
+
 async function parseExcelFile(file) {
   let buf;
   try {
@@ -208,7 +235,7 @@ async function parseExcelFile(file) {
 
   let wb;
   try {
-    wb = XLSX.read(buf, { type: 'array' });
+    wb = XLSX.read(buf, { type: 'array', cellDates: true });
   } catch (err) {
     return { error: `Couldn't read this file as Excel — it may be corrupted or in an old format. Try saving as .xlsx in Excel and re-uploading. (Details: ${err.message})` };
   }
@@ -230,6 +257,7 @@ async function parseExcelFile(file) {
   const invoiceKey   = findColumnKey(headers, CSV_ALIASES.invoiceNumber);
   const woKey        = findColumnKey(headers, CSV_ALIASES.workOrderNumber);
   const customerKey  = findCustomerColumn(headers);
+  const dateKey      = findColumnKey(headers, CSV_ALIASES.invoiceDate);
 
   if (!containerKey) {
     return {
@@ -253,6 +281,7 @@ async function parseExcelFile(file) {
       invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
       workOrderNumber: woKey ? String(r[woKey] || '').trim() : '',
       customer: customerKey ? String(r[customerKey] || '').trim() : '',
+      invoiceDate: dateKey ? formatInvoiceDate(r[dateKey]) : '',
       selected: false,
       status: 'ok',
       statusReason: '',
