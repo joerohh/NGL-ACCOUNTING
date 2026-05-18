@@ -3,6 +3,14 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** `docs/superpowers/specs/2026-05-14-invoice-sender-results-redesign-design.md`
+**Mockup:** `app/mockups/v2.70-results-hud-mockup.html` (clickable; shows all 6 state-machine scenarios)
+**Target version:** **v2.71.0** (was v2.64 in original draft — slots got used for TMS/customer work instead)
+
+## v2.71 deltas from original plan (2026-05-18)
+
+1. **"No PDF Match" pre-send pill is REMOVED** — Joseph called this out as a false-alarm magnet (TMS auto-fetch resolves missing docs at send time, so pre-flagging local PDF absence created noise). Pre-send taxonomy is now 6 pills instead of 7.
+2. **"Upload to TMS" deep link** is the primary action on POD-missing rows (replaces v2.62's local-only drop zone as PRIMARY; drop zone moves to fallback under a dashed divider). Button opens `https://nglinnovation.net/bc-detail/document/{type}/{woNo}` in user's browser via Electron `shell.openExternal`. No TMS upload backend needed — user uploads manually in TMS, then clicks Retry.
+3. **CSS class prefix stays `v64-`** — no point renaming for cosmetic version match; the merge-tool palette tokens these reference are stable.
 
 **Goal:** Replace the three stacked Invoice Sender result UIs (old Send Complete card + old filter + table + new v2.62 tabbed view) with a single combined HUD that lives above Status Log and morphs across pre-send / sending / post-send states.
 

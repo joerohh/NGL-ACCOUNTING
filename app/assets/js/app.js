@@ -10,8 +10,10 @@ import { agentHealthCheck } from './agent-ui.js';
 // Side-effect import: registers window.initMergeV2 / v2SetState / v2TriggerExcel.
 import './tools/merge/merge-v2.js';
 import { invInitDropZones } from './tools/invoice-sender/invoice-sender.js';
-// Side-effect import: registers window.invShowResultsView / invRenderResults (v2.62 results view)
+// Side-effect import: registers window.invShowResultsView / invRenderResults (v2.62 results view — kept during v2.71 migration as hidden compat path)
 import './tools/invoice-sender/invoice-sender-results.js';
+// v2.71 Combined Results HUD — replaces visible v2.62 surfaces
+import { invHudInit, invHudRender } from './tools/invoice-sender/invoice-sender-hud.js';
 import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
 import { renderSessionHistory } from './tools/session-history/session-history.js';
@@ -328,6 +330,8 @@ function initApp() {
 
   // Initialize Invoice Sender drop zones
   invInitDropZones();
+  // v2.71 Combined Results HUD — wire tab clicks, panel close, first render
+  invHudInit();
   invAddLog('info', '// Invoice Sending Tool ready');
   invAddLog('info', '// Upload a CSV export and PDF attachments to get started');
 }
@@ -362,6 +366,7 @@ function switchTool(tool) {
   } else if (tool === 'invoice-sender') {
     document.getElementById('invoiceSenderView').style.display = '';
     invInitDropZones();
+    invHudRender();
   } else if (tool === 'customers') {
     document.getElementById('customerView').style.display = '';
     custLoadCustomers();

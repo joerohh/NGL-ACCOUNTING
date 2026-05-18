@@ -917,18 +917,13 @@
   </div>
 <main style="max-width:1280px; margin:0 auto; padding:24px 24px 40px;">
 
-  <!-- ── Controls Row (3 columns) ── -->
-  <div id="invControlsGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+  <!-- ── v2.71 Combined controls card — CSV upload + send settings + actions ── -->
+  <div id="invControlsGrid" class="panel-card" style="margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:18px;">
 
-    <!-- Column 1: CSV Upload -->
-    <div class="panel-card">
-      <div class="section-label">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
-        </svg>
-        Step 1 — Invoice CSV
-      </div>
+    <!-- Left: CSV drop zone — fills full card height -->
+    <div style="display:flex; flex-direction:column;">
       <div id="invCsvDropZone" class="drop-zone"
+           style="flex:1; display:flex; align-items:center; justify-content:center; min-height:200px;"
            ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over');"
            ondragleave="this.classList.remove('drag-over');"
            ondrop="invHandleCsvDrop(event)">
@@ -939,7 +934,6 @@
             </svg>
           </div>
           <div style="font-size:0.92rem; font-weight:600; color:#334155;">Drop Invoice CSV / Excel</div>
-          <div style="font-size:0.82rem; color:#64748b; margin-top:4px;">QuickBooks export with Invoice # and Customer columns</div>
           <div style="font-size:0.78rem; color:#94a3b8; margin-top:6px;">.csv &nbsp;·&nbsp; .xlsx &nbsp;·&nbsp; .xls</div>
         </div>
         <div id="invCsvLoadedState" style="display:none; align-items:center; gap:10px;">
@@ -960,31 +954,21 @@
       <input type="file" id="invCsvInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="invHandleCsvInput(this)" />
     </div>
 
-    <!-- Column 2: Settings & Actions -->
-    <div class="panel-card">
-      <div class="section-label">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-        Settings & Actions
+    <!-- Right: Subject template + actions -->
+    <div>
+      <label for="invSubjectTemplate" style="display:block; font-size:0.74rem; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px;">Subject</label>
+      <input id="invSubjectTemplate" type="text" value="Invoice {invoice_number} - {customer_name}"
+             style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:7px; font-size:0.85rem; color:#1e293b; outline:none; transition:border-color 0.15s;"
+             onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'"
+             oninput="invUpdateSubjectTemplate(this.value)" />
+      <div style="font-size:0.72rem; color:#94a3b8; margin-top:4px; line-height:1.45;">
+        Email subject line for each invoice. Use <code style="font-size:0.7rem; color:#64748b;">{invoice_number}</code>,
+        <code style="font-size:0.7rem; color:#64748b;">{customer_name}</code>, or
+        <code style="font-size:0.7rem; color:#64748b;">{container_number}</code> as placeholders — they're filled in per row.
       </div>
 
-      <div style="margin-bottom:12px;">
-        <label style="font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:5px;">Fallback Subject Template</label>
-        <input id="invSubjectTemplate" type="text" value="Invoice {invoice_number} - {customer_name}"
-               style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:7px; font-size:0.85rem; color:#1e293b; outline:none; transition:border-color 0.15s;"
-               onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'"
-               oninput="invUpdateSubjectTemplate(this.value)" />
-        <div style="font-size:0.7rem; color:#94a3b8; margin-top:4px; line-height:1.5;">
-          Used when Excel has no <strong>Subject</strong> column.<br>
-          Tokens: <code style="font-size:0.7rem; color:#64748b;">{invoice_number}</code>
-          <code style="font-size:0.7rem; color:#64748b;">{customer_name}</code>
-          <code style="font-size:0.7rem; color:#64748b;">{container_number}</code>
-        </div>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.78rem; color:#64748b; white-space:nowrap;" title="When enabled, the agent fills the email form but waits for your approval before clicking Send on each invoice">
+      <div style="display:flex; align-items:center; gap:10px; margin:12px 0 10px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.78rem; color:#64748b; white-space:nowrap;" title="Fills the email form but waits for approval before sending each invoice">
           <input type="checkbox" id="invTestModeToggle" onchange="invToggleTestLimitVisibility()" style="accent-color:#ea580c; width:15px; height:15px;">
           Test Mode
         </label>
@@ -993,6 +977,7 @@
           <input type="number" id="invTestLimitInput" value="5" min="1" max="200" style="width:56px; padding:2px 4px; font-size:0.78rem; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
         </div>
       </div>
+
       <button id="invSendQboBtn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="invSendViaQBO()" disabled>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -1000,104 +985,114 @@
         Send Invoices
       </button>
 
-      <button id="invResendAllBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem; display:none; border-color:#f59e0b; color:#92400e; background:#fffbeb;" onclick="invResendAll()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-        </svg>
-        Resend All
-      </button>
-
-      <button id="invAuditLogBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem;" onclick="invLoadAuditLog()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-        </svg>
-        Audit Log
-      </button>
-
-      <button id="invClearAllBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:8px; padding:7px 14px; font-size:0.8rem;" onclick="invClearAll()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-        </svg>
-        Clear All
-      </button>
-    </div>
-
-  </div>
-
-  <!-- ── Progress Bar ── -->
-  <div id="invProgressContainer" style="display:none; margin-bottom:16px;">
-    <div style="height:5px; background:#e2e8f0; border-radius:3px; overflow:hidden;">
-      <div id="invProgressBar" style="height:100%; background:linear-gradient(90deg,#ea580c,#f97316); width:0%; transition:width 0.3s ease;"></div>
-    </div>
-    <div id="invProgressLabel" style="font-size:0.8rem; color:#64748b; margin-top:5px; text-align:center;"></div>
-  </div>
-
-  <!-- ── Summary Bar ── -->
-  <div id="invSummaryBar" class="inv-summary-bar" style="display:none;"></div>
-  <div id="invSendStatusBar" class="inv-summary-bar" style="display:none;"></div>
-
-  <!-- ── Send Status Filter ── -->
-  <div id="invSendFilterWrap" style="display:none; margin-bottom:8px;">
-    <select id="invSendFilter" onchange="invRenderTable()" style="padding:5px 10px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:6px; color:#334155; background:#fff; cursor:pointer;">
-      <option value="all">All Invoices</option>
-      <option value="not_sent">Not Sent</option>
-      <option value="in_progress">In Progress</option>
-      <option value="sent">Sent</option>
-      <option value="skipped">Skipped / No Attachments</option>
-      <option value="error">Error</option>
-    </select>
-  </div>
-
-  <!-- ── Invoice Table ── -->
-  <div id="invTableContainer" class="panel-card" style="padding:0; overflow-x:auto;">
-    <table class="inv-table">
-      <thead>
-        <tr>
-          <th style="width:40px; padding-left:14px;"><input type="checkbox" onchange="invToggleAll(this.checked)" id="invSelectAllCb" /></th>
-          <th>Invoice #</th>
-          <th>Container</th>
-          <th>Customer</th>
-          <th style="text-align:right;">Amount</th>
-          <th>Send Method</th>
-          <th>Subject</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="invTableBody">
-        <tr>
-          <td colspan="8" style="text-align:center; padding:50px 20px; color:#94a3b8;">
-            <div style="margin-bottom:8px;">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/>
-              </svg>
-            </div>
-            Upload a TMS Excel to see invoices here
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- ── Failed Rows Box (TMS Data Layer failures) ── -->
-  <div id="invFailedRowsBox" class="panel-card" style="display:none; padding:14px 20px; margin-top:20px; border-left:3px solid #ea580c;">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        <span class="section-label" style="margin-bottom:0;">Failed Rows</span>
-        <span id="invFailedRowsCount" style="background:#fee2e2; color:#991b1b; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:10px;">0</span>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <button id="invFailedRetryAllApi" class="btn btn-secondary" style="padding:5px 11px; font-size:0.78rem;" onclick="invFailedRetryAll('api')">
-          Retry all (API)
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:8px;">
+        <button id="invResendAllBtn" class="btn btn-secondary" style="justify-content:center; padding:6px 10px; font-size:0.76rem; display:none; border-color:#f59e0b; color:#92400e; background:#fffbeb;" onclick="invResendAll()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+          Resend
         </button>
-        <button id="invFailedRetryAllBrowser" class="btn btn-secondary" style="padding:5px 11px; font-size:0.78rem; border-color:#f59e0b; color:#92400e; background:#fffbeb;" onclick="invFailedRetryAll('browser')">
-          Retry all (Browser)
+        <button id="invAuditLogBtn" class="btn btn-secondary" style="justify-content:center; padding:6px 10px; font-size:0.76rem;" onclick="invLoadAuditLog()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Audit
+        </button>
+        <button id="invClearAllBtn" class="btn btn-secondary" style="justify-content:center; padding:6px 10px; font-size:0.76rem;" onclick="invClearAll()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+          Clear
         </button>
       </div>
     </div>
-    <div id="invFailedRowsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+
+  </div>
+
+  <!-- v2.71 transition compat shim — hidden placeholders for IDs the legacy JS
+       still references during Phase 2 migration. Once invoice-sender.js +
+       invoice-sender-results.js are fully rewired, this block can be deleted. -->
+  <div style="display:none;" aria-hidden="true">
+    <div id="invProgressContainer"><div id="invProgressBar"></div><div id="invProgressLabel"></div></div>
+    <div id="invSummaryBar" class="inv-summary-bar"></div>
+    <div id="invSendStatusBar" class="inv-summary-bar"></div>
+    <div id="invSendFilterWrap"><select id="invSendFilter"></select></div>
+    <div id="invTableContainer"><table><tbody id="invTableBody"></tbody></table><input type="checkbox" id="invSelectAllCb" /></div>
+    <div id="invFailedRowsBox">
+      <span id="invFailedRowsCount">0</span>
+      <button id="invFailedRetryAllApi"></button>
+      <button id="invFailedRetryAllBrowser"></button>
+      <div id="invFailedRowsList"></div>
+    </div>
+    <div id="invSendResults">
+      <div id="invSendResultsMain">
+        <div id="invSendAlertBanner"><span id="invSendBannerTitle"></span><small id="invSendBannerSubtitle"></small></div>
+        <button id="invSendBulkRetryBtn"><span id="invSendBulkCount">0</span></button>
+        <span id="invTabIssueCount">0</span><span id="invTabSentCount">0</span><span id="invTabAllCount">0</span>
+        <div id="invResultsTableWrap"></div>
+      </div>
+      <div id="invDetailPanelInner"></div>
+    </div>
+  </div>
+
+  <!-- ── v2.71 Combined Results HUD — replaces old progress bar, summary bars,
+       filter dropdown, invoice table, failed rows box, and v2.62 results block.
+       Spec: docs/superpowers/specs/2026-05-14-invoice-sender-results-redesign-design.md ── -->
+
+  <!-- Progress strip (active send only) -->
+  <div id="invProgressStrip" class="v64-progress-strip">
+    <div class="v64-ps-head">
+      <strong id="invPsTitle">Sending invoices<span class="v64-dots"></span></strong>
+      <span class="v64-ps-pct"><span id="invPsFraction">0 / 0</span> · <span class="v64-ps-pct-num" id="invPsPct">0% complete</span></span>
+    </div>
+    <div class="v64-ps-bar-bg"><div class="v64-ps-bar-fg" id="invPsBar" style="width:0%"></div></div>
+    <div class="v64-ps-meta">
+      <span>Started <strong id="invPsStart">—</strong></span>
+      <span class="v64-ps-divider">·</span>
+      <span>Elapsed <strong id="invPsElapsed">—</strong></span>
+      <span class="v64-ps-divider">·</span>
+      <span><strong id="invPsRemaining">—</strong> remaining</span>
+      <span class="v64-ps-divider">·</span>
+      <span><strong id="invPsAvg">—</strong> / invoice</span>
+    </div>
+  </div>
+
+  <!-- Alert banner (post-send only) -->
+  <div id="invAlertBanner" class="v64-alert-banner">
+    <div class="v64-alert-icon" id="invAlertIcon">!</div>
+    <div class="v64-alert-text">
+      <span class="v64-alert-title" id="invAlertTitle">—</span>
+      <span class="v64-alert-sub" id="invAlertSub">—</span>
+    </div>
+    <div class="v64-alert-actions" id="invAlertActions"></div>
+  </div>
+
+  <!-- Results card -->
+  <div id="invResultsSection" class="v64-results-card">
+    <div class="v64-tabbar">
+      <div class="v64-tabs" id="invTabs">
+        <button class="v64-tab has-issues active" data-tab="needs" type="button">⚠ Needs Attention <span class="count" id="invCNeeds">0</span></button>
+        <button class="v64-tab" data-tab="sent" type="button">✓ Sent <span class="count" id="invCSent">0</span></button>
+        <button class="v64-tab" data-tab="all" type="button">All Invoices <span class="count" id="invCAll">0</span></button>
+      </div>
+      <div class="v64-toolbar hidden" id="invToolbar">
+        <span class="v64-tb-stat">Started <strong id="invTbStart">—</strong></span>
+        <span class="v64-tb-divider">·</span>
+        <span class="v64-tb-stat">Total <strong id="invTbTotal">—</strong></span>
+        <span class="v64-tb-divider">·</span>
+        <span class="v64-tb-stat"><strong id="invTbAvg">—</strong> / inv</span>
+        <button class="v64-tb-btn" type="button" onclick="invDownloadReport()">⬇ Report</button>
+        <button class="v64-tb-btn" type="button" onclick="invLoadAuditLog()">📋 Audit</button>
+      </div>
+    </div>
+    <div class="v64-row-header">
+      <div>Invoice</div>
+      <div>Container</div>
+      <div>Customer</div>
+      <div>Status</div>
+      <div></div>
+    </div>
+    <div class="v64-row-list" id="invRowList"></div>
   </div>
 
   <!-- ── Status Log (Collapsible) ── -->
@@ -1121,38 +1116,15 @@
     </div>
   </div>
 
-  <!-- v2.62 Results view (Fix 1 + Fix 2). Hidden until send completes. -->
-  <div id="invSendResults" class="v62-results-body" style="display:none; margin-top:20px;">
-    <div id="invSendResultsMain">
-      <div id="invSendAlertBanner" class="v62-alert-banner" style="display:none;">
-        <div class="v62-alert-icon">!</div>
-        <div class="v62-alert-text">
-          <strong id="invSendBannerTitle"></strong>
-          <small id="invSendBannerSubtitle"></small>
-        </div>
-        <button id="invSendBulkRetryBtn" class="v62-bulk-retry-btn" disabled>
-          ↻ Retry All Fixed (<span id="invSendBulkCount">0</span>)
-        </button>
-      </div>
-
-      <div class="v62-tabs">
-        <button class="v62-tab has-issues active" data-tab="needs-attention">
-          ⚠ Needs Attention <span class="count" id="invTabIssueCount">0</span>
-        </button>
-        <button class="v62-tab" data-tab="sent">
-          ✓ Sent <span class="count" id="invTabSentCount">0</span>
-        </button>
-        <button class="v62-tab" data-tab="all">
-          All Invoices <span class="count" id="invTabAllCount">0</span>
-        </button>
-      </div>
-
-      <div id="invResultsTableWrap"></div>
+  <!-- Detail panel (slide-in from right) — opened by Resolve button click -->
+  <div id="invPanelBackdrop" class="v64-panel-backdrop"></div>
+  <div id="invDetailPanel" class="v64-detail-panel" role="dialog" aria-label="Row details">
+    <div class="v64-panel-header">
+      <div class="v64-panel-title" id="invPanelTitle">—</div>
+      <div class="v64-panel-meta" id="invPanelMeta">—</div>
+      <button class="v64-panel-close" id="invPanelCloseBtn" type="button" aria-label="Close">✕</button>
     </div>
-
-    <div id="invDetailPanel" class="v62-detail-panel">
-      <div id="invDetailPanelInner" class="v62-panel-inner"></div>
-    </div>
+    <div class="v64-panel-body" id="invPanelBody"></div>
   </div>
 
 </main>

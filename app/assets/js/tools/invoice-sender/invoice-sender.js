@@ -131,6 +131,9 @@ function invHandleCsvFile(file) {
           email: String(colMap.email ? row[colMap.email] : '').trim(),
           poNumber: String(colMap.poNumber ? row[colMap.poNumber] : '').trim(),
           containerNumber: String(colMap.containerNumber ? row[colMap.containerNumber] : '').trim(),
+          // v2.71: capture WO# from CSV so Upload to TMS can deep-link to the WO documents page.
+          // Falls back to container-search URL when missing.
+          workOrderNumber: String(colMap.workOrderNumber ? row[colMap.workOrderNumber] : '').trim(),
           bolNumber: String(colMap.bolNumber ? row[colMap.bolNumber] : '').trim(),
           customerCode: custCode,
           subject: String(colMap.subject ? row[colMap.subject] : '').trim(),
@@ -253,6 +256,52 @@ function invEnrichWithCustomerProfiles() {
   if (noEmail > 0) logMsg += ', ' + noEmail + ' no email';
   if (noMatch > 0) logMsg += ', ' + noMatch + ' not found';
   invAddLog('info', logMsg);
+
+  // v2.71: pre-send validation pills — flag missing INV# and duplicates
+  invDetectPreSendPills();
+}
+
+// v2.71 — detect pre-send issues that the HUD surfaces as warning pills.
+// Sets row._valPill to: 'val_missing_inv' | 'val_dup_inv' | 'val_needs_rev'.
+// Customer-based pills (val_no_customer / val_no_email) are still driven by
+// the existing validationStatus values set above.
+function invDetectPreSendPills() {
+  const rows = invoiceState.invoices || [];
+  // Pass 1: build INV# frequency map to detect duplicates
+  const invCounts = Object.create(null);
+  for (const r of rows) {
+    const inv = (r.invoiceNumber || '').trim().toUpperCase();
+    if (!inv) continue;
+    invCounts[inv] = (invCounts[inv] || 0) + 1;
+  }
+  // Pass 2: tag each row
+  let missingInv = 0, dupInv = 0, needsRev = 0;
+  for (const r of rows) {
+    r._valPill = undefined; // reset
+    const inv = (r.invoiceNumber || '').trim();
+    if (!inv) {
+      r._valPill = 'val_missing_inv';
+      missingInv++;
+      continue;
+    }
+    if (invCounts[inv.toUpperCase()] > 1) {
+      r._valPill = 'val_dup_inv';
+      dupInv++;
+      continue;
+    }
+    // Customer needs review (if matched customer has needsReview flag)
+    if (r.customerMatch && r.customerMatch.needsReview === true) {
+      r._valPill = 'val_needs_rev';
+      needsRev++;
+    }
+  }
+  if (missingInv || dupInv || needsRev) {
+    const parts = [];
+    if (missingInv) parts.push(missingInv + ' missing INV#');
+    if (dupInv) parts.push(dupInv + ' duplicate INV#');
+    if (needsRev) parts.push(needsRev + ' need customer review');
+    invAddLog('warning', 'Pre-send issues: ' + parts.join(', '));
+  }
 }
 
 // ── Subject Template ──
@@ -303,7 +352,13 @@ function invUpdateSummary() {
 
 // ── Table Rendering ──
 function invRenderTable() {
+  // v2.71: also drive the new Combined Results HUD
+  if (typeof window.invHudRender === 'function') {
+    try { window.invHudRender(); } catch (e) { console.warn('[v2.71 HUD] render failed:', e); }
+  }
+
   const tbody = document.getElementById('invTableBody');
+  if (!tbody) return; // v2.71 compat: legacy table removed in some builds
 
   if (invoiceState.invoices.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:50px 20px; color:#94a3b8;">' +
@@ -944,6 +999,9 @@ const _sendEventHandlers = {
         invSaveSendStatus(inv.invoiceNumber, 'not_sent', {});
       }
     });
+    // v2.71: clear finish time so HUD shows Sending stage, start live tick
+    sendState._finishedAt = null;
+    if (typeof window.invHudStartTick === 'function') window.invHudStartTick();
     invRenderTable();
   },
   login_required(event) {
@@ -956,6 +1014,8 @@ const _sendEventHandlers = {
   },
   send_job_complete(event) {
     sendState.isRunning = false;
+    sendState._finishedAt = Date.now();
+    if (typeof window.invHudStopTick === 'function') window.invHudStopTick();
     invAddLog('success', '═══ SEND JOB COMPLETE ═══');
     invAddLog('info', '  Sent: ' + event.sent + ' | Skipped: ' + event.skipped + ' | Errors: ' + event.errors +
       ' | Mismatches: ' + event.mismatches + ' | Missing Docs: ' + (event.missingDocs || 0) +
@@ -966,6 +1026,8 @@ const _sendEventHandlers = {
     if (typeof window.invShowResultsView === 'function') {
       window.invShowResultsView();
     }
+    // v2.71: drive HUD into Complete state
+    if (typeof window.invHudRender === 'function') window.invHudRender();
     // Push to session history
     if (sendState.jobId) fetchJobResultsForHistory(sendState.jobId, 'send', event);
   },
