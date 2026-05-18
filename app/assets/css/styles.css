@@ -569,12 +569,29 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .cust-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .cust-table thead { background: #f8fafc; }
 .cust-table th {
-  padding: 10px 12px; text-align: left; font-size: 0.75rem; font-weight: 700;
+  padding: 9px 10px; text-align: left; font-size: 0.74rem; font-weight: 700;
   color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
   border-bottom: 2px solid #e2e8f0; white-space: nowrap;
 }
-.cust-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+.cust-table td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
 .cust-table tbody tr:hover { background: #fafafa; }
+.cust-table tbody tr:hover .cust-actions-cell { background: #fafafa; }
+
+/* Pin the Actions column to the right so it never scrolls out of view */
+.cust-table th.cust-actions-th,
+.cust-table td.cust-actions-cell {
+  position: sticky; right: 0;
+  background: #fff;
+  box-shadow: -8px 0 12px -6px rgba(15, 23, 42, 0.07);
+  white-space: nowrap;
+}
+.cust-table thead th.cust-actions-th { background: #f8fafc; }
+.cust-table td.cust-status-cell { white-space: nowrap; }
+.cust-table td.cust-notes-cell {
+  max-width: 100px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #94a3b8;
+}
 .tag-pill {
   display: inline-flex; padding: 2px 8px; border-radius: 4px;
   font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
@@ -608,6 +625,16 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   font-size: 0.72rem; text-transform: none; cursor: help;
   font-weight: 600;
 }
+.cust-table td.col-emails { max-width: 170px; }
+.cust-table td.col-emails .tag-pill.email-tag {
+  display: inline-block;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.cust-table td.col-docs { max-width: 150px; }
 .tag-input-wrap {
   display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
   border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;

@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Invoice Sender — Combined Results HUD (v2.70 mockup)</title>
+<style>
+  /* ────────────────────────────────────────────────────────────────
+     Base reset — kept self-contained so this mockup runs anywhere
+  ───────────────────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button { font-family: inherit; }
+
+  /* Slide-in panel must start below any sticky/fixed top chrome
+     (demo banner here; in the real app, the global nav header).
+     Update this var if the chrome above the panel changes height. */
+  :root { --panel-top-offset: 56px; }
+
+  /* ────────────────────────────────────────────────────────────────
+     Demo harness banner
+  ───────────────────────────────────────────────────────────────── */
+  .demo-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white;
+    padding: 12px 24px;
+    font-size: 0.84rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 200;
+  }
+  .demo-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .demo-banner .scenarios { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .demo-banner .scenario-btn {
+    background: rgba(0,0,0,0.2); color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 6px 11px; border-radius: 5px; cursor: pointer;
+    font-weight: 600; font-size: 0.75rem;
+  }
+  .demo-banner .scenario-btn:hover { background: rgba(0,0,0,0.35); }
+  .demo-banner .scenario-btn.active { background: rgba(0,0,0,0.5); border-color: white; }
+
+  /* ────────────────────────────────────────────────────────────────
+     Page layout (mirrors invoice sender shell)
+  ───────────────────────────────────────────────────────────────── */
+  .page-shell { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .page-title {
+    font-size: 1.5rem; font-weight: 700; color: #0f172a; margin: 0 0 6px;
+  }
+  .page-subtitle { color: #64748b; font-size: 0.86rem; margin-bottom: 18px; }
+
+  /* ────────────────────────────────────────────────────────────────
+     v64 Progress strip — visible only during active send
+  ───────────────────────────────────────────────────────────────── */
+  .v64-progress-strip {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .v64-progress-strip.is-active { display: block; }
+  .v64-ps-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .v64-ps-head strong { color: #0f172a; font-weight: 700; font-size: 0.94rem; }
+  .v64-ps-head .v64-ps-pct { color: #475569; font-size: 0.82rem; font-weight: 600; }
+  .v64-ps-bar-bg {
+    height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;
+    margin-bottom: 9px;
+    position: relative;
+  }
+  .v64-ps-bar-fg {
+    height: 100%; background: linear-gradient(90deg, #ea580c, #f97316);
+    border-radius: 3px; transition: width 0.6s ease;
+    position: relative; overflow: hidden;
+  }
+  /* Shimmer sweep — gives the bar a "working" feel */
+  .v64-ps-bar-fg::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg,
+      rgba(255,255,255,0)   0%,
+      rgba(255,255,255,0.45) 50%,
+      rgba(255,255,255,0)  100%);
+    transform: translateX(-100%);
+    animation: v64-shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes v64-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Animated ellipsis on "Sending invoices…" */
+  .v64-ps-head strong .v64-dots::after {
+    content: '';
+    animation: v64-dots 1.4s steps(4, end) infinite;
+  }
+  @keyframes v64-dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+    100% { content: ''; }
+  }
+
+  /* Soft pulse on the percentage so the eye knows it's a live number */
+  .v64-ps-pct .v64-ps-pct-num {
+    display: inline-block;
+    animation: v64-pulse-text 1.8s ease-in-out infinite;
+  }
+  @keyframes v64-pulse-text {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+  .v64-ps-meta {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    font-size: 0.78rem; color: #64748b;
+  }
+  .v64-ps-meta .v64-ps-divider { color: #cbd5e1; }
+  .v64-ps-meta strong { color: #334155; font-weight: 700; }
+
+  /* ────────────────────────────────────────────────────────────────
+     v64 Alert banner — visible only post-send
+  ───────────────────────────────────────────────────────────────── */
+  .v64-alert-banner {
+    border-radius: 12px 12px 0 0;
+    padding: 16px 20px;
+    display: none;
+    align-items: center;
+    gap: 14px;
+    border: 1px solid;
+    border-bottom: none;
+  }
+  .v64-alert-banner.is-active { display: flex; }
+  .v64-alert-banner.warn { background: #fffbeb; border-color: #fde68a; }
+  .v64-alert-banner.error { background: #fef2f2; border-color: #fca5a5; }
+  .v64-alert-banner.ok    { background: #f0fdf4; border-color: #bbf7d0; }
+
+  .v64-alert-icon {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1.05rem; flex-shrink: 0;
+    color: white;
+  }
+  .v64-alert-banner.warn  .v64-alert-icon { background: #f59e0b; }
+  .v64-alert-banner.error .v64-alert-icon { background: #dc2626; }
+  .v64-alert-banner.ok    .v64-alert-icon { background: #16a34a; }
+
+  .v64-alert-text { flex: 1; }
+  .v64-alert-text .v64-alert-title {
+    font-size: 1rem; font-weight: 700; display: block; margin-bottom: 2px;
+  }
+  .v64-alert-banner.warn  .v64-alert-title { color: #92400e; }
+  .v64-alert-banner.error .v64-alert-title { color: #b91c1c; }
+  .v64-alert-banner.ok    .v64-alert-title { color: #15803d; }
+
+  .v64-alert-text .v64-alert-sub {
+    font-size: 0.82rem; color: #475569;
+  }
+  .v64-alert-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .v64-alert-btn {
+    background: white; border: 1px solid;
+    padding: 8px 14px; border-radius: 7px; cursor: pointer;
+    font-weight: 700; font-size: 0.82rem;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .v64-alert-banner.warn  .v64-alert-btn { color: #92400e; border-color: #fbbf24; }
+  .v64-alert-banner.warn  .v64-alert-btn:hover { background: #fef3c7; }
+  .v64-alert-banner.error .v64-alert-btn { color: #b91c1c; border-color: #fca5a5; }
+  .v64-alert-banner.error .v64-alert-btn:hover { background: #fee2e2; }
+  .v64-alert-banner.ok    .v64-alert-btn { color: #15803d; border-color: #86efac; }
+  .v64-alert-banner.ok    .v64-alert-btn:hover { background: #dcfce7; }
+  .v64-alert-btn.primary {
+    background: #ea580c; color: white; border-color: #ea580c;
+  }
+  .v64-alert-btn.primary:hover { background: #c2410c; }
+
+  /* ────────────────────────────────────────────────────────────────
+     Results section + tabs + toolbar
+  ───────────────────────────────────────────────────────────────── */
+  .v64-results-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .v64-results-card.has-banner { border-radius: 0 0 12px 12px; }
+
+  .v64-tabbar {
+    display: flex; align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 6px;
+    background: #f8fafc;
+  }
+  .v64-tabs { display: flex; gap: 2px; }
+  .v64-tab {
+    background: none; border: none; cursor: pointer;
+    padding: 13px 16px;
+    font-weight: 600; font-size: 0.85rem; color: #64748b;
+    display: inline-flex; align-items: center; gap: 7px;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+  }
+  .v64-tab:hover { color: #0f172a; }
+  .v64-tab.active { color: #0f172a; border-bottom-color: #ea580c; }
+  .v64-tab.has-issues.active { border-bottom-color: #f59e0b; }
+  .v64-tab .count {
+    background: #e2e8f0; color: #475569;
+    padding: 1px 7px; border-radius: 9px;
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .v64-tab.has-issues .count { background: #fde68a; color: #92400e; }
+  .v64-tab.active .count { background: #1e293b; color: white; }
+  .v64-tab.has-issues.active .count { background: #f59e0b; color: white; }
+
+  .v64-toolbar {
+    margin-left: auto; display: flex; gap: 12px; align-items: center;
+    padding: 8px 12px;
+    font-size: 0.76rem; color: #64748b;
+    flex-wrap: wrap;
+  }
+  .v64-toolbar.hidden { display: none; }
+  .v64-toolbar .v64-tb-stat strong { color: #334155; font-weight: 700; }
+  .v64-toolbar .v64-tb-divider { color: #cbd5e1; }
+  .v64-toolbar .v64-tb-btn {
+    background: white; border: 1px solid #cbd5e1;
+    padding: 5px 11px; border-radius: 6px; cursor: pointer;
+    font-weight: 600; font-size: 0.75rem; color: #475569;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .v64-toolbar .v64-tb-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+  /* ────────────────────────────────────────────────────────────────
+     Row table
+  ───────────────────────────────────────────────────────────────── */
+  .v64-row-list { padding: 4px 0; }
+  .v64-row {
+    display: grid;
+    grid-template-columns: 130px 130px 1fr 170px 110px;
+    gap: 14px; align-items: center;
+    padding: 11px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .v64-row:last-child { border-bottom: none; }
+  .v64-row:hover { background: #f8fafc; }
+  .v64-row.is-active { background: #fff7ed; }
+  .v64-row-inv {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.82rem; font-weight: 700; color: #0f172a;
+  }
+  .v64-row-ctn {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.8rem; color: #475569;
+  }
+  .v64-row-cust {
+    font-size: 0.84rem; color: #334155;
+  }
+  .v64-row-cust .v64-cust-code {
+    font-size: 0.72rem; color: #94a3b8; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    display: block; margin-bottom: 1px;
+  }
+  .v64-row-status { display: flex; justify-content: flex-start; }
+  .v64-row-action { display: flex; justify-content: flex-end; }
+  .v64-row-resolve {
+    background: white; color: #ea580c;
+    border: 1px solid #fed7aa;
+    padding: 5px 12px; border-radius: 6px;
+    font-weight: 700; font-size: 0.76rem;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .v64-row-resolve:hover { background: #fff7ed; border-color: #fdba74; }
+
+  /* Pills */
+  .v64-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .v64-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .v64-pill.ok    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .v64-pill.ok .dot { background: #16a34a; }
+  .v64-pill.warn  { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+  .v64-pill.warn .dot { background: #f59e0b; }
+  .v64-pill.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .v64-pill.error .dot { background: #dc2626; }
+  .v64-pill.live  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .v64-pill.live .dot { background: #2563eb; animation: pulse 1.5s ease-in-out infinite; }
+  .v64-pill.queued { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+  .v64-pill.queued .dot { background: #94a3b8; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(1.3); }
+  }
+
+  /* Empty state inside a tab */
+  .v64-empty {
+    padding: 56px 20px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.9rem;
+  }
+  .v64-empty .v64-empty-icon { font-size: 2.2rem; margin-bottom: 10px; opacity: 0.6; }
+
+  /* ────────────────────────────────────────────────────────────────
+     Detail panel (slide-in right)
+  ───────────────────────────────────────────────────────────────── */
+  .v64-panel-backdrop {
+    position: fixed;
+    top: var(--panel-top-offset); right: 0; bottom: 0; left: 0;
+    background: rgba(15,23,42,0.35);
+    z-index: 90;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .v64-panel-backdrop.is-open {
+    opacity: 1; pointer-events: auto;
+  }
+  .v64-detail-panel {
+    position: fixed; top: var(--panel-top-offset); right: 0; bottom: 0;
+    width: 460px; max-width: 92vw;
+    background: white;
+    border-left: 1px solid #e2e8f0;
+    box-shadow: -8px 0 24px rgba(15,23,42,0.08);
+    z-index: 100;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .v64-detail-panel.is-open { transform: translateX(0); }
+  .v64-panel-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky; top: 0; background: white; z-index: 5;
+  }
+  .v64-panel-title {
+    font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .v64-panel-meta { font-size: 0.78rem; color: #64748b; }
+  .v64-panel-close {
+    position: absolute; top: 14px; right: 14px;
+    width: 28px; height: 28px;
+    border-radius: 6px; border: 1px solid #e2e8f0;
+    background: white; cursor: pointer;
+    font-size: 1rem; color: #64748b;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .v64-panel-close:hover { background: #f1f5f9; color: #0f172a; }
+  .v64-panel-body { padding: 18px 22px; flex: 1; }
+  .v64-panel-section { margin-bottom: 18px; }
+  .v64-panel-section-label {
+    font-size: 0.72rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 5px;
+  }
+  .v64-panel-section-body {
+    font-size: 0.88rem; color: #334155; line-height: 1.5;
+  }
+  .v64-panel-action {
+    margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .v64-panel-btn {
+    background: #ea580c; color: white; border: none;
+    padding: 9px 16px; border-radius: 7px;
+    font-weight: 700; font-size: 0.85rem; cursor: pointer;
+  }
+  .v64-panel-btn:hover { background: #c2410c; }
+  .v64-panel-btn.secondary {
+    background: white; color: #475569;
+    border: 1px solid #cbd5e1;
+  }
+  .v64-panel-btn.secondary:hover { background: #f1f5f9; }
+  /* Visual subordination: thin divider, small caption, compact dropzone */
+  .v64-dz-block {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed #e2e8f0;
+  }
+  .v64-dz-sublabel {
+    font-size: 0.76rem; color: #64748b; font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .v64-dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: center;
+    color: #64748b;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .v64-dropzone:hover { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+  .v64-dropzone .v64-dz-icon {
+    font-size: 1.05rem; opacity: 0.7; line-height: 1;
+  }
+  .v64-dropzone .v64-dz-text {
+    display: flex; flex-direction: column; align-items: flex-start;
+  }
+  .v64-dropzone .v64-dz-title { font-weight: 700; color: #334155; font-size: 0.82rem; line-height: 1.2; }
+  .v64-dropzone .v64-dz-sub   { font-size: 0.7rem; color: #94a3b8; line-height: 1.2; margin-top: 1px; }
+  details.v64-tech {
+    margin-top: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    padding: 8px 12px;
+  }
+  details.v64-tech summary {
+    cursor: pointer; font-size: 0.78rem; color: #64748b;
+    font-weight: 600;
+  }
+  details.v64-tech[open] summary { margin-bottom: 8px; }
+  details.v64-tech .v64-tech-body {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.72rem; color: #475569;
+    background: #fff; border: 1px solid #e2e8f0;
+    padding: 8px 10px; border-radius: 5px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  details.v64-tech .v64-tech-copy {
+    margin-top: 6px; background: white; border: 1px solid #cbd5e1;
+    padding: 4px 9px; border-radius: 5px; cursor: pointer;
+    font-size: 0.72rem; color: #475569; font-weight: 600;
+  }
+
+  /* ────────────────────────────────────────────────────────────────
+     Stage label (developer-facing in mockup only)
+  ───────────────────────────────────────────────────────────────── */
+  .stage-label {
+    display: inline-block;
+    background: #0f172a; color: #fff;
+    padding: 3px 10px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="demo-banner">
+  <span class="pill">Mockup</span>
+  <span>Invoice Sender — Combined Results HUD redesign</span>
+  <div class="scenarios" id="scenarioBar">
+    <button class="scenario-btn" data-scenario="idle">Idle</button>
+    <button class="scenario-btn" data-scenario="uploaded">Uploaded (5 issues)</button>
+    <button class="scenario-btn" data-scenario="sending">Sending (47/120)</button>
+    <button class="scenario-btn" data-scenario="completeMixed">Complete · mixed</button>
+    <button class="scenario-btn" data-scenario="completeAuth">Complete · auth</button>
+    <button class="scenario-btn" data-scenario="completeOk">Complete · all clean</button>
+  </div>
+</div>
+
+<div class="page-shell">
+  <span class="stage-label" id="stageLabel">Stage: idle</span>
+  <h1 class="page-title">Invoice Sender</h1>
+  <div class="page-subtitle" id="pageSubtitle">No batch in progress. Upload a TMS Excel from the sidebar to get started.</div>
+
+  <!-- Progress strip (visible during send only) -->
+  <div class="v64-progress-strip" id="progressStrip">
+    <div class="v64-ps-head">
+      <strong id="psTitle">Sending invoices<span class="v64-dots"></span></strong>
+      <span class="v64-ps-pct"><span id="psFraction">0 / 0</span> · <span class="v64-ps-pct-num" id="psPct">0% complete</span></span>
+    </div>
+    <div class="v64-ps-bar-bg"><div class="v64-ps-bar-fg" id="psBar" style="width: 0%"></div></div>
+    <div class="v64-ps-meta">
+      <span>Started <strong id="psStart">—</strong></span>
+      <span class="v64-ps-divider">·</span>
+      <span>Elapsed <strong id="psElapsed">—</strong></span>
+      <span class="v64-ps-divider">·</span>
+      <span><strong id="psRemaining">—</strong> remaining</span>
+      <span class="v64-ps-divider">·</span>
+      <span><strong id="psAvg">—</strong> / invoice</span>
+    </div>
+  </div>
+
+  <!-- Alert banner (post-send only) -->
+  <div class="v64-alert-banner" id="alertBanner">
+    <div class="v64-alert-icon" id="alertIcon">!</div>
+    <div class="v64-alert-text">
+      <span class="v64-alert-title" id="alertTitle">—</span>
+      <span class="v64-alert-sub" id="alertSub">—</span>
+    </div>
+    <div class="v64-alert-actions" id="alertActions"></div>
+  </div>
+
+  <!-- Results card -->
+  <div class="v64-results-card" id="resultsCard">
+    <div class="v64-tabbar">
+      <div class="v64-tabs" id="tabs">
+        <button class="v64-tab has-issues active" data-tab="needs">⚠ Needs Attention <span class="count" id="cNeeds">0</span></button>
+        <button class="v64-tab" data-tab="sent">✓ Sent <span class="count" id="cSent">0</span></button>
+        <button class="v64-tab" data-tab="all">All Invoices <span class="count" id="cAll">0</span></button>
+      </div>
+      <div class="v64-toolbar hidden" id="toolbar">
+        <span class="v64-tb-stat">Started <strong id="tbStart">—</strong></span>
+        <span class="v64-tb-divider">·</span>
+        <span class="v64-tb-stat">Total <strong id="tbTotal">—</strong></span>
+        <span class="v64-tb-divider">·</span>
+        <span class="v64-tb-stat"><strong id="tbAvg">—</strong> / inv</span>
+        <button class="v64-tb-btn" type="button">⬇ Report</button>
+        <button class="v64-tb-btn" type="button">📋 Audit</button>
+      </div>
+    </div>
+    <div class="v64-row-list" id="rowList"></div>
+  </div>
+</div>
+
+<!-- Detail panel (right slide-in) -->
+<div class="v64-panel-backdrop" id="panelBackdrop"></div>
+<div class="v64-detail-panel" id="detailPanel" role="dialog" aria-label="Row details">
+  <div class="v64-panel-header">
+    <div class="v64-panel-title" id="panelTitle">—</div>
+    <div class="v64-panel-meta" id="panelMeta">—</div>
+    <button class="v64-panel-close" id="panelCloseBtn" aria-label="Close">✕</button>
+  </div>
+  <div class="v64-panel-body" id="panelBody"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// Scenario data — mirrors Lorena's 2026-05-04 batch shape
+// ─────────────────────────────────────────────────────────────────
+
+const CUSTOMER_NAMES = ['RIVER LOGISTICS','CARGOWORLD INC','PACIFIC FREIGHT','SUNRISE LOG',
+  'EVERGREEN CO','GLOBAL CARGO LTD','OCEANIC TRADE','BLUE WAVE SHIP','HORIZON FORWARDERS',
+  'COASTAL LINK','NORDIC SUPPLY','TRANSWORLD INTL','PORT GATEWAY'];
+const CTN_PREFIXES = ['MAGU','KKFU','SUDU','TGHU','TCLU','OOLU','TRHU','UETU'];
+
+function makeSentRow(i, baseTime = '10:35') {
+  return {
+    id: 'sent_' + i,
+    inv: 'LM' + (26040000 + i + 100) + 'F',
+    ctn: CTN_PREFIXES[i % CTN_PREFIXES.length] + String(1000000 + i * 7919).slice(0, 7),
+    code: 'CUST' + String(i + 10).padStart(2, '0'),
+    name: CUSTOMER_NAMES[i % CUSTOMER_NAMES.length],
+    status: 'sent',
+    sentAt: baseTime,
+  };
+}
+
+// 5 validation issues (Uploaded scenario) — only things we can know pre-send
+// PDF/POD presence is NOT validated pre-send. Real source of truth is TMS,
+// which we can't check until send time. Missing docs surface post-send.
+const VALIDATION_ROWS = [
+  { id: 'v1', inv: '',            ctn: 'TRHU4593053', code: 'APEXMA01', name: 'APEX MARITIME',
+    status: 'val_missing_inv' },
+  { id: 'v2', inv: 'LM26040841F', ctn: 'MSCU8852311', code: 'TOPTRA02', name: 'TOP TRADING',
+    status: 'val_missing_field', missingField: 'Amount' },
+  { id: 'v3', inv: 'LM26040899F', ctn: 'CMAU5566778', code: 'SEAWAY01', name: 'SEAWAY EXPRESS',
+    status: 'val_no_customer' },
+  { id: 'v4', inv: 'LM26040912F', ctn: 'OOLU6909529', code: 'NEWCUS09', name: 'NEW CUSTOMER 09',
+    status: 'val_no_email' },
+  { id: 'v5', inv: 'LM26040792F', ctn: 'UETU5693907', code: 'TOPTRA02', name: 'TOP TRADING',
+    status: 'val_dup_inv' },
+];
+
+// Sending scenario — 47 sent, 10 sending live, 63 queued = 120 total
+function buildSendingRows() {
+  const rows = [];
+  for (let i = 0; i < 47; i++) rows.push({ ...makeSentRow(i, '10:' + String(34 + Math.floor(i/8)).padStart(2,'0')), status: 'sent' });
+  for (let i = 47; i < 57; i++) rows.push({ ...makeSentRow(i), status: 'sending' });
+  for (let i = 57; i < 120; i++) rows.push({ ...makeSentRow(i), status: 'queued' });
+  return rows;
+}
+
+// Complete mixed: 117 sent + 3 fails (Lorena's real shape)
+function buildCompleteMixedRows() {
+  const fails = [
+    { id: 'f1', inv: 'LM26040864F', ctn: 'TRHU4593053', code: 'APEXMA01', name: 'APEX MARITIME',
+      status: 'fail_pod' },
+    { id: 'f2', inv: 'LM26040841F', ctn: 'MSCU8852311', code: 'TOPTRA02', name: 'TOP TRADING',
+      status: 'fail_pod_bol' },
+    { id: 'f3', inv: 'LM26040899F', ctn: 'CMAU5566778', code: 'SEAWAY01', name: 'SEAWAY EXPRESS',
+      status: 'fail_timeout' },
+  ];
+  const sent = [];
+  for (let i = 0; i < 117; i++) sent.push(makeSentRow(i));
+  return fails.concat(sent);
+}
+
+// Complete auth: 12 sent before signout, 8 failed with 401, "Signed Out of QuickBooks"
+function buildCompleteAuthRows() {
+  const out = [];
+  for (let i = 0; i < 12; i++) out.push(makeSentRow(i, '10:36'));
+  for (let i = 12; i < 20; i++) {
+    out.push({ ...makeSentRow(i, '10:42'), status: 'fail_auth' });
+  }
+  return out;
+}
+
+function buildCompleteOkRows() {
+  const out = [];
+  for (let i = 0; i < 50; i++) out.push(makeSentRow(i, '10:' + String(34 + Math.floor(i/5)).padStart(2,'0')));
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Pill taxonomy — plain English labels + severity
+// ─────────────────────────────────────────────────────────────────
+
+const PILL = {
+  sent:             { label: 'Sent',                       severity: 'ok' },
+  sending:          { label: 'Sending…',                   severity: 'live' },
+  queued:           { label: 'Queued',                     severity: 'queued' },
+  val_missing_inv:  { label: 'Missing INV#',               severity: 'warn' },
+  val_missing_field:{ label: 'Missing Field',              severity: 'warn' },
+  val_no_customer:  { label: 'No Customer Match',          severity: 'warn' },
+  val_no_email:     { label: 'No Email on File',           severity: 'warn' },
+  val_dup_inv:      { label: 'Duplicate INV#',             severity: 'warn' },
+  val_needs_review: { label: 'Customer Needs Review',      severity: 'warn' },
+  fail_pod:         { label: 'POD Missing',                severity: 'warn' },
+  fail_pod_bol:     { label: 'POD + BOL Missing',          severity: 'warn' },
+  fail_timeout:     { label: 'QuickBooks Timed Out',       severity: 'error' },
+  fail_auth:        { label: 'Signed Out of QuickBooks',   severity: 'error' },
+  fail_network:     { label: 'No Internet',                severity: 'error' },
+  fail_unknown:     { label: 'Unexpected Error',           severity: 'error' },
+};
+
+const PILL_HINT = {
+  val_missing_inv: {
+    whatWrong: "This Excel row has no invoice number, so we can't match it to QuickBooks.",
+    whatTodo:  "Type the invoice number below, or fix it in your Excel and re-upload.",
+    actionLabel: 'Save invoice number',
+  },
+  val_missing_field: {
+    whatWrong: "A required field is empty in this row — we need it before we can send.",
+    whatTodo:  "Fill in the missing value, or fix it in your Excel and re-upload.",
+    actionLabel: 'Save value',
+  },
+  val_no_customer: {
+    whatWrong: "Customer code doesn't match any customer in your address book.",
+    whatTodo:  "Pick an existing customer, or create a new one.",
+    actionLabel: 'Pick a customer',
+  },
+  val_no_email: {
+    whatWrong: "This customer doesn't have an email address on file.",
+    whatTodo:  "Add their email here — we'll save it to Customer Manager too.",
+    actionLabel: 'Save email',
+  },
+  val_dup_inv: {
+    whatWrong: "Two rows in this Excel share the same invoice number.",
+    whatTodo:  "Choose which row to keep, or keep both as separate invoices.",
+    actionLabel: 'Keep this one',
+  },
+  val_needs_review: {
+    whatWrong: "This customer is flagged for review — their profile is incomplete or in draft.",
+    whatTodo:  "Open Customer Manager and finish setting them up before sending.",
+    actionLabel: 'Open customer profile',
+  },
+  fail_pod: {
+    whatWrong: "The POD wasn't found in QuickBooks or TMS. The customer requires it before we can send.",
+    whatTodo:  "Upload the POD to TMS so it's there next time too. (Or attach it for just this send.)",
+    actionLabel: 'Upload to TMS',
+    secondaryAction: 'Try fetching again',
+    dropzone: true,
+    dropzoneLabel: 'Need this send to go now? Attach for this send only.',
+    tmsFix: true,
+  },
+  fail_pod_bol: {
+    whatWrong: "Both POD and BOL are missing from QuickBooks and TMS. The customer requires both.",
+    whatTodo:  "Upload the missing files to TMS so they're there for future batches too.",
+    actionLabel: 'Upload to TMS',
+    secondaryAction: 'Try fetching again',
+    dropzone: true,
+    dropzoneLabel: 'Need this send to go now? Attach for this send only.',
+    tmsFix: true,
+  },
+  fail_timeout: {
+    whatWrong: "QuickBooks didn't respond in time when we tried to send this invoice.",
+    whatTodo:  "Could be a slow connection or QuickBooks being busy. Try again.",
+    actionLabel: 'Try Again',
+    tech: 'QBO API timeout: list_attachments — request timed out after 30 seconds\nStatus: 504\nTrace ID: qbo-trace-7f93ac21\nElapsed: 30.41s',
+  },
+  fail_auth: {
+    whatWrong: "You've been signed out of QuickBooks. The invoice didn't send.",
+    whatTodo:  "Sign back in to QuickBooks, then retry the failed batch.",
+    actionLabel: 'Sign back in to QuickBooks',
+    tech: 'HTTP 401 Unauthorized\nMessage: AuthenticationFailed — token expired\nQBO realm: 9341231...8\nToken last refreshed: 8h 14m ago',
+  },
+  fail_network: {
+    whatWrong: "We couldn't reach QuickBooks — looks like your internet dropped.",
+    whatTodo:  "Check your connection and try again.",
+    actionLabel: 'Check connection · Try Again',
+    tech: 'NetworkError: getaddrinfo ENOTFOUND oauth.platform.intuit.com',
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Scenario configs
+// ─────────────────────────────────────────────────────────────────
+
+const SCENARIOS = {
+  idle: {
+    label: 'Stage: idle',
+    subtitle: 'No batch in progress. Upload a TMS Excel from the sidebar to get started.',
+    progressStrip: false,
+    banner: null,
+    toolbar: false,
+    defaultTab: 'all',
+    rows: [],
+  },
+  uploaded: {
+    label: 'Stage: uploaded — 5 validation issues',
+    subtitle: '120 invoices loaded from Excel · 5 need attention before you click Send.',
+    progressStrip: false,
+    banner: null,
+    toolbar: false,
+    defaultTab: 'needs',
+    rows: () => {
+      const out = [];
+      out.push(...VALIDATION_ROWS);
+      for (let i = 0; i < 115; i++) out.push({ ...makeSentRow(i), status: 'queued' });
+      return out;
+    },
+  },
+  sending: {
+    label: 'Stage: sending — 47 of 120',
+    subtitle: 'Send in progress. Progress strip up top updates live as each invoice finishes.',
+    progressStrip: {
+      title: 'Sending invoices…',
+      sent: 47, total: 120,
+      start: '10:34 AM',
+      elapsed: '5m 47s',
+      elapsedSecs: 347,
+      remaining: '~7m',
+      avg: '7.4s',
+    },
+    banner: null,
+    toolbar: false,
+    defaultTab: 'all',
+    rows: buildSendingRows,
+  },
+  completeMixed: {
+    label: 'Stage: complete — 3 need a fix',
+    subtitle: 'Send finished. 117 went through cleanly · 3 failed and need your attention.',
+    progressStrip: false,
+    banner: {
+      severity: 'warn',
+      icon: '⚠',
+      title: '3 invoices need a fix before they can send',
+      sub: '117 sent successfully · finished 10:48 AM · total 14m 32s',
+      actions: [
+        { label: '↻ Retry the Fixed Ones (0)', disabled: true },
+      ],
+    },
+    toolbar: { start: '10:34 AM', total: '14m 32s', avg: '7.3s' },
+    defaultTab: 'needs',
+    rows: buildCompleteMixedRows,
+  },
+  completeAuth: {
+    label: 'Stage: complete — sign-out caused failures',
+    subtitle: 'Send stopped after a QuickBooks sign-out. 12 went through · 8 failed with auth errors.',
+    progressStrip: false,
+    banner: {
+      severity: 'error',
+      icon: '!',
+      title: "8 invoices couldn't send — looks like you got signed out of QuickBooks",
+      sub: '12 invoices sent before the problem started. Sign back in below, then click Retry.',
+      actions: [
+        { label: 'Sign back in to QuickBooks', primary: true },
+        { label: '↻ Retry These (8)' },
+      ],
+    },
+    toolbar: { start: '10:34 AM', total: '8m 12s', avg: '24.6s' },
+    defaultTab: 'needs',
+    rows: buildCompleteAuthRows,
+  },
+  completeOk: {
+    label: 'Stage: complete — all clean',
+    subtitle: 'All 50 invoices sent successfully. Nothing left to fix.',
+    progressStrip: false,
+    banner: {
+      severity: 'ok',
+      icon: '✓',
+      title: 'All 50 invoices sent successfully',
+      sub: 'Started 10:34 AM · finished 10:42 AM · total 8m 14s',
+      actions: [
+        { label: '📋 View Audit' },
+      ],
+    },
+    toolbar: { start: '10:34 AM', total: '8m 14s', avg: '9.9s' },
+    defaultTab: 'sent',
+    rows: buildCompleteOkRows,
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Renderer
+// ─────────────────────────────────────────────────────────────────
+
+let currentTab = 'needs';
+let currentScenario = null;
+let sendingTickHandle = null;
+
+function setActiveTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.v64-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  renderRows();
+}
+
+function rowGroupOf(row) {
+  if (row.status === 'sent') return 'sent';
+  if (row.status === 'queued' || row.status === 'sending') return 'inflight';
+  return 'needs';
+}
+
+function renderPill(status) {
+  const p = PILL[status];
+  if (!p) return '';
+  return `<span class="v64-pill ${p.severity}"><span class="dot"></span>${p.label}</span>`;
+}
+
+function renderRows() {
+  const list = document.getElementById('rowList');
+  const allRows = currentScenario.computedRows || [];
+  let filtered;
+  if (currentTab === 'sent') filtered = allRows.filter(r => r.status === 'sent');
+  else if (currentTab === 'all') filtered = allRows.slice(0, 60); // cap for visual
+  else filtered = allRows.filter(r => rowGroupOf(r) === 'needs');
+
+  if (!filtered.length) {
+    let msg, icon;
+    if (currentTab === 'needs') {
+      msg = (allRows.length === 0)
+        ? 'Nothing flagged. Upload an Excel to get started.'
+        : "Nothing to fix. All invoices look ready.";
+      icon = '✓';
+    } else if (currentTab === 'sent') {
+      msg = 'No invoices sent yet.';
+      icon = '—';
+    } else {
+      msg = 'Upload a TMS Excel to see invoices here.';
+      icon = '📋';
+    }
+    list.innerHTML = `
+      <div class="v64-empty">
+        <div class="v64-empty-icon">${icon}</div>
+        ${msg}
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(row => {
+    const needsResolve = rowGroupOf(row) === 'needs';
+    return `
+      <div class="v64-row" data-id="${row.id}">
+        <div class="v64-row-inv">${row.inv || '—'}</div>
+        <div class="v64-row-ctn">${row.ctn}</div>
+        <div class="v64-row-cust">
+          <span class="v64-cust-code">${row.code}</span>
+          ${row.name}
+        </div>
+        <div class="v64-row-status">${renderPill(row.status)}</div>
+        <div class="v64-row-action">
+          ${needsResolve ? '<button class="v64-row-resolve" type="button">Resolve →</button>' : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.v64-row').forEach(el => {
+    const id = el.dataset.id;
+    el.addEventListener('click', () => openDetailPanel(id));
+  });
+}
+
+function stopSendingTick() {
+  if (sendingTickHandle) {
+    clearInterval(sendingTickHandle);
+    sendingTickHandle = null;
+  }
+}
+
+function startSendingTick() {
+  stopSendingTick();
+  // Tick every 900ms — advance one invoice, tick elapsed time, update bar & meta.
+  sendingTickHandle = setInterval(() => {
+    if (!currentScenario || !currentScenario.progressStrip) {
+      stopSendingTick();
+      return;
+    }
+    const p = currentScenario.progressStrip;
+    if (p.sent >= p.total) {
+      stopSendingTick();
+      return;
+    }
+    p.sent += 1;
+    p.elapsedSecs = (p.elapsedSecs || 347) + 1;
+
+    const mm = Math.floor(p.elapsedSecs / 60);
+    const ss = p.elapsedSecs % 60;
+    p.elapsed = `${mm}m ${ss}s`;
+
+    const remainingInvoices = p.total - p.sent;
+    const avgSec = p.elapsedSecs / Math.max(p.sent, 1);
+    const remainingSec = Math.round(avgSec * remainingInvoices);
+    const rMm = Math.floor(remainingSec / 60);
+    p.remaining = `~${rMm}m`;
+    p.avg = avgSec.toFixed(1) + 's';
+
+    const pct = Math.round(p.sent / p.total * 100);
+    document.getElementById('psFraction').textContent = `${p.sent} / ${p.total}`;
+    document.getElementById('psPct').textContent = `${pct}% complete`;
+    document.getElementById('psBar').style.width = pct + '%';
+    document.getElementById('psElapsed').textContent = p.elapsed;
+    document.getElementById('psRemaining').textContent = p.remaining;
+    document.getElementById('psAvg').textContent = p.avg;
+  }, 900);
+}
+
+function applyScenario(name) {
+  stopSendingTick();
+  const s = SCENARIOS[name];
+  currentScenario = { ...s };
+  currentScenario.computedRows = typeof s.rows === 'function' ? s.rows() : s.rows;
+  // Deep-copy the progress strip config so the live tick mutations don't pollute the template
+  if (s.progressStrip) currentScenario.progressStrip = { ...s.progressStrip };
+
+  // Active button
+  document.querySelectorAll('.scenario-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.scenario === name);
+  });
+
+  document.getElementById('stageLabel').textContent = s.label;
+  document.getElementById('pageSubtitle').textContent = s.subtitle;
+
+  // Progress strip
+  const ps = document.getElementById('progressStrip');
+  if (s.progressStrip) {
+    ps.classList.add('is-active');
+    const p = currentScenario.progressStrip;
+    // Title preserves the animated-dots span; only swap the leading copy if it differs
+    document.getElementById('psTitle').innerHTML = `${p.title.replace(/…$/, '')}<span class="v64-dots"></span>`;
+    document.getElementById('psFraction').textContent = `${p.sent} / ${p.total}`;
+    const pct = Math.round(p.sent / p.total * 100);
+    document.getElementById('psPct').textContent = `${pct}% complete`;
+    document.getElementById('psBar').style.width = pct + '%';
+    document.getElementById('psStart').textContent = p.start;
+    document.getElementById('psElapsed').textContent = p.elapsed;
+    document.getElementById('psRemaining').textContent = p.remaining;
+    document.getElementById('psAvg').textContent = p.avg;
+    startSendingTick();
+  } else {
+    ps.classList.remove('is-active');
+  }
+
+  // Banner
+  const banner = document.getElementById('alertBanner');
+  banner.className = 'v64-alert-banner';
+  if (s.banner) {
+    banner.classList.add('is-active', s.banner.severity);
+    document.getElementById('alertIcon').textContent = s.banner.icon;
+    document.getElementById('alertTitle').textContent = s.banner.title;
+    document.getElementById('alertSub').textContent = s.banner.sub;
+    const actions = document.getElementById('alertActions');
+    actions.innerHTML = (s.banner.actions || []).map(a => {
+      const cls = ['v64-alert-btn'];
+      if (a.primary) cls.push('primary');
+      return `<button class="${cls.join(' ')}" type="button" ${a.disabled ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>${a.label}</button>`;
+    }).join('');
+    document.getElementById('resultsCard').classList.add('has-banner');
+  } else {
+    document.getElementById('resultsCard').classList.remove('has-banner');
+  }
+
+  // Toolbar
+  const toolbar = document.getElementById('toolbar');
+  if (s.toolbar) {
+    toolbar.classList.remove('hidden');
+    document.getElementById('tbStart').textContent = s.toolbar.start;
+    document.getElementById('tbTotal').textContent = s.toolbar.total;
+    document.getElementById('tbAvg').textContent = s.toolbar.avg;
+  } else {
+    toolbar.classList.add('hidden');
+  }
+
+  // Tab counts
+  const rows = currentScenario.computedRows;
+  const cNeeds = rows.filter(r => rowGroupOf(r) === 'needs').length;
+  const cSent  = rows.filter(r => r.status === 'sent').length;
+  const cAll   = rows.length;
+  document.getElementById('cNeeds').textContent = cNeeds;
+  document.getElementById('cSent').textContent  = cSent;
+  document.getElementById('cAll').textContent   = cAll;
+
+  // Default tab
+  setActiveTab(s.defaultTab);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Detail panel
+// ─────────────────────────────────────────────────────────────────
+
+function openDetailPanel(id) {
+  const row = (currentScenario.computedRows || []).find(r => r.id === id);
+  if (!row) return;
+  const p = PILL[row.status];
+  const hint = PILL_HINT[row.status];
+
+  document.querySelectorAll('.v64-row').forEach(el => {
+    el.classList.toggle('is-active', el.dataset.id === id);
+  });
+
+  document.getElementById('panelTitle').innerHTML = `
+    Invoice ${row.inv || '<em style="color:#94a3b8">(blank)</em>'}
+    ${renderPill(row.status)}
+  `;
+  document.getElementById('panelMeta').textContent =
+    `Container ${row.ctn} · ${row.code} — ${row.name}`;
+
+  if (!hint) {
+    document.getElementById('panelBody').innerHTML = `
+      <div class="v64-panel-section">
+        <div class="v64-panel-section-label">Status</div>
+        <div class="v64-panel-section-body">This row is already sent — no action needed.</div>
+      </div>`;
+  } else {
+    const buttons = [
+      `<button class="v64-panel-btn">${hint.actionLabel}</button>`,
+    ];
+    if (hint.secondaryAction) {
+      buttons.push(`<button class="v64-panel-btn secondary">${hint.secondaryAction}</button>`);
+    }
+    let actionHtml = '';
+    if (hint.dropzone) {
+      const dzLabel = hint.dropzoneLabel || 'Drop the file here for this send only.';
+      actionHtml = `
+        <div class="v64-dz-block">
+          <div class="v64-dz-sublabel">${dzLabel}</div>
+          <div class="v64-dropzone">
+            <div class="v64-dz-icon">⬆</div>
+            <div class="v64-dz-text">
+              <div class="v64-dz-title">Drop the file here</div>
+              <div class="v64-dz-sub">PDF, JPG, PNG · or click to browse</div>
+            </div>
+          </div>
+        </div>`;
+    }
+    const techHtml = hint.tech ? `
+      <details class="v64-tech">
+        <summary>Technical detail (for support)</summary>
+        <div class="v64-tech-body">${hint.tech}</div>
+        <button class="v64-tech-copy" type="button">📋 Copy</button>
+      </details>` : '';
+
+    document.getElementById('panelBody').innerHTML = `
+      <div class="v64-panel-section">
+        <div class="v64-panel-section-label">What's wrong</div>
+        <div class="v64-panel-section-body">${hint.whatWrong}</div>
+      </div>
+      <div class="v64-panel-section">
+        <div class="v64-panel-section-label">What to do</div>
+        <div class="v64-panel-section-body">${hint.whatTodo}</div>
+        <div class="v64-panel-action">
+          ${buttons.join('')}
+        </div>
+        ${actionHtml}
+      </div>
+      ${techHtml}`;
+  }
+
+  document.getElementById('detailPanel').classList.add('is-open');
+  document.getElementById('panelBackdrop').classList.add('is-open');
+}
+
+function closeDetailPanel() {
+  document.getElementById('detailPanel').classList.remove('is-open');
+  document.getElementById('panelBackdrop').classList.remove('is-open');
+  document.querySelectorAll('.v64-row').forEach(el => el.classList.remove('is-active'));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Wire up
+// ─────────────────────────────────────────────────────────────────
+
+document.getElementById('scenarioBar').addEventListener('click', e => {
+  if (e.target.classList.contains('scenario-btn')) {
+    closeDetailPanel();
+    applyScenario(e.target.dataset.scenario);
+  }
+});
+
+document.getElementById('tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.v64-tab');
+  if (tab) setActiveTab(tab.dataset.tab);
+});
+
+document.getElementById('panelCloseBtn').addEventListener('click', closeDetailPanel);
+document.getElementById('panelBackdrop').addEventListener('click', closeDetailPanel);
+
+// Default scenario
+applyScenario('completeMixed');
+</script>
+</body>
+</html>

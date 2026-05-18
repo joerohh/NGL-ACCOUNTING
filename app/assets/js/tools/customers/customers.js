@@ -45,32 +45,45 @@ function custRenderTableData(customers) {
     <tr>
       <td><strong style="font-family:monospace; font-size:0.82rem;">${escHtml(c.code)}</strong></td>
       <td>${escHtml(c.name)}${_custMethodBadge(c.sendMethod)}</td>
-      <td>${(() => {
+      <td class="col-emails">${(() => {
         const list = c.emails || [];
         if (list.length === 0) return '';
-        const first = '<span class="tag-pill email-tag">' + escHtml(list[0]) + '</span>';
+        const first = '<span class="tag-pill email-tag" title="' + escHtml(list[0]) + '">' + escHtml(list[0]) + '</span>';
         if (list.length === 1) return first;
         const tooltip = list.slice(1).join(', ');
         return first + ' <span class="tag-pill email-more" title="' + escHtml(tooltip) + '">+' + (list.length - 1) + ' more</span>';
       })()}</td>
-      <td>${(c.sendMethod === 'qbo_invoice_only_then_pod_email' || c.sendMethod === 'portal_upload')
-        ? '<span class="tag-pill" style="background:#f1f5f9;color:#94a3b8;">N/A</span>'
-        : (c.requiredDocs || []).length === 0
-        ? '<span class="tag-pill" style="background:#ecfdf5;color:#065f46;">ALL</span>'
-        : (c.requiredDocs || []).map(d => {
-        if (d.includes('/')) {
-          const display = d.split('/').map(p => p.trim().toUpperCase()).join(' / ');
-          return '<span class="tag-pill" style="background:#fef3c7;color:#92400e;">' + escHtml(display) + '</span>';
+      <td class="col-docs">${(() => {
+        if (c.sendMethod === 'qbo_invoice_only_then_pod_email' || c.sendMethod === 'portal_upload') {
+          return '<span class="tag-pill" style="background:#f1f5f9;color:#94a3b8;">N/A</span>';
         }
-        return '<span class="tag-pill ' + (DOC_CLASSES[d] || '') + '">' + escHtml(d.toUpperCase()) + '</span>';
-      }).join(' ')}</td>
-      <td style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#94a3b8;">${escHtml(c.notes || '')}</td>
-      <td>${c.active !== false ? '<span class="status-badge status-ready">Active</span>' : '<span class="status-badge status-missing">Inactive</span>'}</td>
-      <td style="text-align:right; white-space:nowrap;">
-        <button class="btn btn-secondary" style="padding:5px 10px; font-size:0.78rem;" onclick="custEdit('${escHtml(c.code)}')">Edit</button>
+        const docs = c.requiredDocs || [];
+        if (docs.length === 0) {
+          return '<span class="tag-pill" style="background:#ecfdf5;color:#065f46;">ALL</span>';
+        }
+        const renderPill = (d) => {
+          if (d.includes('/')) {
+            const display = d.split('/').map(p => p.trim().toUpperCase()).join(' / ');
+            return '<span class="tag-pill" style="background:#fef3c7;color:#92400e;">' + escHtml(display) + '</span>';
+          }
+          return '<span class="tag-pill ' + (DOC_CLASSES[d] || '') + '">' + escHtml(d.toUpperCase()) + '</span>';
+        };
+        if (docs.length <= 2) return docs.map(renderPill).join(' ');
+        const visible = docs.slice(0, 2).map(renderPill).join(' ');
+        const remaining = docs.slice(2);
+        const tooltip = remaining.map(d => d.includes('/')
+          ? d.split('/').map(p => p.trim().toUpperCase()).join(' / ')
+          : d.toUpperCase()
+        ).join(', ');
+        return visible + ' <span class="tag-pill email-more" title="' + escHtml(tooltip) + '">+' + remaining.length + ' more</span>';
+      })()}</td>
+      <td class="cust-notes-cell" title="${escHtml(c.notes || '')}">${escHtml(c.notes || '')}</td>
+      <td class="cust-status-cell">${c.active !== false ? '<span class="status-badge status-ready">Active</span>' : '<span class="status-badge status-missing">Inactive</span>'}</td>
+      <td class="cust-actions-cell" style="text-align:right;">
+        <button class="btn btn-secondary" style="padding:4px 9px; font-size:0.74rem;" onclick="custEdit('${escHtml(c.code)}')">Edit</button>
         ${c.active !== false ?
-          `<button class="btn btn-danger" style="padding:5px 10px; font-size:0.78rem; margin-left:4px;" onclick="custDelete('${escHtml(c.code)}')">Delete</button>` :
-          `<button class="btn btn-success" style="padding:5px 10px; font-size:0.78rem; margin-left:4px;" onclick="custReactivate('${escHtml(c.code)}')">Activate</button>`
+          `<button class="btn btn-danger" style="padding:4px 9px; font-size:0.74rem; margin-left:3px;" onclick="custDelete('${escHtml(c.code)}')">Delete</button>` :
+          `<button class="btn btn-success" style="padding:4px 9px; font-size:0.74rem; margin-left:3px;" onclick="custReactivate('${escHtml(c.code)}')">Activate</button>`
         }
       </td>
     </tr>
