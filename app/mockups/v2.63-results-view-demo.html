@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>v2.63 — Results view demo (no real sends)</title>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; margin: 0; }
+  .demo-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 11px 24px;
+    font-size: 0.84rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .demo-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .demo-banner .right {
+    margin-left: auto; opacity: 0.92; font-size: 0.78rem;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .demo-banner button {
+    background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);
+    padding: 5px 12px; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 0.78rem;
+  }
+  .demo-banner button:hover { background: rgba(0,0,0,0.35); }
+  #invoiceSenderView { padding: 24px; max-width: 1280px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="demo-banner">
+  <span class="pill">DEMO</span>
+  <span>v2.63 Invoice Sender — Post-send results view (mocked data, no real sends)</span>
+  <div class="right">
+    <button onclick="seedAndShow('mixed')">Mixed (3 failures + 117 sent)</button>
+    <button onclick="seedAndShow('all-failed')">5 failures, no sent</button>
+    <button onclick="seedAndShow('all-good')">All sent ✓</button>
+  </div>
+</div>
+
+<!-- Replicates the structure inside #invoiceSenderView from index.html, just the results portion -->
+<div id="invoiceSenderView">
+
+  <div id="invSendResults" class="v62-results-body" style="display:none; margin-top:20px;">
+    <div id="invSendResultsMain">
+      <div id="invSendAlertBanner" class="v62-alert-banner" style="display:none;">
+        <div class="v62-alert-icon">!</div>
+        <div class="v62-alert-text">
+          <strong id="invSendBannerTitle"></strong>
+          <small id="invSendBannerSubtitle"></small>
+        </div>
+        <button id="invSendBulkRetryBtn" class="v62-bulk-retry-btn" disabled>
+          ↻ Retry All Fixed (<span id="invSendBulkCount">0</span>)
+        </button>
+      </div>
+
+      <div class="v62-tabs">
+        <button class="v62-tab has-issues active" data-tab="needs-attention">
+          ⚠ Needs Attention <span class="count" id="invTabIssueCount">0</span>
+        </button>
+        <button class="v62-tab" data-tab="sent">
+          ✓ Sent <span class="count" id="invTabSentCount">0</span>
+        </button>
+        <button class="v62-tab" data-tab="all">
+          All Invoices <span class="count" id="invTabAllCount">0</span>
+        </button>
+      </div>
+
+      <div id="invResultsTableWrap"></div>
+    </div>
+
+    <div id="invDetailPanel" class="v62-detail-panel">
+      <div id="invDetailPanelInner" class="v62-panel-inner"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Load the real production module so we're rendering exactly what ships -->
+<script type="module">
+import { sendState, invoiceState } from '../assets/js/shared/state.js';
+import '../assets/js/tools/invoice-sender/invoice-sender-results.js';
+
+// Mock customers & rows that mirror Lorena's real 2026-05-04 batch
+const MIXED_ROWS = [
+  // Failures
+  { id: 'r1', invoiceNumber: 'LM26040864F', containerNumber: 'TRHU4593053',
+    customerCode: 'APEXMA01', customerName: 'APEX MARITIME',
+    sendStatus: 'missing_docs', missingDocs: ['pod'],
+    errorMessage: 'Missing: pod' },
+  { id: 'r2', invoiceNumber: 'LM26040841F', containerNumber: 'MSCU8852311',
+    customerCode: 'TOPTRA02', customerName: 'TOP TRADING',
+    sendStatus: 'missing_docs', missingDocs: ['pod', 'bol'],
+    errorMessage: 'Missing: pod, bol' },
+  { id: 'r3', invoiceNumber: 'LM26040899F', containerNumber: 'CMAU5566778',
+    customerCode: 'SEAWAY01', customerName: 'SEAWAY EXPRESS',
+    sendStatus: 'error', missingDocs: [],
+    errorMessage: 'QBO API timeout: list_attachments — request timed out after 30 seconds' },
+];
+
+// 117 successful sends (just generate placeholders)
+const CUSTOMER_NAMES = ['RIVER LOGISTICS','CARGOWORLD INC','PACIFIC FREIGHT','SUNRISE LOG',
+  'EVERGREEN CO','GLOBAL CARGO LTD','OCEANIC TRADE','BLUE WAVE SHIP','HORIZON FORWARDERS',
+  'COASTAL LINK','NORDIC SUPPLY','TRANSWORLD INTL','PORT GATEWAY'];
+const PREFIXES = ['MAGU','KKFU','SUDU','TGHU','TCLU','OOLU','TRHU','UETU'];
+
+function makeSentRows(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      id: 'sent_' + i,
+      invoiceNumber: 'LM' + (26040000 + i + 100) + 'F',
+      containerNumber: PREFIXES[i % PREFIXES.length] + String(1000000 + i * 7919).slice(0, 7),
+      customerCode: 'CUST' + String(i + 10).padStart(2, '0'),
+      customerName: CUSTOMER_NAMES[i % CUSTOMER_NAMES.length],
+      sendStatus: 'sent',
+      sentAt: '10:' + String((i % 60)).padStart(2, '0'),
+    });
+  }
+  return out;
+}
+
+window.seedAndShow = function(scenario) {
+  // Reset state
+  invoiceState.invoices.length = 0;
+  sendState.retry = {};
+  sendState.activePanelInvoiceId = null;
+  sendState.currentTab = 'needs-attention';
+
+  if (scenario === 'mixed') {
+    invoiceState.invoices.push(...MIXED_ROWS, ...makeSentRows(117));
+  } else if (scenario === 'all-failed') {
+    invoiceState.invoices.push(...MIXED_ROWS,
+      { id: 'r4', invoiceNumber: 'LM26040701F', containerNumber: 'OOLU6909529',
+        customerCode: 'TOPTRA02', customerName: 'TOP TRADING',
+        sendStatus: 'missing_docs', missingDocs: ['pod'],
+        errorMessage: 'Missing: pod' },
+      { id: 'r5', invoiceNumber: 'LM26040792F', containerNumber: 'UETU5693907',
+        customerCode: 'TOPTRA02', customerName: 'TOP TRADING',
+        sendStatus: 'missing_docs', missingDocs: ['pod'],
+        errorMessage: 'Missing: pod' },
+    );
+  } else {
+    invoiceState.invoices.push(...makeSentRows(50));
+  }
+
+  window.invShowResultsView();
+};
+
+// Auto-load the default mixed scenario
+seedAndShow('mixed');
+</script>
+</body>
+</html>

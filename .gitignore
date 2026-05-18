@@ -73,6 +73,20 @@ agent/data/archive/
 
 # Transient build logs
 desktop/build-log*.txt
+desktop/build-log*.err
+desktop/publish-log*.txt
+desktop/publish-log*.err
+desktop/*.err
+
+# Build scaffolding (PowerShell empty-stdin helpers)
+desktop/empty-stdin.txt
+desktop/.empty-stdin
+
+# Local superpowers workspace
+.superpowers/
+
+# Customer / billing data (never commit — keep outside repo)
+docs/*.xlsx
 
 # Debug screenshots and HTML captures
 agent/debug/
