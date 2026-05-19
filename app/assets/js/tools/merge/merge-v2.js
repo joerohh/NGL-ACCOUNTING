@@ -9,7 +9,7 @@
 // ══════════════════════════════════════════════════════════
 import {
   escHtml, readAsArrayBuffer, findColumnKey, CSV_ALIASES,
-  routingDecisionFor,
+  routingDecisionFor, uid, fmtSize,
 } from '../../shared/utils.js';
 import { agentBridge } from '../../shared/agent-client.js';
 import {
@@ -155,6 +155,13 @@ export function setStateV2(name) {
     updateMasterCheckbox();
     updateFetchButton();
   }
+  // After any re-render that includes the sidebar, latch SortableJS onto the
+  // doc list so the user can drag attachments to reorder. Re-init each render
+  // because innerHTML wipes prior Sortable instances along with the DOM.
+  if (v2State.openSidebarRow !== null && v2State.openSidebarRow >= 0) {
+    const row = v2State.rows[v2State.openSidebarRow];
+    if (row) initSortableForRow(row);
+  }
 }
 
 // ── Excel drop / pick ──
@@ -286,6 +293,7 @@ async function parseExcelFile(file) {
     if (decision.type !== 'warehouse' && !cn) continue;
 
     rows.push({
+      id: uid(),                // stable per-row id (used by side-panel doc list)
       rowNum: i + 2,            // sheet row 1 is headers, so first data row → 2
       // Warehouse rows carry no real container — strip any placeholder value.
       containerNumber: decision.type === 'warehouse' ? '' : cn,
@@ -1214,6 +1222,205 @@ function renderReady() {
   `;
 }
 
+// ── Side-panel document list (Task 14) ─────────────────────────────
+//
+// Each row keeps a customizable `documents` array — the canonical list of
+// PDFs that will be merged for that row. The user can drag to reorder,
+// click × to remove (local only — never touches QBO), drop in extras with
+// the + Add document zone, or click Reset to restore the original fetched
+// list. State lives on the row; merge engine (Task 17) reads from it.
+//
+// Doc shape:
+//   { id, name, source: 'qbo'|'tms'|'added', converted,
+//     pageCount, sizeBytes, failReason, _file? }
+function buildInitialDocList(row) {
+  const docs = [];
+  const fr = row.fetchResult;
+  if (!fr) return docs;
+
+  // Invoice is always present (downloaded for all row types in Task 8)
+  const invName = fr.invoiceFile || row.invoiceFile;
+  if (invName) {
+    docs.push({
+      id: uid(), name: invName, source: 'qbo',
+      converted: false, pageCount: 1, sizeBytes: 0, failReason: null,
+    });
+  }
+
+  if (row.routingType === 'warehouse') {
+    for (const att of (fr.warehouseAttachments || [])) {
+      docs.push({
+        id: uid(), name: att.fileName, source: 'qbo',
+        converted: !!att.converted, pageCount: att.pageCount || 0,
+        sizeBytes: att.sizeBytes || 0, failReason: null,
+      });
+    }
+    for (const fail of (fr.warehouseFailures || [])) {
+      docs.push({
+        id: uid(), name: fail.fileName, source: 'qbo',
+        converted: false, pageCount: 0, sizeBytes: 0,
+        failReason: fail.reason,
+      });
+    }
+  } else {
+    // Import/export — single POD/BL/POL doc
+    if (fr.podFile) {
+      docs.push({
+        id: uid(), name: fr.podFile,
+        source: fr.podSource || 'qbo',  // 'qbo' or 'tms'
+        converted: false, pageCount: 0, sizeBytes: 0, failReason: null,
+      });
+    }
+  }
+  row._originalDocs = JSON.parse(JSON.stringify(docs));  // snapshot for Reset
+  return docs;
+}
+
+function ensureDocList(row) {
+  if (!row.documents) row.documents = buildInitialDocList(row);
+  return row.documents;
+}
+
+function renderAttachmentRow(rowId, doc) {
+  const classes = ['attachment-row'];
+  if (doc.source === 'added') classes.push('manual');
+  if (doc.failReason) classes.push('fail');
+
+  const dragHandle = `
+    <span class="drag-handle" title="Drag to reorder">
+      <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+        <circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/>
+        <circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/>
+        <circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/>
+      </svg>
+    </span>`;
+
+  const icon = doc.failReason
+    ? `<span class="icon fail" aria-hidden="true">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+       </span>`
+    : doc.source === 'added'
+      ? `<span class="icon manual" aria-hidden="true">
+           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+         </span>`
+      : `<span class="icon ok" aria-hidden="true">
+           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+         </span>`;
+
+  const subtitle = doc.failReason
+    ? `<div class="fail-reason">${escHtml(doc.failReason)}</div>`
+    : (doc.pageCount || doc.sizeBytes)
+      ? `<div class="meta">${doc.pageCount ? doc.pageCount + ' pages' : ''}${doc.pageCount && doc.sizeBytes ? ' · ' : ''}${doc.sizeBytes ? fmtSize(doc.sizeBytes) : ''}</div>`
+      : '';
+
+  const sourceTag =
+    doc.source === 'tms'   ? '<span class="tag tms">From TMS</span>' :
+    doc.source === 'added' ? '<span class="tag added">Added by you</span>' :
+                             '<span class="tag qbo">From QBO</span>';
+  const convertTag = doc.converted ? '<span class="tag convert">XLSX → PDF</span>' : '';
+
+  return `
+    <div class="${classes.join(' ')}" data-doc-id="${doc.id}">
+      ${dragHandle}
+      ${icon}
+      <div style="flex:1; min-width:0;">
+        <div class="name">${escHtml(doc.name)}</div>
+        ${subtitle}
+      </div>
+      ${sourceTag}
+      ${convertTag}
+      <button class="remove-btn" title="Remove from this merge (doesn't touch QBO)"
+              onclick="window.v2RemoveDoc('${rowId}', '${doc.id}')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  `;
+}
+
+function renderDocumentsSection(row) {
+  const docs = ensureDocList(row);
+  const rowId = row.id;
+  const count = docs.length;
+  const headerLabel = count === 1 ? '1 file' : `${count} files`;
+
+  const docsMarkup = docs.length === 0
+    ? `<div style="padding: 10px 4px; color:#94a3b8; font-size: 0.8rem;">No documents fetched yet.</div>`
+    : docs.map(d => renderAttachmentRow(rowId, d)).join('');
+
+  return `
+    <div class="ds-section">
+      <div class="ds-section-label">Documents in this merge · ${headerLabel}</div>
+      <div data-doc-list="${rowId}">
+        ${docsMarkup}
+      </div>
+      <button class="add-doc-zone" type="button" onclick="window.v2OpenAddDocPicker('${rowId}')">
+        <svg class="plus-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="label-line">Add document</span>
+        <span class="help-line">drop a PDF or click to browse</span>
+      </button>
+      <div class="reset-row">
+        <span>Drag handles to reorder · × to remove</span>
+        <span class="reset-link" onclick="window.v2ResetDocs('${rowId}')">Reset</span>
+      </div>
+    </div>
+  `;
+}
+
+function initSortableForRow(row) {
+  if (!window.Sortable) return;
+  const list = document.querySelector(`[data-doc-list="${row.id}"]`);
+  if (!list) return;
+  Sortable.create(list, {
+    handle: '.drag-handle',
+    animation: 150,
+    onEnd: (evt) => {
+      if (evt.oldIndex === evt.newIndex) return;
+      const docs = row.documents || [];
+      const moved = docs.splice(evt.oldIndex, 1)[0];
+      docs.splice(evt.newIndex, 0, moved);
+      // Don't re-render — Sortable already moved the DOM nodes
+    },
+  });
+}
+
+// ── Per-row doc action handlers (exposed on window) ──
+window.v2RemoveDoc = function(rowId, docId) {
+  const row = v2State.rows.find(r => r.id === rowId);
+  if (!row) return;
+  row.documents = (row.documents || []).filter(d => d.id !== docId);
+  setStateV2(v2State.subMode);
+};
+
+window.v2OpenAddDocPicker = function(rowId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/pdf';
+  input.multiple = true;
+  input.onchange = e => window.v2AddDocsToRow(rowId, e.target.files);
+  input.click();
+};
+
+window.v2AddDocsToRow = function(rowId, files) {
+  const row = v2State.rows.find(r => r.id === rowId);
+  if (!row || !files || files.length === 0) return;
+  row.documents = row.documents || [];
+  for (const f of files) {
+    row.documents.push({
+      id: uid(), name: f.name, source: 'added',
+      converted: false, pageCount: 0, sizeBytes: f.size,
+      failReason: null, _file: f,
+    });
+  }
+  setStateV2(v2State.subMode);
+};
+
+window.v2ResetDocs = function(rowId) {
+  const row = v2State.rows.find(r => r.id === rowId);
+  if (!row || !row._originalDocs) return;
+  row.documents = JSON.parse(JSON.stringify(row._originalDocs));
+  setStateV2(v2State.subMode);
+};
+
 function renderSidebar(rowIdx) {
   const row = v2State.rows[rowIdx];
   if (!row) return '';
@@ -1371,19 +1578,25 @@ function renderErrorBody(row, traceHtml, docName) {
 }
 
 function renderResolvedBody(row, traceHtml) {
-  const file = row.manualPodFile;
-  const summary = file
-    ? `<div class="ds-attached">
-         <div class="name">${escHtml(file.name)}</div>
-         <div class="size">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
-         <button class="replace" onclick="document.getElementById('v2UploadInput-${row.rowNum}').click()">Replace</button>
-         <input type="file" id="v2UploadInput-${row.rowNum}" accept=".pdf" style="display:none;"
-                onchange="window.v2HandleSidebarUpload(${v2State.rows.indexOf(row)}, this.files)" />
-       </div>`
-    : `<div class="ds-attached">
-         <div class="name">Retry succeeded — fetched from TMS</div>
-         <div class="size">${escHtml(row.fetchResult?.podLabel || '')}</div>
-       </div>`;
+  // If the user did a manual upload that isn't already part of row.documents,
+  // surface it as an "added" doc so it shows in the list and ships with the merge.
+  if (row.manualPodFile) {
+    ensureDocList(row);
+    const already = (row.documents || []).some(d => d._file === row.manualPodFile);
+    if (!already) {
+      row.documents = row.documents || [];
+      row.documents.push({
+        id: uid(),
+        name: row.manualPodFile.name,
+        source: 'added',
+        converted: false,
+        pageCount: 0,
+        sizeBytes: row.manualPodFile.size || 0,
+        failReason: null,
+        _file: row.manualPodFile,
+      });
+    }
+  }
 
   return `
     <div class="ds-section">
@@ -1404,10 +1617,7 @@ function renderResolvedBody(row, traceHtml) {
       ${traceHtml}
     </div>
 
-    <div class="ds-section">
-      <div class="ds-section-label">Attached</div>
-      ${summary}
-    </div>
+    ${renderDocumentsSection(row)}
   `;
 }
 
@@ -2029,6 +2239,10 @@ function patchRow(container, fetchResult) {
     const row = v2State.rows[i];
     if (row.containerNumber.toLowerCase() !== containerLower) continue;
     row.fetchResult = { ...fetchResult };
+    // Fresh fetch → drop the cached doc list so the side panel rebuilds from the
+    // new fetchResult (and the Reset snapshot reflects what was just fetched).
+    row.documents = undefined;
+    row._originalDocs = undefined;
     // Snapshot per-file jobIds so a POD-only retry doesn't clobber the row's pointer to the
     // folder where the invoice already lives. Each fetchMissing call sets the doc-type flags
     // below; we only update the corresponding jobId field. Legacy fetchJobId is kept as a
