@@ -19,7 +19,7 @@ process.on("uncaughtException", (err) => {
 const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, globalShortcut, shell, ipcMain } = require("electron");
 const path = _path;
 const fs = _fs;
-const { spawn } = require("child_process");
+const { spawn, exec } = require("child_process");
 const http = require("http");
 const { autoUpdater } = require("electron-updater");
 
@@ -62,6 +62,43 @@ let tray = null;
 let agentProcess = null;
 let isQuitting = false;
 let agentIsExternal = false; // true if agent was already running when Electron started
+
+// ── Version helpers ────────────────────────────────────────────────
+
+// Pad a version string to 3 parts so "2.71" and "2.71.0" compare equal.
+// Without this, the agent's VERSION file (sometimes 2-part) and Electron's
+// app.getVersion() (always 3-part from package.json) trigger a false-positive
+// "another version is running" dialog when launching twice.
+function normalizeVersion(v) {
+  if (!v) return "";
+  const parts = String(v).trim().split(".");
+  while (parts.length < 3) parts.push("0");
+  return parts.slice(0, 3).join(".");
+}
+
+// Forcibly terminate any leftover ngl-agent.exe processes. Used to auto-recover
+// when an old agent survives a previous Electron exit and blocks port 8787.
+// Resolves whether or not any processes matched — taskkill returns non-zero
+// when nothing matches, which is fine.
+function killOrphanAgent() {
+  return new Promise((resolve) => {
+    exec("taskkill /F /IM ngl-agent.exe", (err, stdout, stderr) => {
+      const out = (stdout || "").trim() || (stderr || "").trim() || (err && err.message) || "";
+      log(`taskkill ngl-agent.exe: ${out}`);
+      resolve();
+    });
+  });
+}
+
+// Re-probe /health to see if the port has freed up after a kill attempt.
+function probeAgentHealth(timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const req = http.get(`${AGENT_URL}/health`, () => resolve(true));
+    req.on("error", () => resolve(false));
+    req.setTimeout(timeoutMs, () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
 
 // ── Agent lifecycle ────────────────────────────────────────────────
 
@@ -415,23 +452,47 @@ app.whenReady().then(async () => {
   if (existing) {
     const ourVersion = app.getVersion();
     const theirVersion = existing.version || "(unknown)";
-    if (theirVersion !== ourVersion) {
+    const sameVersion = normalizeVersion(theirVersion) === normalizeVersion(ourVersion);
+
+    if (sameVersion) {
+      log(`Agent already running on port 8787 (matching v${theirVersion}) — skipping spawn`);
+      agentIsExternal = true;
+    } else {
       log(`Version mismatch: bundled v${ourVersion} but port 8787 reports v${theirVersion}`);
-      dialog.showErrorBox(
-        "NGL Accounting — Another version is running",
-        `An older version of NGL Accounting (v${theirVersion}) is still running in the background.\n\n`
-        + `This version is v${ourVersion}. To avoid using the wrong agent, please close the running copy first.\n\n`
-        + `How to close it:\n`
-        + `  1. Open Task Manager (Ctrl + Shift + Esc)\n`
-        + `  2. Look for "ngl-agent.exe" or "python.exe"\n`
-        + `  3. Right-click → End task\n`
-        + `  4. Relaunch NGL Accounting`
-      );
-      app.quit();
-      return;
+
+      if (isDev) {
+        // Dev mode: surface the mismatch instead of killing the dev's manual run.
+        dialog.showErrorBox(
+          "NGL Accounting (dev) — Version mismatch on port 8787",
+          `Bundled v${ourVersion} but port 8787 reports v${theirVersion}.\n\n`
+          + `Stop the manually-run agent before launching Electron from dev.`
+        );
+        app.quit();
+        return;
+      }
+
+      // Production: auto-kill the leftover agent and spawn a fresh one.
+      // This is the case where the auto-updater installed a new version but
+      // couldn't terminate the old ngl-agent.exe child process.
+      log("Production auto-recovery: killing stale ngl-agent.exe and respawning");
+      await killOrphanAgent();
+      await new Promise((r) => setTimeout(r, 1500));
+
+      const stillUp = await probeAgentHealth();
+      if (stillUp) {
+        // Auto-recovery failed (rare — maybe a non-ngl process on 8787, or
+        // permissions issue). Fall back to the manual dialog.
+        dialog.showErrorBox(
+          "NGL Accounting — Couldn't auto-recover",
+          `An older version (v${theirVersion}) is still running and couldn't be stopped automatically.\n\n`
+          + `Please open Task Manager (Ctrl + Shift + Esc), end any "ngl-agent.exe" processes, and relaunch.`
+        );
+        app.quit();
+        return;
+      }
+      log("Stale agent cleared — spawning fresh agent for v" + ourVersion);
+      startAgent();
     }
-    log(`Agent already running on port 8787 (matching v${theirVersion}) — skipping spawn`);
-    agentIsExternal = true;
   } else {
     startAgent();
   }
