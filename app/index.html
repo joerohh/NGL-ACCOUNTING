@@ -1415,6 +1415,75 @@
         </div>
       </div>
     </div>
+
+    <!-- Storage -->
+    <div class="panel-card" id="storageCard" style="margin-top:24px;">
+      <div class="section-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/>
+          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
+        Storage
+      </div>
+
+      <div class="storage-row">
+        <div style="min-width:0;">
+          <div class="label">Saved merged files</div>
+          <div class="path" id="storageOutputPath">…</div>
+          <div class="meta" id="storageOutputMeta">…</div>
+          <div class="size-bar"><div class="fill" id="storageOutputBar" style="width:0%;"></div></div>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="window.settingsOpenOutputFolder()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            Open folder
+          </button>
+        </div>
+      </div>
+
+      <div class="storage-row">
+        <div style="min-width:0;">
+          <div class="label">Temporary app files</div>
+          <div class="path" id="storageDownloadsPath">…</div>
+          <div class="meta" id="storageDownloadsMeta">…</div>
+          <div class="size-bar"><div class="fill" id="storageDownloadsBar" style="width:0%;"></div></div>
+        </div>
+      </div>
+
+      <div class="cleanup-callout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <div class="text">
+          <strong>Auto-cleanup is on.</strong>
+          Merged files and working files older than <strong>7 days</strong> are deleted automatically.
+          The current week of output always stays.
+          <span class="last" id="storageLastCleanup"></span>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-secondary" onclick="window.settingsCleanupNow()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          </svg>
+          Clean up now
+        </button>
+        <button class="btn btn-ghost" onclick="window.settingsChangeOutputFolder()">Change output folder…</button>
+      </div>
+
+      <div class="subtle-footnote">
+        Only the Merge Tool saves files to disk. Invoice Sender and Customer Manager don't.
+      </div>
+    </div>
   </div>
 </div>
 
