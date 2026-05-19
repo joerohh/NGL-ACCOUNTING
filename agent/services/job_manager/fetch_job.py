@@ -297,16 +297,6 @@ class FetchJobMixin:
 
         invoice_id = invoice_data["Id"]
 
-        # Warehouse rows: fetch all QBO attachments, convert xlsx → PDF.
-        # No TMS fallback, no safety cascade — warehouse is QBO-only.
-        if _is_warehouse_row(container.invoice_number):
-            await self._handle_warehouse_attachments(job, container, invoice_id, result)
-            await self._emit(job, "container_complete", {
-                "containerNumber": container.container_number,
-                "result": result.to_dict(),
-            })
-            return
-
         # Step 2: Download the invoice PDF (only if invoice type is requested)
         if want_invoice:
             await self._emit(job, "downloading_invoice", {
@@ -342,6 +332,18 @@ class FetchJobMixin:
                     "containerNumber": container.container_number,
                     "type": "invoice",
                 })
+
+        # Step 2.5: Warehouse rows short-circuit here — after the invoice PDF
+        # is on disk, but before any POD/BL/POL/TMS-fallback logic.
+        # Fetch every QBO attachment, convert xlsx → PDF. No TMS fallback,
+        # no safety cascade — warehouse is QBO-only.
+        if _is_warehouse_row(container.invoice_number):
+            await self._handle_warehouse_attachments(job, container, invoice_id, result)
+            await self._emit(job, "container_complete", {
+                "containerNumber": container.container_number,
+                "result": result.to_dict(),
+            })
+            return
 
         # Step 3: Check for POD attachment (only if POD type is requested)
         if want_pod:
