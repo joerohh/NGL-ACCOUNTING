@@ -28,6 +28,7 @@ const v2State = {
   searchQuery: '',
   sortMode: 'excel',
   activeTab: 'all',
+  routingTypeFilter: 'all', // 'all' | 'import' | 'export' | 'warehouse' | 'unknown'
   showAllInSuccess: false,
   // M3: fetch + sidebar
   jobId: null,
@@ -120,6 +121,7 @@ export function setStateV2(name) {
     v2State.searchQuery = '';
     v2State.sortMode = 'excel';
     v2State.activeTab = 'all';
+    v2State.routingTypeFilter = 'all';
     v2State.showAllInSuccess = false;
     v2State.fetchProgress = 0;
     v2State.fetchTotal = 0;
@@ -183,6 +185,7 @@ async function handleExcelChange(e) {
   // Default-active tab: Issues if any issue exists, All otherwise.
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   v2State.activeTab = hasIssues ? 'issues' : 'all';
+  v2State.routingTypeFilter = 'all';
   v2State.searchQuery = '';
   v2State.sortMode = 'excel';
   v2State.showAllInSuccess = false;
@@ -427,12 +430,43 @@ function getVisibleRows() {
   if (v2State.activeTab === 'issues') {
     rows = rows.filter(r => r.status !== 'ok');
   }
+  if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
+    rows = rows.filter(r => r.routingType === v2State.routingTypeFilter);
+  }
   if (v2State.searchQuery) {
     const q = v2State.searchQuery.toLowerCase();
     rows = rows.filter(r => r.containerNumber.toLowerCase().includes(q));
   }
   return sortRows(rows, v2State.sortMode);
 }
+
+function routingTypeFilterTabs() {
+  const total      = v2State.rows.length;
+  const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
+  const exports_   = v2State.rows.filter(r => r.routingType === 'export').length;
+  const warehouses = v2State.rows.filter(r => r.routingType === 'warehouse').length;
+  const unknown    = v2State.rows.filter(r => r.routingType === 'unknown').length;
+  const f = v2State.routingTypeFilter || 'all';
+  const btn = (key, label, count) => `
+    <button class="tab ${f === key ? 'active' : ''}" onclick="window.v2SetRoutingTypeFilter('${key}')">
+      ${label} <span class="count">${count}</span>
+    </button>`;
+  return `
+    <div class="filter-tabs">
+      ${btn('all', 'All', total)}
+      ${btn('import', 'Import', imports)}
+      ${btn('export', 'Export', exports_)}
+      ${btn('warehouse', 'Warehouse', warehouses)}
+      ${btn('unknown', 'Unknown', unknown)}
+    </div>
+  `;
+}
+
+function v2SetRoutingTypeFilter(key) {
+  v2State.routingTypeFilter = key;
+  setStateV2('review');
+}
+window.v2SetRoutingTypeFilter = v2SetRoutingTypeFilter;
 
 function sortRows(rows, mode) {
   const out = rows.slice();
@@ -463,15 +497,16 @@ function selectedCount()        { return v2State.rows.filter(r => r.selected).le
 function issuesCount()          { return v2State.rows.filter(r => r.status !== 'ok').length; }
 
 function willChipFor(row) {
-  if (row.routingType === 'import') return `<span class="will-chip import">POD</span>`;
-  if (row.routingType === 'export') return `<span class="will-chip export">BL/POL</span>`;
+  if (row.routingType === 'import')    return `<span class="will-chip import">POD</span>`;
+  if (row.routingType === 'export')    return `<span class="will-chip export">BL/POL</span>`;
+  if (row.routingType === 'warehouse') return `<span class="will-chip whdocs">All QBO Docs</span>`;
   return `<span class="will-chip unknown">?</span>`;
 }
 
 function highlightInvLetter(inv) {
   if (!inv || inv.length < 2) return escHtml(inv);
   const c = inv[1].toUpperCase();
-  if (c === 'M' || c === 'E' || c === 'X') {
+  if (c === 'M' || c === 'E' || c === 'X' || c === 'W') {
     return escHtml(inv[0]) + `<span class="inv-letter">${escHtml(inv[1])}</span>` + escHtml(inv.slice(2));
   }
   return escHtml(inv);
@@ -497,8 +532,16 @@ function rowMarkup(row) {
     ? `<div style="font-size:0.72rem; color:#92400e; margin-top:3px;">${escHtml(row.statusReason)}</div>`
     : '';
 
+  const isWarehouse = row.routingType === 'warehouse';
+
+  const containerCell = isWarehouse
+    ? `<td><span class="na-cell">—</span></td>`
+    : `<td><span class="mono">${escHtml(row.containerNumber)}</span></td>`;
+
   const woCell = hasAnyWO()
-    ? `<td>${row.workOrderNumber ? `<span class="mono">${escHtml(row.workOrderNumber)}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>`
+    ? (isWarehouse
+        ? `<td><span class="na-cell">—</span></td>`
+        : `<td>${row.workOrderNumber ? `<span class="mono">${escHtml(row.workOrderNumber)}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>`)
     : '';
 
   const willCell = `<td>${willChipFor(row)}</td>`;
@@ -506,7 +549,7 @@ function rowMarkup(row) {
   return `<tr class="${trClass}" data-row-num="${row.rowNum}">
     <td class="check-col"><input type="checkbox" class="row-check" ${checkAttr} onchange="window.v2ToggleRow(${row.rowNum}, this.checked)" /></td>
     <td style="color:#94a3b8; font-size:0.8rem;">${row.rowNum}</td>
-    <td><span class="mono">${escHtml(row.containerNumber)}</span></td>
+    ${containerCell}
     <td>${invDisplay}</td>
     ${woCell}
     <td>${customerDisplay}</td>
@@ -584,9 +627,14 @@ function fetchRowMarkup(rowIdx, row, opts) {
        </td>`
     : '';
 
+  const isWarehouse = row.routingType === 'warehouse';
+  const containerCell = isWarehouse
+    ? `<td><span class="na-cell">—</span></td>`
+    : `<td><span class="mono">${escHtml(row.containerNumber)}</span></td>`;
+
   return `<tr class="${trClass}" ${trAttrs} data-row-idx="${rowIdx}">
     ${checkColMaybe}
-    <td><span class="mono">${escHtml(row.containerNumber)}</span></td>
+    ${containerCell}
     <td><span class="mono mono-sub">${highlightInvLetter(row.invoiceNumber)}</span></td>
     <td>${row.customer ? escHtml(row.customer) : '<span style="color:#cbd5e1;">—</span>'}</td>
     <td>${willChipFor(row)}</td>
@@ -757,9 +805,10 @@ function v2HandleBulkPdfDrop(fileList) {
 window.v2HandleBulkPdfDrop = v2HandleBulkPdfDrop;
 
 function routingSummaryBand() {
-  const imports  = v2State.rows.filter(r => r.routingType === 'import').length;
-  const exports_ = v2State.rows.filter(r => r.routingType === 'export').length;
-  const unknown  = v2State.rows.filter(r => r.routingType === 'unknown').length;
+  const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
+  const exports_   = v2State.rows.filter(r => r.routingType === 'export').length;
+  const warehouses = v2State.rows.filter(r => r.routingType === 'warehouse').length;
+  const unknown    = v2State.rows.filter(r => r.routingType === 'unknown').length;
   return `
     <div class="routing-summary">
       <span class="label">Will fetch</span>
@@ -771,11 +820,15 @@ function routingSummaryBand() {
         <span class="chip export">BL/POL</span>
         <strong>${exports_}</strong> export${exports_ !== 1 ? 's' : ''}
       </span>
+      <span class="group">
+        <span class="chip warehouse">All QBO Docs</span>
+        <strong>${warehouses}</strong> warehouse
+      </span>
       ${unknown ? `<span class="group">
         <span class="chip unknown">?</span>
         <strong>${unknown}</strong> unknown
       </span>` : ''}
-      <span class="hint">Decided by INV# letter (M/E) · falls back to WO# letter when prefix is non-standard</span>
+      <span class="hint">Decided by INV# letter (M / E / W) · falls back to WO# letter when prefix is non-standard</span>
     </div>
   `;
 }
@@ -832,6 +885,7 @@ function renderReviewSuccess() {
     : `Show all ${total} rows ▼`;
   return `
     ${topBarOnlyExcel()}
+    ${routingTypeFilterTabs()}
     ${routingSummaryBand()}
     <div class="review-success-card">
       <div class="check-icon">
@@ -868,6 +922,7 @@ function renderReviewWithIssues() {
 
   return `
     ${topBarOnlyExcel()}
+    ${routingTypeFilterTabs()}
     ${routingSummaryBand()}
 
     <div class="controls-line" style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:11px 16px;">

@@ -1723,6 +1723,53 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .will-chip.import  { background: #dbeafe; color: #1e40af; }
 #mergeToolViewV2 .will-chip.export  { background: #f3e8ff; color: #6b21a8; }
 #mergeToolViewV2 .will-chip.unknown { background: #f1f5f9; color: #94a3b8; }
+#mergeToolViewV2 .will-chip.whdocs  { background: #ffedd5; color: #9a3412; }
+
+/* Warehouse chip in routing-summary band */
+#mergeToolViewV2 .routing-summary .group .chip.warehouse { background: #ffedd5; color: #9a3412; }
+
+/* Type badges shown next to routing-summary or in rows (orange = warehouse accent) */
+#mergeToolViewV2 .type-badge {
+  display: inline-flex; padding: 2px 9px; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#mergeToolViewV2 .type-badge.import    { background: #dbeafe; color: #1e40af; }
+#mergeToolViewV2 .type-badge.export    { background: #f3e8ff; color: #6b21a8; }
+#mergeToolViewV2 .type-badge.warehouse { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+#mergeToolViewV2 .type-badge.unknown   { background: #f1f5f9; color: #94a3b8; }
+
+/* Em-dash placeholder cell for "not applicable" columns on warehouse rows */
+#mergeToolViewV2 .na-cell {
+  color: #cbd5e1; font-size: 1.05rem; font-weight: 400;
+  user-select: none;
+}
+
+/* Routing-type filter tabs (All / Import / Export / Warehouse / Unknown) */
+#mergeToolViewV2 .filter-tabs {
+  display: flex; gap: 4px;
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 9px; padding: 4px;
+  margin-bottom: 14px; width: fit-content;
+}
+#mergeToolViewV2 .filter-tabs .tab {
+  padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+  color: #64748b; cursor: pointer; border: none; background: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  border-bottom: none; margin-bottom: 0;
+}
+#mergeToolViewV2 .filter-tabs .tab:hover { color: #0f172a; background: #f8fafc; }
+#mergeToolViewV2 .filter-tabs .tab.active {
+  background: #fff7ed; color: #ea580c;
+  box-shadow: inset 0 0 0 1px #fed7aa;
+  border-bottom: none;
+}
+#mergeToolViewV2 .filter-tabs .tab .count {
+  background: #e2e8f0; color: #475569;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700;
+}
+#mergeToolViewV2 .filter-tabs .tab.active .count { background: #fed7aa; color: #9a3412; }
 
 /* INV# letter highlight (shows the routing letter at pos 2) */
 #mergeToolViewV2 .inv-letter {
