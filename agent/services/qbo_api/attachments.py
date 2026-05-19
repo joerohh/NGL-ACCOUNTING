@@ -1,5 +1,6 @@
 """QBO API attachment operations — list, classify, download, upload."""
 
+import asyncio
 import base64
 import io
 import json
@@ -11,6 +12,16 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger("ngl.qbo_api.attachments")
+
+# Transient network errors that may resolve on retry (mirrors invoices.py).
+_TRANSIENT_NETWORK_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
+_DOWNLOAD_RETRY_ATTEMPTS = 3
+_DOWNLOAD_RETRY_BACKOFF_SECONDS = (1.0, 3.0)  # before attempts 2 and 3
 
 # Filename patterns for document classification
 DOC_PATTERNS = {
@@ -105,45 +116,69 @@ class QBOAttachmentsMixin:
                                    temp_download_uri: str = None) -> Optional[Path]:
         """Download an attachment file. Returns the saved file path or None.
 
-        The QBO /download/{id} endpoint returns a redirect URL as plain text,
-        not the actual file bytes. We prefer tempDownloadUri when available.
+        Retries up to 3 times on transient network errors (DNS blip, brief
+        connection refusal, read timeout). HTTP 4xx/5xx and decode errors
+        are treated as permanent and do not retry. Mirrors the retry pattern
+        in services.qbo_api.invoices.get_invoice_link.
         """
-        try:
-            download_url = temp_download_uri
-            if not download_url:
-                # /download/{id} returns a redirect URL as text — need to follow it
-                token = await self._token_manager.get_access_token()
-                if not token:
-                    logger.error("No valid access token for attachment download")
-                    return None
-
-                url = f"{self._base_url}/v3/company/{self._realm_id}/download/{attachable_id}"
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.get(
-                        url,
-                        headers={"Authorization": f"Bearer {token}"},
-                        timeout=30,
+        last_error: Optional[Exception] = None
+        for attempt in range(_DOWNLOAD_RETRY_ATTEMPTS):
+            try:
+                return await self._download_attachment_once(
+                    attachable_id, filename, download_dir, temp_download_uri,
+                )
+            except _TRANSIENT_NETWORK_ERRORS as e:
+                last_error = e
+                if attempt < _DOWNLOAD_RETRY_ATTEMPTS - 1:
+                    backoff = _DOWNLOAD_RETRY_BACKOFF_SECONDS[attempt]
+                    logger.warning(
+                        "download_attachment attempt %d/%d failed for %s (%s) — retrying in %.1fs",
+                        attempt + 1, _DOWNLOAD_RETRY_ATTEMPTS,
+                        filename, type(e).__name__, backoff,
                     )
-                if resp.status_code != 200:
-                    logger.error("Attachment download failed: %d — %s", resp.status_code, resp.text)
-                    return None
-                download_url = resp.content.decode("utf-8").strip()
+                    await asyncio.sleep(backoff)
+                    continue
+        logger.error(
+            "download_attachment FAILED for %s after %d attempts. Last error: %s",
+            filename, _DOWNLOAD_RETRY_ATTEMPTS, last_error,
+        )
+        return None
 
-            # Fetch the actual file bytes from the redirect URL
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                file_resp = await client.get(download_url, timeout=30)
-            if file_resp.status_code != 200:
-                logger.error("Attachment file fetch failed: %d", file_resp.status_code)
+    async def _download_attachment_once(self, attachable_id: str,
+                                         filename: str,
+                                         download_dir: Path,
+                                         temp_download_uri: str = None) -> Optional[Path]:
+        """Single download attempt. Raises transient errors so the retry wrapper sees them."""
+        download_url = temp_download_uri
+        if not download_url:
+            token = await self._token_manager.get_access_token()
+            if not token:
+                logger.error("No valid access token for attachment download")
                 return None
 
-            download_dir.mkdir(parents=True, exist_ok=True)
-            file_path = download_dir / filename
-            file_path.write_bytes(file_resp.content)
-            logger.info("Downloaded attachment: %s (%d bytes)", filename, len(file_resp.content))
-            return file_path
-        except Exception as e:
-            logger.error("Error downloading attachment %s: %s", filename, e)
+            url = f"{self._base_url}/v3/company/{self._realm_id}/download/{attachable_id}"
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=30,
+                )
+            if resp.status_code != 200:
+                logger.error("Attachment download failed: %d — %s", resp.status_code, resp.text)
+                return None
+            download_url = resp.content.decode("utf-8").strip()
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            file_resp = await client.get(download_url, timeout=30)
+        if file_resp.status_code != 200:
+            logger.error("Attachment file fetch failed: %d", file_resp.status_code)
             return None
+
+        download_dir.mkdir(parents=True, exist_ok=True)
+        file_path = download_dir / filename
+        file_path.write_bytes(file_resp.content)
+        logger.info("Downloaded attachment: %s (%d bytes)", filename, len(file_resp.content))
+        return file_path
 
     async def upload_attachment(self, invoice_id: str, file_path: Path,
                                  include_on_send: bool = False) -> Optional[dict]:
