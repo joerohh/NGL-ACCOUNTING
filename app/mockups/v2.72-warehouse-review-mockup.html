@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Warehouse Invoices · Review screen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  /* ─── Mockup banner ─── */
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
+  /* ─── App shell (simplified for mockup) ─── */
+  .top-bar {
+    background: #fff; border-bottom: 1px solid #e2e8f0;
+    padding: 10px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  .top-bar .brand {
+    font-weight: 700; color: #0f172a; font-size: 0.95rem;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .top-bar .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #16a34a;
+    box-shadow: 0 0 0 2px #dcfce7;
+  }
+  .top-bar .breadcrumb {
+    color: #64748b; font-size: 0.82rem;
+  }
+  .top-bar .breadcrumb .crumb-active { color: #0f172a; font-weight: 600; }
+
+  .page { max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; }
+
+  /* ─── Filter tabs (above table) ─── */
+  .filter-tabs {
+    display: flex; gap: 4px;
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 9px; padding: 4px;
+    margin-bottom: 14px; width: fit-content;
+  }
+  .filter-tabs .tab {
+    padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+    color: #64748b; cursor: pointer; border: none; background: none;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .filter-tabs .tab:hover { color: #0f172a; background: #f8fafc; }
+  .filter-tabs .tab.active {
+    background: #fff7ed; color: #ea580c;
+    box-shadow: inset 0 0 0 1px #fed7aa;
+  }
+  .filter-tabs .tab .count {
+    background: #e2e8f0; color: #475569;
+    padding: 1px 7px; border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+  }
+  .filter-tabs .tab.active .count { background: #fed7aa; color: #9a3412; }
+
+  /* ─── Routing summary band ─── */
+  .routing-summary {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 14px;
+    font-size: 0.84rem;
+    color: #475569;
+    display: flex; align-items: center; gap: 18px;
+    flex-wrap: wrap;
+  }
+  .routing-summary .label {
+    font-weight: 700; color: #0f172a;
+    font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .routing-summary .group {
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .routing-summary .group strong { color: #0f172a; font-weight: 700; }
+  .routing-summary .chip {
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .chip.import    { background: #dbeafe; color: #1e40af; }
+  .chip.export    { background: #f3e8ff; color: #6b21a8; }
+  .chip.warehouse { background: #ffedd5; color: #9a3412; }
+  .chip.unknown   { background: #f1f5f9; color: #94a3b8; }
+  .routing-summary .hint {
+    margin-left: auto;
+    font-size: 0.78rem; color: #94a3b8;
+  }
+  .routing-summary .hint strong.new {
+    color: #ea580c; font-weight: 700;
+    padding: 0 2px;
+  }
+
+  /* ─── Layout: table + side panel ─── */
+  .review-layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: flex-start; }
+
+  /* ─── Table ─── */
+  .table-wrap {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; overflow: hidden;
+  }
+  .merge-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .merge-table thead { background: #f8fafc; }
+  .merge-table th {
+    padding: 11px 14px; text-align: left;
+    font-size: 0.68rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  .merge-table .check-col { width: 36px; padding-left: 14px; padding-right: 6px; text-align: center; }
+  .merge-table th input[type="checkbox"],
+  .merge-table td input[type="checkbox"] {
+    width: 15px; height: 15px; accent-color: #ea580c; cursor: pointer;
+  }
+  .merge-table td {
+    padding: 11px 14px; border-bottom: 1px solid #f1f5f9;
+    color: #334155; vertical-align: middle;
+  }
+  .merge-table tbody tr:hover { background: #fafafa; }
+  .merge-table tbody tr.row-active {
+    background: #fff7ed;
+    box-shadow: inset 4px 0 0 #ea580c;
+  }
+  .merge-table tbody tr.row-active:hover { background: #ffedd5; }
+
+  /* ─── Cells / chips ─── */
+  .mono { font-family: 'SF Mono', Consolas, 'Courier New', monospace; font-size: 0.86rem; }
+  .muted { color: #94a3b8; }
+  .type-badge {
+    display: inline-flex; padding: 2px 9px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .type-badge.import    { background: #dbeafe; color: #1e40af; }
+  .type-badge.export    { background: #f3e8ff; color: #6b21a8; }
+  .type-badge.warehouse { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+  .will-chip {
+    display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 5px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
+    background: #f1f5f9; color: #475569;
+  }
+  .will-chip.pod     { background: #dbeafe; color: #1e40af; }
+  .will-chip.bolpol  { background: #f3e8ff; color: #6b21a8; }
+  .will-chip.whdocs  { background: #ffedd5; color: #9a3412; }
+
+  .status-badge {
+    display: inline-flex; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .status-ok      { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .status-warn    { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+  .status-missing { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+  /* Em-dash cell for "not applicable" columns on warehouse rows */
+  .na-cell {
+    color: #cbd5e1; font-size: 1.05rem; font-weight: 400;
+    letter-spacing: 0;
+    user-select: none;
+  }
+
+  /* ─── Side panel (selected row detail) ─── */
+  .side-panel {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; overflow: hidden;
+    position: sticky; top: 84px;
+  }
+  .side-panel-header {
+    background: linear-gradient(180deg, #ffedd5 0%, #fff7ed 100%);
+    padding: 14px 16px; border-bottom: 1px solid #fed7aa;
+  }
+  .side-panel-header .row-label {
+    font-size: 0.7rem; font-weight: 700; color: #9a3412;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .side-panel-header h3 {
+    font-size: 1rem; color: #0f172a; margin: 4px 0 0;
+  }
+  .side-panel-body { padding: 14px 16px; }
+  .side-panel-body .field {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 6px 0; border-bottom: 1px dashed #f1f5f9; font-size: 0.83rem;
+  }
+  .side-panel-body .field:last-child { border-bottom: none; }
+  .side-panel-body .field .k { color: #64748b; }
+  .side-panel-body .field .v { color: #0f172a; font-weight: 600; }
+  .side-panel-section { padding: 12px 16px; border-top: 1px solid #f1f5f9; }
+  .side-panel-section h4 {
+    font-size: 0.7rem; font-weight: 700; color: #475569;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .attachment-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px 8px 6px; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    margin-bottom: 6px; font-size: 0.82rem;
+    position: relative;
+  }
+  .attachment-row.fail { background: #fef2f2; border-color: #fecaca; }
+  .attachment-row.manual { background: #eff6ff; border-color: #bfdbfe; }
+  .attachment-row .drag-handle {
+    width: 14px; height: 18px;
+    color: #cbd5e1; cursor: grab; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .attachment-row:hover .drag-handle { color: #94a3b8; }
+  .attachment-row .icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .attachment-row .icon.ok   { color: #16a34a; }
+  .attachment-row .icon.fail { color: #dc2626; }
+  .attachment-row .icon.manual { color: #2563eb; }
+  .attachment-row .name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #0f172a; font-weight: 500;
+  }
+  .attachment-row .meta {
+    color: #94a3b8; font-size: 0.74rem; white-space: nowrap;
+  }
+  .attachment-row .tag {
+    font-size: 0.65rem; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .attachment-row .tag.convert  { background: #dbeafe; color: #1e40af; }
+  .attachment-row .tag.qbo      { background: #ecfccb; color: #4d7c0f; }
+  .attachment-row .tag.added    { background: #cffafe; color: #155e75; }
+  .attachment-row .tag.tms      { background: #fef3c7; color: #92400e; }
+  .attachment-row .remove-btn {
+    width: 22px; height: 22px; flex-shrink: 0;
+    border: 1px solid transparent; background: none;
+    color: #cbd5e1; cursor: pointer; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.12s;
+  }
+  .attachment-row .remove-btn:hover {
+    color: #dc2626; background: #fee2e2; border-color: #fecaca;
+  }
+  .attachment-row .fail-reason {
+    font-size: 0.74rem; color: #b91c1c; margin-top: 2px;
+  }
+  /* Add-doc drop zone — slim and subtle, but clearly different from a file row.
+     Dashed border (vs file rows' solid), no background fill, plus-icon left-aligned. */
+  .add-doc-zone {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; margin-top: 10px;
+    border: 1.5px dashed #cbd5e1; border-radius: 8px;
+    background: transparent;
+    color: #64748b;
+    padding: 10px 14px;
+    cursor: pointer; transition: border-color 0.12s, color 0.12s, background 0.12s;
+    text-align: left;
+    font-family: inherit;
+  }
+  .add-doc-zone:hover {
+    border-color: #ea580c;
+    color: #9a3412;
+    background: #fff7ed;
+  }
+  .add-doc-zone .plus-icon {
+    width: 14px; height: 14px; flex-shrink: 0;
+  }
+  .add-doc-zone .label-line { font-size: 0.82rem; font-weight: 600; }
+  .add-doc-zone .help-line { color: #94a3b8; font-size: 0.75rem; margin-left: auto; }
+  .add-doc-zone:hover .help-line { color: #c2410c; }
+  .manual-drop {
+    margin-top: 8px;
+    border: 2px dashed #cbd5e1; border-radius: 8px;
+    padding: 14px; text-align: center;
+    color: #64748b; font-size: 0.8rem;
+    background: #fafafa;
+  }
+  .manual-drop.alert {
+    border-color: #fecaca; background: #fef2f2; color: #b91c1c;
+  }
+  .manual-drop .title { font-weight: 700; margin-bottom: 4px; color: inherit; }
+
+  /* Reset bar at bottom of attachment list */
+  .reset-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 4px 0; font-size: 0.74rem; color: #94a3b8;
+  }
+  .reset-row .reset-link {
+    color: #64748b; text-decoration: underline; cursor: pointer;
+    font-weight: 500;
+  }
+  .reset-row .reset-link:hover { color: #ea580c; }
+
+  /* ─── Excel-not-installed banner (top of screen warning) ─── */
+  .agent-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; padding: 9px 14px;
+    color: #78350f; font-size: 0.82rem; margin-bottom: 14px;
+  }
+  .agent-banner .badge {
+    background: #fde68a; color: #92400e;
+    font-size: 0.7rem; font-weight: 700;
+    padding: 2px 7px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
+  /* Error banner shown at the top of a side panel when fetch had problems */
+  .panel-error-banner {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: #fef2f2; border-bottom: 1px solid #fecaca;
+    padding: 10px 16px; color: #991b1b; font-size: 0.78rem;
+  }
+  .panel-error-banner svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+  .panel-error-banner strong { color: #7f1d1d; }
+
+  /* Empty-state (zero attachments) banner */
+  .panel-empty-banner {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: #fffbeb; border-bottom: 1px solid #fde68a;
+    padding: 10px 16px; color: #78350f; font-size: 0.78rem;
+  }
+  .panel-empty-banner svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+
+  /* ─── Footer notes ─── */
+  .mockup-notes {
+    margin: 24px 0 0;
+    padding: 16px 18px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    color: #475569; font-size: 0.84rem; line-height: 1.55;
+  }
+  .mockup-notes h4 { color: #0f172a; margin-bottom: 8px; font-size: 0.9rem; }
+  .mockup-notes ul { padding-left: 18px; margin: 6px 0 10px; }
+  .mockup-notes li { margin-bottom: 4px; }
+  .mockup-notes .legend {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
+    padding: 10px; background: #f8fafc; border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">Mockup</span>
+  <span>v2.72 · Merge Tool · Warehouse invoices on Review screen</span>
+</div>
+
+<div class="top-bar">
+  <div class="brand">
+    <span class="dot"></span>
+    <span>NGL Accounting</span>
+  </div>
+  <div class="breadcrumb">Merge Tool &rsaquo; <span class="crumb-active">Review (Step 2 of 3)</span></div>
+</div>
+
+<div class="page">
+
+  <!-- Filter tabs (the new Warehouse tab) -->
+  <div class="filter-tabs">
+    <button class="tab">All <span class="count">9</span></button>
+    <button class="tab">Import <span class="count">3</span></button>
+    <button class="tab">Export <span class="count">2</span></button>
+    <button class="tab active">Warehouse <span class="count">4</span></button>
+    <button class="tab">Unknown <span class="count">0</span></button>
+  </div>
+
+  <!-- Routing summary band -->
+  <div class="routing-summary">
+    <span class="label">Will fetch</span>
+
+    <span class="group">
+      <span class="chip import">POD</span>
+      <strong>3</strong> imports
+    </span>
+    <span class="group">
+      <span class="chip export">BL/POL</span>
+      <strong>2</strong> exports
+    </span>
+    <span class="group">
+      <span class="chip warehouse">All QBO Docs</span>
+      <strong>4</strong> warehouse
+    </span>
+
+    <span class="hint">
+      Decided by INV# letter (<strong class="new">M / E / W</strong>) · falls back to WO# letter when prefix is non-standard
+    </span>
+  </div>
+
+  <div class="review-layout">
+
+    <!-- LEFT: the Review table -->
+    <div class="table-wrap">
+      <table class="merge-table">
+        <thead>
+          <tr>
+            <th class="check-col"><input type="checkbox" checked></th>
+            <th>Row</th>
+            <th>Type</th>
+            <th>Container #</th>
+            <th>INV #</th>
+            <th>WO #</th>
+            <th>Customer</th>
+            <th>Will fetch</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- An import row, for comparison -->
+          <tr>
+            <td class="check-col"><input type="checkbox" checked></td>
+            <td>1</td>
+            <td><span class="type-badge import">Import</span></td>
+            <td class="mono">TEMU8809194</td>
+            <td class="mono">LM2602170009</td>
+            <td class="mono">LM2602170009</td>
+            <td>NEXTGEN LOGISTICS</td>
+            <td><span class="will-chip pod">POD</span></td>
+            <td><span class="status-badge status-ok">Ready</span></td>
+          </tr>
+
+          <!-- An export row -->
+          <tr>
+            <td class="check-col"><input type="checkbox" checked></td>
+            <td>2</td>
+            <td><span class="type-badge export">Export</span></td>
+            <td class="mono">YMMU6229671</td>
+            <td class="mono">LE2602170011</td>
+            <td class="mono">LX2602170012</td>
+            <td>PACIFIC RIM EXPORTS</td>
+            <td><span class="will-chip bolpol">BL/POL</span></td>
+            <td><span class="status-badge status-ok">Ready</span></td>
+          </tr>
+
+          <!-- Warehouse rows — note Container # and WO # show literal "warehouse" -->
+          <tr class="row-active">
+            <td class="check-col"><input type="checkbox" checked></td>
+            <td>90</td>
+            <td><span class="type-badge warehouse">Warehouse</span></td>
+            <td><span class="na-cell">—</span></td>
+            <td class="mono">LW260515P01</td>
+            <td><span class="na-cell">—</span></td>
+            <td>INDIMEX GLOBAL LLC</td>
+            <td><span class="will-chip whdocs">All QBO Docs</span></td>
+            <td><span class="status-badge status-ok">Ready</span></td>
+          </tr>
+
+          <tr>
+            <td class="check-col"><input type="checkbox" checked></td>
+            <td>91</td>
+            <td><span class="type-badge warehouse">Warehouse</span></td>
+            <td><span class="na-cell">—</span></td>
+            <td class="mono">LW260515P02</td>
+            <td><span class="na-cell">—</span></td>
+            <td>INDIMEX GLOBAL LLC</td>
+            <td><span class="will-chip whdocs">All QBO Docs</span></td>
+            <td><span class="status-badge status-ok">Ready</span></td>
+          </tr>
+
+          <tr>
+            <td class="check-col"><input type="checkbox" checked></td>
+            <td>92</td>
+            <td><span class="type-badge warehouse">Warehouse</span></td>
+            <td><span class="na-cell">—</span></td>
+            <td class="mono">LW260515P03</td>
+            <td><span class="na-cell">—</span></td>
+            <td>INDIMEX GLOBAL LLC</td>
+            <td><span class="will-chip whdocs">All QBO Docs</span></td>
+            <td><span class="status-badge status-warn">Verify</span></td>
+          </tr>
+
+          <tr>
+            <td class="check-col"><input type="checkbox" checked></td>
+            <td>93</td>
+            <td><span class="type-badge warehouse">Warehouse</span></td>
+            <td><span class="na-cell">—</span></td>
+            <td class="mono">LW260515P04</td>
+            <td><span class="na-cell">—</span></td>
+            <td>INDIMEX GLOBAL LLC</td>
+            <td><span class="will-chip whdocs">All QBO Docs</span></td>
+            <td><span class="status-badge status-ok">Ready</span></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- RIGHT: side panel — selected warehouse row -->
+    <div class="side-panel">
+      <div class="side-panel-header">
+        <div class="row-label">Row 90 · Warehouse</div>
+        <h3>LW260515P01</h3>
+      </div>
+
+      <div class="side-panel-body">
+        <div class="field"><span class="k">Customer</span><span class="v">INDIMEX GLOBAL LLC</span></div>
+        <div class="field"><span class="k">Invoice date</span><span class="v">05/15/2026</span></div>
+        <div class="field"><span class="k">Container #</span><span class="v muted">— not applicable</span></div>
+        <div class="field"><span class="k">WO #</span><span class="v muted">— not applicable</span></div>
+        <div class="field"><span class="k">Source</span><span class="v">QBO only</span></div>
+        <div class="field"><span class="k">TMS fallback</span><span class="v muted">disabled (warehouse)</span></div>
+      </div>
+
+      <div class="side-panel-section">
+        <h4>Documents in this merge · 3 files</h4>
+
+        <!-- 1. QBO-fetched, converted from xlsx -->
+        <div class="attachment-row">
+          <span class="drag-handle" title="Drag to reorder">
+            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+          </span>
+          <span class="icon ok">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+          <div style="flex:1; min-width:0;">
+            <div class="name">APRIL CHARGE 2026.xlsx</div>
+            <div class="meta">20 pages · 838 KB</div>
+          </div>
+          <span class="tag qbo">From QBO</span>
+          <span class="tag convert">XLSX → PDF</span>
+          <button class="remove-btn" title="Remove from this merge (doesn't touch QBO)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- 2. QBO-fetched, native PDF -->
+        <div class="attachment-row">
+          <span class="drag-handle">
+            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+          </span>
+          <span class="icon ok">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+          <div style="flex:1; min-width:0;">
+            <div class="name">Warehouse_Receipt_signed.pdf</div>
+            <div class="meta">2 pages · 412 KB</div>
+          </div>
+          <span class="tag qbo">From QBO</span>
+          <button class="remove-btn" title="Remove from this merge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- 3. User-added file -->
+        <div class="attachment-row manual">
+          <span class="drag-handle">
+            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+          </span>
+          <span class="icon manual">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </span>
+          <div style="flex:1; min-width:0;">
+            <div class="name">supplement_invoice.pdf</div>
+            <div class="meta">1 page · 96 KB</div>
+          </div>
+          <span class="tag added">Added by you</span>
+          <button class="remove-btn" title="Remove this file">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- + Add another document affordance -->
+        <button class="add-doc-zone" type="button">
+          <svg class="plus-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="label-line">Add document</span>
+          <span class="help-line">drop a PDF or click to browse</span>
+        </button>
+
+        <div class="reset-row">
+          <span>Drag handles to reorder · × to remove</span>
+          <span class="reset-link">Reset</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── Second mini-panel: showing the same affordances on an IMPORT row ─── -->
+  <div style="margin-top: 28px;">
+    <h3 style="font-size: 0.95rem; color: #0f172a; margin-bottom: 4px;">Same controls on an Import row (Row 1)</h3>
+    <p style="color: #64748b; font-size: 0.82rem; margin-bottom: 12px;">
+      The add / remove / reorder controls are not warehouse-specific — every row gets them.
+      Here's how Row 1 (TEMU8809194 import) sidebar would look after the user added a packing list and reordered.
+    </p>
+
+    <div style="display: grid; grid-template-columns: 1fr 380px; gap: 16px;">
+      <div></div>
+      <div class="side-panel" style="position: static;">
+        <div class="side-panel-header" style="background: linear-gradient(180deg, #dbeafe 0%, #eff6ff 100%); border-bottom-color: #bfdbfe;">
+          <div class="row-label" style="color: #1e40af;">Row 1 · Import</div>
+          <h3>TEMU8809194</h3>
+        </div>
+
+        <div class="side-panel-body">
+          <div class="field"><span class="k">Customer</span><span class="v">NEXTGEN LOGISTICS</span></div>
+          <div class="field"><span class="k">Container #</span><span class="v">TEMU8809194</span></div>
+          <div class="field"><span class="k">WO #</span><span class="v">LM2602170009</span></div>
+          <div class="field"><span class="k">Source</span><span class="v">QBO → TMS fallback</span></div>
+        </div>
+
+        <div class="side-panel-section">
+          <h4>Documents in this merge · 3 files</h4>
+
+          <!-- POD from TMS -->
+          <div class="attachment-row">
+            <span class="drag-handle">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+            </span>
+            <span class="icon ok">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div class="name">TEMU8809194_pod.pdf</div>
+              <div class="meta">3 pages · 412 KB</div>
+            </div>
+            <span class="tag tms">From TMS</span>
+            <button class="remove-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+
+          <!-- Manually added by user -->
+          <div class="attachment-row manual">
+            <span class="drag-handle">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+            </span>
+            <span class="icon manual">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div class="name">packing_list.pdf</div>
+              <div class="meta">1 page · 84 KB</div>
+            </div>
+            <span class="tag added">Added by you</span>
+            <button class="remove-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+
+          <!-- BOL from QBO -->
+          <div class="attachment-row">
+            <span class="drag-handle">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+            </span>
+            <span class="icon ok">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div class="name">TEMU8809194_bol.pdf</div>
+              <div class="meta">2 pages · 287 KB</div>
+            </div>
+            <span class="tag qbo">From QBO</span>
+            <button class="remove-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+
+          <button class="add-doc-zone" type="button">
+            <svg class="plus-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="label-line">Add document</span>
+            <span class="help-line">drop a PDF or click to browse</span>
+          </button>
+
+          <div class="reset-row">
+            <span>Drag handles to reorder · × to remove</span>
+            <span class="reset-link">Reset</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Third panel: error states ─── -->
+  <div style="margin-top: 28px;">
+    <h3 style="font-size: 0.95rem; color: #0f172a; margin-bottom: 4px;">Error states</h3>
+    <p style="color: #64748b; font-size: 0.82rem; margin-bottom: 12px;">
+      Two failure cases the sidebar handles: an attachment that failed to convert,
+      and a row where QBO returned zero attachments at all.
+    </p>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+
+      <!-- Error case A: partial — some converted, some failed -->
+      <div class="side-panel" style="position: static;">
+        <div class="side-panel-header" style="background: linear-gradient(180deg, #fef2f2 0%, #fff 100%); border-bottom-color: #fecaca;">
+          <div class="row-label" style="color: #991b1b;">Row 92 · Warehouse · partial</div>
+          <h3>LW260515P03</h3>
+        </div>
+        <div class="panel-error-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span><strong>1 attachment couldn't be converted.</strong> The merge will continue with what worked — drop in a replacement if you have one.</span>
+        </div>
+
+        <div class="side-panel-body">
+          <div class="field"><span class="k">Customer</span><span class="v">INDIMEX GLOBAL LLC</span></div>
+          <div class="field"><span class="k">Source</span><span class="v">QBO only</span></div>
+        </div>
+
+        <div class="side-panel-section">
+          <h4>Documents in this merge · 2 of 3</h4>
+
+          <!-- One successful file -->
+          <div class="attachment-row">
+            <span class="drag-handle">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+            </span>
+            <span class="icon ok">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div class="name">MAY CHARGE 2026.xlsx</div>
+              <div class="meta">14 pages · 612 KB</div>
+            </div>
+            <span class="tag qbo">From QBO</span>
+            <span class="tag convert">XLSX → PDF</span>
+            <button class="remove-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+
+          <!-- The FAILED file -->
+          <div class="attachment-row fail">
+            <span class="drag-handle" style="color: #fca5a5;">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+            </span>
+            <span class="icon fail">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div class="name">DAMAGED_RECEIPT.xlsx</div>
+              <div class="fail-reason">Couldn't convert — file is password-protected</div>
+            </div>
+            <button class="remove-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+
+          <!-- And a successful native PDF -->
+          <div class="attachment-row">
+            <span class="drag-handle">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="8" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/></svg>
+            </span>
+            <span class="icon ok">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div class="name">signed_pol.pdf</div>
+              <div class="meta">1 page · 84 KB</div>
+            </div>
+            <span class="tag qbo">From QBO</span>
+            <button class="remove-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+
+          <button class="add-doc-zone" type="button">
+            <svg class="plus-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="label-line">Add document</span>
+            <span class="help-line">drop a PDF or click to browse</span>
+          </button>
+
+          <div class="reset-row">
+            <span>Drag · × · click reason for details</span>
+            <span class="reset-link">Reset</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error case B: zero attachments at all -->
+      <div class="side-panel" style="position: static;">
+        <div class="side-panel-header" style="background: linear-gradient(180deg, #fffbeb 0%, #fff 100%); border-bottom-color: #fde68a;">
+          <div class="row-label" style="color: #92400e;">Row 94 · Warehouse · empty</div>
+          <h3>LW260515P05</h3>
+        </div>
+        <div class="panel-empty-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span><strong>No documents on QBO.</strong> Upload one manually below — this row can't merge without it.</span>
+        </div>
+
+        <div class="side-panel-body">
+          <div class="field"><span class="k">Customer</span><span class="v">INDIMEX GLOBAL LLC</span></div>
+          <div class="field"><span class="k">QBO attachments</span><span class="v muted">0 found</span></div>
+          <div class="field"><span class="k">TMS fallback</span><span class="v muted">disabled (warehouse)</span></div>
+        </div>
+
+        <div class="side-panel-section">
+          <h4>Documents in this merge · 0 files</h4>
+
+          <button class="add-doc-zone" type="button" style="border-color: #fcd34d; color: #92400e; background: #fffbeb;">
+            <svg class="plus-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="label-line">Add document</span>
+            <span class="help-line" style="color: #b45309;">drop a PDF or click to browse</span>
+          </button>
+
+          <p style="color: #94a3b8; font-size: 0.74rem; margin-top: 10px; padding: 0 4px;">
+            You can also drop PDFs onto the bulk drop zone above the table — files whose names contain
+            <span class="mono" style="color:#475569;">LW260515P05</span> will land in this row automatically.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Mockup explainer footer -->
+  <div class="mockup-notes">
+    <h4>What's new on this screen</h4>
+    <ul>
+      <li><strong>Warehouse filter tab</strong> added next to Import/Export, with a row count.</li>
+      <li><strong>Orange "Warehouse" type badge</strong> on each row, using the NGL accent so it reads as the new type.</li>
+      <li><strong>Container # and WO # cells</strong> on warehouse rows show a faint em-dash <span class="na-cell">—</span> to indicate "not applicable." Any value the exporter stuffed into those columns is ignored.</li>
+      <li><strong>"Will fetch" chip</strong> reads <span class="will-chip whdocs">All QBO Docs</span> (vs. POD / BL/POL).</li>
+      <li><strong>Routing summary hint</strong> updates to mention M/E/W instead of just M/E.</li>
+      <li><strong>Side panel — customizable document list:</strong>
+        <ul style="margin-top: 6px;">
+          <li>Each attachment has a <strong>drag handle</strong> to reorder, and an <strong>× button</strong> to remove from this merge (QBO is untouched).</li>
+          <li><strong>+ Add document</strong> button below the list — drop in extra PDFs that weren't on QBO.</li>
+          <li>Source tags tell you where each file came from: <span class="tag qbo">From QBO</span> · <span class="tag tms">From TMS</span> · <span class="tag added">Added by you</span>. The <span class="tag convert">XLSX → PDF</span> tag marks files we converted from Excel.</li>
+          <li><strong>Reset</strong> link at the bottom puts the list back to what was originally fetched, undoing any reorders/removes/adds. No network call — it's a local undo only.</li>
+          <li>These controls apply to <strong>every</strong> row type — import, export, and warehouse — not just warehouse.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h4>Legend</h4>
+    <div class="legend">
+      <span class="type-badge import">Import</span>
+      <span class="type-badge export">Export</span>
+      <span class="type-badge warehouse">Warehouse</span>
+      <span class="will-chip pod">POD</span>
+      <span class="will-chip bolpol">BL/POL</span>
+      <span class="will-chip whdocs">All QBO Docs</span>
+      <span style="display:inline-flex; align-items:center; gap:6px; padding-left:4px;">
+        <span class="na-cell">—</span><span style="font-size:0.78rem; color:#64748b;">not applicable</span>
+      </span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

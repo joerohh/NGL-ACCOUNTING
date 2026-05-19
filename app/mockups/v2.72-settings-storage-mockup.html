@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Settings · Storage section</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px;
+  }
+
+  /* ─── Mockup banner ─── */
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
+  /* ─── App shell ─── */
+  .top-bar {
+    background: #fff; border-bottom: 1px solid #e2e8f0;
+    padding: 10px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  .top-bar .brand {
+    font-weight: 700; color: #0f172a; font-size: 0.95rem;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .top-bar .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #16a34a;
+    box-shadow: 0 0 0 2px #dcfce7;
+  }
+  .top-bar .breadcrumb { color: #64748b; font-size: 0.82rem; }
+  .top-bar .breadcrumb .crumb-active { color: #0f172a; font-weight: 600; }
+
+  /* ─── Side nav simulation ─── */
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 0; min-height: calc(100vh - 80px); }
+  .side-nav {
+    background: #fff; border-right: 1px solid #e2e8f0;
+    padding: 18px 12px;
+  }
+  .nav-section-label {
+    font-size: 0.65rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 8px 10px 6px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-radius: 6px;
+    font-size: 0.85rem; color: #475569; cursor: pointer;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: #f8fafc; color: #0f172a; }
+  .nav-item.active { background: #fff7ed; color: #ea580c; font-weight: 600; }
+  .nav-item.active svg { color: #ea580c; }
+  .nav-item svg { color: #94a3b8; }
+
+  .content { padding: 24px 28px 40px; max-width: 880px; }
+  .page-title {
+    font-size: 1.4rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 6px;
+  }
+  .page-sub {
+    color: #64748b; font-size: 0.88rem; margin-bottom: 22px;
+  }
+
+  /* ─── Card ─── */
+  .panel-card {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .section-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.7rem; font-weight: 700; color: #475569;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 14px;
+  }
+  .section-label svg { color: #ea580c; }
+
+  /* ─── Storage rows ─── */
+  .storage-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 18px; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid #f1f5f9;
+  }
+  .storage-row:last-child { border-bottom: none; }
+  .storage-row .label {
+    font-size: 0.82rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 2px;
+  }
+  .storage-row .path {
+    font-family: 'SF Mono', Consolas, 'Courier New', monospace;
+    color: #475569; font-size: 0.82rem;
+    word-break: break-all;
+  }
+  .storage-row .meta {
+    color: #64748b; font-size: 0.78rem; margin-top: 4px;
+  }
+  .storage-row .meta strong { color: #0f172a; font-weight: 700; }
+
+  /* Bar visualisation */
+  .size-bar {
+    margin-top: 10px;
+    height: 8px; width: 100%;
+    background: #f1f5f9; border-radius: 4px; overflow: hidden;
+  }
+  .size-bar .fill {
+    height: 100%; background: linear-gradient(90deg, #ea580c, #f97316);
+    border-radius: 4px;
+  }
+  .size-bar .fill.warn { background: linear-gradient(90deg, #d97706, #f59e0b); }
+
+  /* Buttons */
+  .btn {
+    padding: 7px 14px; border-radius: 7px; font-size: 0.82rem;
+    font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid transparent;
+    transition: all 0.12s;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: #ea580c; color: #fff;
+  }
+  .btn-primary:hover { background: #c2410c; }
+  .btn-secondary {
+    background: #fff; color: #334155;
+    border-color: #e2e8f0;
+  }
+  .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+  .btn-ghost {
+    background: transparent; color: #64748b;
+  }
+  .btn-ghost:hover { color: #ea580c; }
+
+  /* Auto-cleanup callout */
+  .cleanup-callout {
+    margin-top: 14px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa; border-radius: 8px;
+    padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .cleanup-callout svg {
+    color: #ea580c; flex-shrink: 0; margin-top: 1px;
+  }
+  .cleanup-callout .text { font-size: 0.83rem; color: #7c2d12; line-height: 1.5; }
+  .cleanup-callout .text strong { font-weight: 700; }
+  .cleanup-callout .text .last {
+    display: block; margin-top: 4px;
+    color: #9a3412; font-size: 0.76rem;
+  }
+
+  .action-row {
+    margin-top: 14px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+
+  /* Very subtle footnote — barely-there text */
+  .subtle-footnote {
+    margin-top: 16px;
+    padding-top: 10px;
+    border-top: 1px solid #f8fafc;
+    color: #cbd5e1;
+    font-size: 0.72rem;
+    font-style: italic;
+    line-height: 1.4;
+  }
+
+  /* ─── Footer notes ─── */
+  .mockup-notes {
+    margin: 24px 0 0;
+    padding: 16px 18px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    color: #475569; font-size: 0.84rem; line-height: 1.55;
+  }
+  .mockup-notes h4 { color: #0f172a; margin-bottom: 8px; font-size: 0.9rem; }
+  .mockup-notes ul { padding-left: 18px; margin: 6px 0 10px; }
+  .mockup-notes li { margin-bottom: 4px; }
+  .mockup-notes code {
+    background: #f1f5f9; padding: 1px 6px; border-radius: 3px;
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">Mockup</span>
+  <span>v2.72 · Settings · new Storage section</span>
+</div>
+
+<div class="top-bar">
+  <div class="brand">
+    <span class="dot"></span>
+    <span>NGL Accounting</span>
+  </div>
+  <div class="breadcrumb">Settings &rsaquo; <span class="crumb-active">Storage</span></div>
+</div>
+
+<div class="layout">
+
+  <!-- Simulated side nav for context -->
+  <div class="side-nav">
+    <div class="nav-section-label">Tools</div>
+    <div class="nav-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Merge Tool
+    </div>
+    <div class="nav-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Invoice Sender
+    </div>
+    <div class="nav-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Customers
+    </div>
+    <div class="nav-section-label" style="margin-top:14px;">System</div>
+    <div class="nav-item active">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </div>
+  </div>
+
+  <!-- Settings content -->
+  <div class="content">
+
+    <div class="page-title">Settings</div>
+    <div class="page-sub">Manage where your merged files go and how long they stick around.</div>
+
+    <!-- (other settings sections would live above this — sign-in, output location, notifications, etc.) -->
+
+    <!-- ─── NEW: Storage section ─── -->
+    <div class="panel-card">
+      <div class="section-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
+        Storage
+      </div>
+
+      <!-- Row 1: Saved merged files -->
+      <div class="storage-row">
+        <div style="min-width:0;">
+          <div class="label">Saved merged files</div>
+          <div class="path">C:\Users\Joseph\Documents\NGL Merges</div>
+          <div class="meta">
+            <strong>8.4 GB</strong> · 162 files · 47 folders
+          </div>
+          <div class="size-bar"><div class="fill" style="width:42%;"></div></div>
+        </div>
+        <div>
+          <button class="btn btn-secondary">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Open folder
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 2: Temporary app files -->
+      <div class="storage-row">
+        <div style="min-width:0;">
+          <div class="label">Temporary app files</div>
+          <div class="path">…\NGL Accounting\agent\downloads</div>
+          <div class="meta">
+            <strong>1.2 GB</strong> · 38 batches
+            <span style="color:#94a3b8;"> · auto-cleaned by the same 7-day rule</span>
+          </div>
+          <div class="size-bar"><div class="fill" style="width:6%;"></div></div>
+        </div>
+      </div>
+
+      <!-- Auto-cleanup callout -->
+      <div class="cleanup-callout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <div class="text">
+          <strong>Auto-cleanup is on.</strong>
+          Merged files and working files older than <strong>7 days</strong> are deleted automatically.
+          The current week of output always stays — you've got a full week to review each batch in Explorer.
+          <span class="last">Last cleanup ran today at 9:14 AM · removed 14 files (612 MB)</span>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-secondary">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          Clean up now
+        </button>
+        <button class="btn btn-ghost">Change output folder…</button>
+      </div>
+
+      <div class="subtle-footnote">
+        Only the Merge Tool saves files to disk. Invoice Sender and Customer Manager don't.
+      </div>
+    </div>
+
+    <!-- Other settings cards would follow (Notifications, Selectors, Backups, etc.) -->
+
+    <!-- Footer notes -->
+    <div class="mockup-notes">
+      <h4>What's new on this screen</h4>
+      <ul>
+        <li>New <strong>Storage</strong> card under Settings — visible alongside existing cards (sign-in, notifications, selectors, backups).</li>
+        <li>Two storage rows: <strong>Saved merged files</strong> (your deliverables) and <strong>Temporary app files</strong> (behind-the-scenes downloads). Same 7-day cleanup rule for both.</li>
+        <li><strong>Open folder</strong> button on the Saved merged files row launches Windows Explorer at your chosen location.</li>
+        <li>Orange callout explains the 7-day rule in plain English so there are no surprises about files disappearing.</li>
+        <li><strong>Clean up now</strong> runs the 7-day sweep on demand if you want to free space immediately instead of waiting for the next startup.</li>
+        <li><strong>Change output folder</strong> takes you to the existing folder-picker dialog.</li>
+        <li>Numbers (8.4 GB / 1.2 GB / "Last cleanup…") are placeholders. The real values are computed by the agent the first time the Settings page loads, then cached.</li>
+      </ul>
+
+      <h4>Where the data comes from</h4>
+      <ul>
+        <li>Agent exposes <code>/storage/info</code> → <code>{ output_size_bytes, output_file_count, downloads_size_bytes, downloads_batch_count, last_cleanup_ts, last_cleanup_freed_bytes }</code>.</li>
+        <li>Sweep runs on agent startup; the "Clean up now" button calls <code>POST /storage/cleanup</code>.</li>
+        <li>Only deletes files inside <code>Merge Outputs/</code> and <code>agent/downloads/</code>. Never touches anything else in your chosen folder.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
