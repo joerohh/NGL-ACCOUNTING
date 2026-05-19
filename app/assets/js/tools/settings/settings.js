@@ -662,7 +662,7 @@ function renderStorageInfo(info) {
 }
 
 window.settingsCleanupNow = async function() {
-  const btn = document.querySelector('[onclick="settingsCleanupNow()"]');
+  const btn = document.querySelector('[onclick="window.settingsCleanupNow()"]');
   if (btn) btn.disabled = true;
   try {
     const res = await agentBridge._authFetch(agentBridge.baseUrl + '/storage/cleanup', { method: 'POST' });
