@@ -33,6 +33,7 @@ AUDIT_LOG_FILE = DATA_DIR / "audit_log.jsonl"
 DO_SENDER_CACHE_FILE = DATA_DIR / "do_sender_cache.json"
 BACKUP_DIR = APPDATA_DIR / "backups"
 BACKUP_RETAIN_DAYS = 30  # keep last 30 daily backups
+STORAGE_RETAIN_DAYS = 7  # cleanup threshold for Merge Outputs + agent downloads
 
 # Ensure directories exist
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
