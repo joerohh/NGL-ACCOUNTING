@@ -14,6 +14,7 @@ Page-setup rules from the POC (scratch/excel_to_pdf_test.py):
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 from dataclasses import dataclass
@@ -70,6 +71,10 @@ def set_excel_available(value: bool) -> None:
 class ExcelSession:
     """Async context manager that owns a single Excel COM process.
 
+    All COM calls run on a single dedicated thread (max_workers=1 executor)
+    so that COM STA apartment-threading rules are satisfied — the same thread
+    that calls CoInitialize/DispatchEx must call Quit/CoUninitialize.
+
     Usage:
         async with ExcelSession() as session:
             result = await session.convert(Path("a.xlsx"), Path("a.pdf"))
@@ -79,13 +84,23 @@ class ExcelSession:
     def __init__(self) -> None:
         self._excel = None
         self._pythoncom = None
+        # Single-thread executor keeps all COM work on one OS thread.
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    def _run(self, fn, *args):
+        """Submit fn(*args) to the dedicated COM thread and await it."""
+        loop = asyncio.get_running_loop()
+        return loop.run_in_executor(self._executor, fn, *args)
 
     async def __aenter__(self) -> "ExcelSession":
-        await asyncio.to_thread(self._start_sync)
+        await self._run(self._start_sync)
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
-        await asyncio.to_thread(self._stop_sync)
+        try:
+            await self._run(self._stop_sync)
+        finally:
+            self._executor.shutdown(wait=False)
 
     def _start_sync(self) -> None:
         import pythoncom
@@ -118,7 +133,7 @@ class ExcelSession:
         """Convert one xlsx file. Wraps the sync converter in a timeout."""
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(self._convert_sync, src, out),
+                self._run(self._convert_sync, src, out),
                 timeout=PER_FILE_TIMEOUT_S,
             )
         except asyncio.TimeoutError:
