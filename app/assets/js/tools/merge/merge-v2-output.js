@@ -80,7 +80,7 @@ export function dateFolderParts(d = new Date()) {
 
 // ── Path builder ──
 //   Returns the subfolder relative to baseLocation, e.g.:
-//     "Per Container/2026-05/2026-05-07"
+//     "Per Invoice/2026-05/2026-05-07"
 
 export function subfolderFor(modeKey, when = new Date()) {
   const mode = modeByKey(modeKey);
