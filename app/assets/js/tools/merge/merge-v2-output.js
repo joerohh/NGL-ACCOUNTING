@@ -98,30 +98,35 @@ function sanitizeFilenamePart(s) {
   return String(s || '').replace(/[\/\\:*?"<>|]/g, '_').trim();
 }
 
-export function perContainerFilename(row, modeKey) {
-  // Use container as primary, fall back to WO# then INV#.
-  const container = sanitizeFilenamePart(row.containerNumber);
+export function perInvoiceFilename(row, modeKey) {
+  // All row types name files by INV# only — container # is dropped from filenames.
   const inv = sanitizeFilenamePart(row.invoiceNumber);
-  const wo = sanitizeFilenamePart(row.workOrderNumber);
-  const stem = container || wo || inv || `row-${row.rowNum}`;
-  const invSuffix = inv ? `_${inv}` : '';
+  if (!inv) {
+    throw new Error(`perInvoiceFilename: row ${row.rowNum || '?'} has no INV#`);
+  }
 
   if (modeKey === 'per-container') {
-    return `${stem}${invSuffix}.pdf`;
+    return `${inv}.pdf`;
   }
   if (modeKey === 'per-container-invoice') {
-    return `${stem}${invSuffix}_INV.pdf`;
+    return `${inv}_INV.pdf`;
   }
   if (modeKey === 'per-container-document') {
-    // podLabel is one of POD/BL/POL/IT/ITE on success or '—' on miss/error.
-    // Treat the em-dash sentinel as "no label" so we don't emit "FOO_—.pdf".
+    // For warehouse rows, podLabel will be 'Warehouse' from the agent —
+    // we want the short '_WH' suffix instead.
+    const routingType = row.fetchResult?.routingType || row.routingType;
     const rawLabel = row.fetchResult?.podLabel;
-    const docLabel = (rawLabel && rawLabel !== '—')
-      ? sanitizeFilenamePart(rawLabel)
-      : 'DOC';
-    return `${stem}${invSuffix}_${docLabel}.pdf`;
+    let docLabel;
+    if (routingType === 'warehouse') {
+      docLabel = 'WH';
+    } else if (rawLabel && rawLabel !== '—') {
+      docLabel = sanitizeFilenamePart(rawLabel);
+    } else {
+      docLabel = 'DOC';
+    }
+    return `${inv}_${docLabel}.pdf`;
   }
-  throw new Error(`perContainerFilename: not a per-container mode: ${modeKey}`);
+  throw new Error(`perInvoiceFilename: not a per-invoice mode: ${modeKey}`);
 }
 
 export function singleOutputFilename(modeKey, when = new Date()) {

@@ -6,7 +6,7 @@
 import { agentBridge } from '../../shared/agent-client.js';
 import {
   MODES, modeByKey,
-  perContainerFilename, singleOutputFilename,
+  perInvoiceFilename, singleOutputFilename,
 } from './merge-v2-output.js';
 
 // ── Fetch a single agent file as ArrayBuffer ──
@@ -125,7 +125,7 @@ async function runPerContainer(rows, jobId, modeKey, onProgress) {
     if (bufs.length === 0) continue;
 
     const { bytes: merged, pageCount } = await concatPages(bufs);
-    const desiredName = perContainerFilename(row, modeKey);
+    const desiredName = perInvoiceFilename(row, modeKey);
     const finalName = uniqueFilename(desiredName, usedNames);
     files.push({ filename: finalName, bytes: merged });
     totalBytes += merged.byteLength;
