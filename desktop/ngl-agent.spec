@@ -124,6 +124,12 @@ a = Analysis(
         "bcrypt",
         # sqlite3
         "sqlite3",
+        # pywin32 — Excel COM for xlsx→PDF conversion
+        "win32com",
+        "win32com.client",
+        "pythoncom",
+        "win32api",
+        "pywintypes",
     ],
     hookspath=[],
     hooksconfig={},
