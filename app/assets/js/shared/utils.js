@@ -128,6 +128,7 @@ export function parseInvType(inv) {
   const c = inv[1].toUpperCase();
   if (c === 'M') return 'import';
   if (c === 'E') return 'export';
+  if (c === 'W') return 'warehouse';
   return null;
 }
 
@@ -151,9 +152,13 @@ export function parseWoType(wo) {
  */
 export function routingDecisionFor(row) {
   const fromInv = parseInvType(row.invoiceNumber);
+  if (fromInv === 'warehouse') {
+    return { type: 'warehouse', expectedDoc: 'All QBO Docs' };
+  }
   if (fromInv) {
     return { type: fromInv, expectedDoc: fromInv === 'import' ? 'POD' : 'BL/POL' };
   }
+  // WO# letter fallback — does NOT route to warehouse (too risky for false positives)
   const fromWo = parseWoType(row.workOrderNumber);
   if (fromWo) {
     return { type: fromWo, expectedDoc: fromWo === 'import' ? 'POD' : 'BL/POL' };
