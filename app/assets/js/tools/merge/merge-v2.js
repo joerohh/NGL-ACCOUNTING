@@ -1905,6 +1905,10 @@ async function v2ClickModeCard(modeKey) {
     return;
   }
 
+  // Materialize row.documents for any row whose side panel was never opened —
+  // the engine (Task 17) iterates row.documents, so it must be populated.
+  for (const r of rows) ensureDocList(r);
+
   v2State.runningMode = modeKey;
   v2State.mergeProgress = { done: 0, total: rows.length, current: '' };
   setStateV2('merge');   // shows running banner + spinner card

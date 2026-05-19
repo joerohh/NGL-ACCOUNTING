@@ -2,6 +2,13 @@
 //  MERGE TOOL V2 — engine module
 //  pdf-lib-based merging across the 6 v2 modes.
 //  Spec: docs/superpowers/specs/2026-05-07-merge-tool-v2-m4-merging-done-design.md
+//
+//  Task 17 (v2.72 warehouse): per-row merging now iterates `row.documents`
+//  (the canonical, user-editable doc list built by merge-v2.js). This picks
+//  up warehouse multi-attachment, manual side-panel adds, and side-panel
+//  reordering automatically. Import/export rows still merge as
+//  invoice + POD/BL/POL because their `row.documents` array contains
+//  exactly those two entries.
 // ══════════════════════════════════════════════════════════
 import { agentBridge } from '../../shared/agent-client.js';
 import {
@@ -30,50 +37,98 @@ function blobToArrayBuffer(blob) {
   });
 }
 
-// ── Pre-load both files for one row. Returns { invoiceBuf, docBuf } (either may be null). ──
-//   Manual uploads (row.manualPodFile from sidebar Fix Error or top-bar bulk drop) take
-//   precedence over fetched agent files. invoiceJobId / docJobId are tracked separately so
-//   a POD-only retry (which writes a new job folder without an invoice) doesn't clobber the
-//   row's pointer to the original folder where the invoice still lives. Falls back to the
-//   legacy fetchJobId for any rows patched before this split.
-async function preloadRowFiles(fallbackJobId, row) {
-  const invoiceJobId = row.invoiceJobId || row.fetchJobId || fallbackJobId;
-  const docJobId     = row.docJobId     || row.fetchJobId || fallbackJobId;
-  const cn = row.containerNumber;
+// ── Identify the invoice entry in a row's documents array ──
+//   The agent renames the QBO invoice file to `<container>_invoice.pdf`
+//   for both import/export and warehouse rows, so the filename suffix is a
+//   reliable marker. Warehouse attachments keep their original filenames.
+function isInvoiceDoc(doc) {
+  return /_invoice\.pdf$/i.test(doc.name || '');
+}
 
-  // Doc: prefer manual upload over fetched file. If errored AND no manual upload, skip.
-  let docPromise;
-  if (row.manualPodFile) {
-    docPromise = blobToArrayBuffer(row.manualPodFile);
-  } else if (row.fetchResult?.podPill === 'miss') {
-    docPromise = Promise.resolve(null);
-  } else if (docJobId) {
-    docPromise = fetchAgentFile(docJobId, `${cn}_pod.pdf`);
-  } else {
-    docPromise = Promise.resolve(null);
+// ── Resolve which agent job folder holds a given doc ──
+//   Manual uploads (`source==='added'` with _file) come straight from the
+//   browser File object. Otherwise, invoice files live under invoiceJobId
+//   (or fallback), and document files (POD/BL/POL/warehouse attachments)
+//   live under docJobId (or fallback). This mirrors the split in the old
+//   preloadRowFiles() so POD-only retries don't clobber the invoice path.
+function jobIdForDoc(doc, row, fallbackJobId) {
+  if (isInvoiceDoc(doc)) {
+    return row.invoiceJobId || row.fetchJobId || fallbackJobId;
   }
+  return row.docJobId || row.fetchJobId || fallbackJobId;
+}
 
-  // Invoice: always from the agent (no manual-invoice path today).
-  const invoicePromise = invoiceJobId
-    ? fetchAgentFile(invoiceJobId, `${cn}_invoice.pdf`)
-    : Promise.resolve(null);
+// ── Fetch bytes for a single doc entry (manual file or agent-saved) ──
+async function fetchDocBytes(doc, row, fallbackJobId) {
+  if (doc._file) {
+    return await blobToArrayBuffer(doc._file);
+  }
+  const jobId = jobIdForDoc(doc, row, fallbackJobId);
+  if (!jobId) return null;
+  return await fetchAgentFile(jobId, doc.name);
+}
 
-  const [invoiceBuf, docBuf] = await Promise.all([invoicePromise, docPromise]);
-  return { invoiceBuf, docBuf };
+// ── Filter a row's documents for a given mode ──
+//   - 'per-container' / 'combined'           : everything
+//   - 'per-container-invoice' / 'invoice-only': only invoice doc(s)
+//   - 'per-container-document' / 'document-only': everything except invoice
+//   Errored docs (failReason set) are always excluded — they have nothing
+//   on disk to merge.
+function docsForMode(row, modeKey) {
+  const docs = (row.documents || []).filter(d => !d.failReason);
+  switch (modeKey) {
+    case 'per-container':
+    case 'combined':
+      return docs;
+    case 'per-container-invoice':
+    case 'invoice-only':
+      return docs.filter(isInvoiceDoc);
+    case 'per-container-document':
+    case 'document-only':
+      return docs.filter(d => !isInvoiceDoc(d));
+    default:
+      throw new Error(`docsForMode: unknown mode ${modeKey}`);
+  }
+}
+
+// ── Load all bytes for a row's selected docs (in array order) ──
+//   Returns the buffers as an array, dropping any that failed to fetch.
+//   Logs warnings (not errors) for missing files so a single bad attachment
+//   doesn't kill the whole merge.
+async function loadRowDocBytes(row, modeKey, fallbackJobId) {
+  const include = docsForMode(row, modeKey);
+  const out = [];
+  for (const doc of include) {
+    let bytes = null;
+    try {
+      bytes = await fetchDocBytes(doc, row, fallbackJobId);
+    } catch (e) {
+      console.warn(`[merge] fetch failed for "${doc.name}":`, e.message || e);
+      continue;
+    }
+    if (!bytes || !bytes.byteLength) continue;
+    out.push(bytes);
+  }
+  return out;
 }
 
 // ── Concatenate page-arrays into one PDFDocument and serialize ──
 //   Returns { bytes, pageCount } so callers can tally pages without re-loading.
+//   Per-doc load failures are caught so one bad PDF doesn't kill the merge.
 async function concatPages(pageGroups) {
   const { PDFDocument } = PDFLib;
   const out = await PDFDocument.create();
   let pageCount = 0;
   for (const group of pageGroups) {
     if (!group) continue;
-    const src = await PDFDocument.load(group, { ignoreEncryption: true, updateMetadata: false });
-    const pages = await out.copyPages(src, src.getPageIndices());
-    pages.forEach(p => out.addPage(p));
-    pageCount += pages.length;
+    try {
+      const src = await PDFDocument.load(group, { ignoreEncryption: true, updateMetadata: false });
+      const pages = await out.copyPages(src, src.getPageIndices());
+      pages.forEach(p => out.addPage(p));
+      pageCount += pages.length;
+    } catch (e) {
+      console.warn('[merge] PDFDocument.load failed for one doc, skipping:', e.message || e);
+    }
   }
   const bytes = await out.save({ updateFieldAppearances: false });
   return { bytes, pageCount };
@@ -102,6 +157,10 @@ function uniqueFilename(name, usedSet) {
 }
 
 // ── Per-container modes ──
+//   Walks `row.documents` so warehouse rows (multi-attachment), manual
+//   side-panel adds, and side-panel reordering all flow through. Skips
+//   rows whose filtered doc list comes back empty (e.g. document-only on a
+//   row whose POD was never fetched).
 async function runPerContainer(rows, jobId, modeKey, onProgress) {
   const files = [];
   const usedNames = new Set();
@@ -112,19 +171,12 @@ async function runPerContainer(rows, jobId, modeKey, onProgress) {
     const row = rows[i];
     onProgress?.({ done: i, total: rows.length, current: row.containerNumber });
 
-    const { invoiceBuf, docBuf } = await preloadRowFiles(jobId, row);
-    if (!invoiceBuf && !docBuf) continue;  // nothing to merge for this row
-
-    let bufs;
-    if (modeKey === 'per-container')               bufs = [invoiceBuf, docBuf];
-    else if (modeKey === 'per-container-invoice')  bufs = [invoiceBuf];
-    else if (modeKey === 'per-container-document') bufs = [docBuf];
-    else throw new Error(`runPerContainer: not a per-container mode: ${modeKey}`);
-
-    bufs = bufs.filter(Boolean);
+    const bufs = await loadRowDocBytes(row, modeKey, jobId);
     if (bufs.length === 0) continue;
 
     const { bytes: merged, pageCount } = await concatPages(bufs);
+    if (!pageCount) continue;  // every doc failed to load — nothing to write
+
     const desiredName = perInvoiceFilename(row, modeKey);
     const finalName = uniqueFilename(desiredName, usedNames);
     files.push({ filename: finalName, bytes: merged });
@@ -137,10 +189,10 @@ async function runPerContainer(rows, jobId, modeKey, onProgress) {
 }
 
 // ── Single-output modes ──
+//   Same iteration over row.documents, but streamed into one output PDF
+//   across all rows.
 async function runCombined(rows, jobId, modeKey, onProgress) {
   const { PDFDocument } = PDFLib;
-  // We can't reuse concatPages here — we keep one out doc alive across rows
-  // to stream pages straight in, so the final PDF is built incrementally.
   const out = await PDFDocument.create();
   let totalPages = 0;
 
@@ -148,20 +200,16 @@ async function runCombined(rows, jobId, modeKey, onProgress) {
     const row = rows[i];
     onProgress?.({ done: i, total: rows.length, current: row.containerNumber });
 
-    const { invoiceBuf, docBuf } = await preloadRowFiles(jobId, row);
-
-    let bufs;
-    if (modeKey === 'combined')           bufs = [invoiceBuf, docBuf];
-    else if (modeKey === 'invoice-only')  bufs = [invoiceBuf];
-    else if (modeKey === 'document-only') bufs = [docBuf];
-    else throw new Error(`runCombined: not a combined mode: ${modeKey}`);
-
+    const bufs = await loadRowDocBytes(row, modeKey, jobId);
     for (const buf of bufs) {
-      if (!buf) continue;
-      const src = await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false });
-      const pages = await out.copyPages(src, src.getPageIndices());
-      pages.forEach(p => out.addPage(p));
-      totalPages += pages.length;
+      try {
+        const src = await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false });
+        const pages = await out.copyPages(src, src.getPageIndices());
+        pages.forEach(p => out.addPage(p));
+        totalPages += pages.length;
+      } catch (e) {
+        console.warn('[merge] PDFDocument.load failed for one doc, skipping:', e.message || e);
+      }
     }
   }
 
@@ -192,7 +240,9 @@ export async function runMergeMode({ rows, jobId, modeKey, onProgress }) {
   }
   // Need at least one source of jobId per row — either the row's own fetchJobId or the
   // dispatcher fallback. If both are missing for every row, we have no way to find files.
-  const haveAnyJob = jobId || rows.some(r => r.fetchJobId);
+  // (Manual-only rows are an exception, but in practice every row has at least an invoice
+  // from the agent fetch, so we keep the guard.)
+  const haveAnyJob = jobId || rows.some(r => r.fetchJobId || r.invoiceJobId || r.docJobId);
   if (!haveAnyJob) {
     throw new Error('runMergeMode: no jobId on rows or dispatcher — cannot locate fetched files');
   }
