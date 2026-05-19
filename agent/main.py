@@ -21,7 +21,13 @@ from config import (
     TMS_SELECTORS_FILE,
     WEB_UPDATE_URL, WEBAPP_CACHE_DIR,
 )
-from routers import auth, jobs, files, qbo, customers, audit, tms, settings, chassis, retry
+from routers import auth, jobs, files, qbo, customers, audit, tms, settings, chassis, retry, storage
+from services.excel_converter import (
+    _check_excel_available, set_excel_available, kill_orphan_excel_processes,
+)
+import services.excel_converter as _excel
+from services.storage import sweep_old_outputs, sweep_old_downloads
+from routers.storage import record_startup_sweep
 from services.shared_browser import SharedBrowser
 from services.qbo_api import QBOApiClient
 from services.tms_api import TMSApiClient
@@ -268,6 +274,34 @@ async def lifespan(app: FastAPI):
     cleanup_old_debug_files(DEBUG_DIR)
     backup_data_files(DATA_DIR, BACKUP_DIR, BACKUP_RETAIN_DAYS)
 
+    # Storage cleanup — 7-day sweep of Merge Outputs + agent downloads
+    from config import STORAGE_RETAIN_DAYS, DOWNLOADS_DIR
+    from routers.storage import _resolve_output_root
+    _output_root = _resolve_output_root()
+    if _output_root and _output_root.exists():
+        _out_sweep = sweep_old_outputs(_output_root, STORAGE_RETAIN_DAYS)
+        logger.info(
+            "Storage sweep (outputs): removed %d files, freed %d bytes",
+            _out_sweep.files_removed, _out_sweep.bytes_freed,
+        )
+    else:
+        from services.storage import SweepResult
+        _out_sweep = SweepResult()
+    _dl_sweep = sweep_old_downloads(DOWNLOADS_DIR, STORAGE_RETAIN_DAYS)
+    logger.info(
+        "Storage sweep (downloads): removed %d files, freed %d bytes",
+        _dl_sweep.files_removed, _dl_sweep.bytes_freed,
+    )
+    record_startup_sweep(_out_sweep, _dl_sweep)
+
+    # Excel COM probe — sets module flag for the fetch job to check
+    _killed = kill_orphan_excel_processes()
+    if _killed:
+        logger.info("Cleaned up %d orphan EXCEL.EXE processes", _killed)
+    _excel_ok = _check_excel_available()
+    set_excel_available(_excel_ok)
+    logger.info("Excel converter: %s", "ready" if _excel_ok else "missing")
+
     # Init shared Playwright browser (single Chrome process for TMS + portals)
     from config import TMS_DOWNLOADS_DIR, TMS_VIEWPORT
     from utils import cleanup_old_profiles
@@ -490,6 +524,7 @@ app.include_router(tms.router)
 app.include_router(settings.router)
 app.include_router(chassis.router)
 app.include_router(retry.router)
+app.include_router(storage.router)
 
 
 @app.get("/health")
@@ -513,6 +548,7 @@ async def health():
         "qbo_api": "connected" if qbo_api.is_connected else "not_connected",
         "tms_browser": "initialized" if tms_browser.is_initialized else "lazy_pending",
         "classifier": "ready" if classifier else "no_api_key",
+        "excel_converter": "ready" if _excel.EXCEL_AVAILABLE else "missing",
         "session_alerts": alerts,
         **usage_info,
     }
