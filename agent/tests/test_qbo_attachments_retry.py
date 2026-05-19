@@ -109,3 +109,30 @@ async def test_download_attachment_does_not_retry_on_404(tmp_path: Path):
 
     assert result is None
     assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_download_attachment_returns_none_on_non_transient_error(tmp_path: Path):
+    """A non-transient exception (e.g. ValueError from decode) should NOT retry —
+    return None immediately, preserving the legacy contract."""
+    client = _Client()
+    calls = {"n": 0}
+
+    class _FakeHttpxClient:
+        def __init__(self, *args, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, url, **kwargs):
+            calls["n"] += 1
+            raise ValueError("simulated non-transient error")
+
+    with patch("httpx.AsyncClient", _FakeHttpxClient):
+        result = await client.download_attachment(
+            attachable_id="123",
+            filename="x.pdf",
+            download_dir=tmp_path,
+            temp_download_uri="https://example.invalid/file",
+        )
+
+    assert result is None
+    assert calls["n"] == 1  # no retry on non-transient

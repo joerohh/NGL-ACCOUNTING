@@ -138,6 +138,14 @@ class QBOAttachmentsMixin:
                     )
                     await asyncio.sleep(backoff)
                     continue
+            except Exception as e:
+                # Non-transient (e.g. disk write error, decode error) —
+                # preserve the legacy "return None on any error" contract.
+                logger.warning(
+                    "download_attachment failed for %s (non-transient): %s",
+                    filename, e,
+                )
+                return None
         logger.error(
             "download_attachment FAILED for %s after %d attempts. Last error: %s",
             filename, _DOWNLOAD_RETRY_ATTEMPTS, last_error,
