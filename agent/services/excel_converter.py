@@ -216,10 +216,17 @@ class ExcelSession:
 def _count_pdf_pages(pdf_path: Path) -> int:
     """Cheap PDF page count by counting /Type /Page objects.
 
-    Not a full PDF parser — good enough for telemetry."""
+    Handles both `/Type /Page` (with space) and `/Type/Page` (no space) —
+    Excel's exporter omits the space, so the simple count failed for our
+    real warehouse files until this was fixed. Not a full PDF parser —
+    good enough for telemetry."""
     try:
         data = pdf_path.read_bytes()
-        return data.count(b"/Type /Page") - data.count(b"/Type /Pages")
+        page_with    = data.count(b"/Type /Page")
+        page_without = data.count(b"/Type/Page")
+        pages_with    = data.count(b"/Type /Pages")
+        pages_without = data.count(b"/Type/Pages")
+        return (page_with + page_without) - (pages_with + pages_without)
     except Exception:
         return 0
 
