@@ -184,8 +184,6 @@ class FetchJobMixin:
         if not attachments:
             result.warehouse_attachments = []
             result.warehouse_failures = []
-            result.routing_type = "warehouse"
-            result.pod_label = "Warehouse"
             await self._emit(job, "warehouse_empty", {
                 "containerNumber": container.container_number,
                 "invoiceNumber": container.invoice_number,
@@ -257,8 +255,6 @@ class FetchJobMixin:
 
         result.warehouse_attachments = successes
         result.warehouse_failures = failures
-        result.routing_type = "warehouse"
-        result.pod_label = "Warehouse"
 
         await self._emit(job, "warehouse_fetched", {
             "containerNumber": container.container_number,
@@ -338,6 +334,17 @@ class FetchJobMixin:
         # Fetch every QBO attachment, convert xlsx → PDF. No TMS fallback,
         # no safety cascade — warehouse is QBO-only.
         if _is_warehouse_row(container.invoice_number):
+            result.routing_type = "warehouse"
+            result.pod_label = "Warehouse"
+            if not result.invoice_file:
+                # Warehouse merge always wants the invoice page first; if
+                # want_invoice was False, surface a clear warning rather than
+                # silently producing a documents-only output.
+                logger.warning(
+                    "Warehouse row %s: invoice PDF was not downloaded "
+                    "(want_invoice=False?); merged output will have no invoice page",
+                    container.invoice_number,
+                )
             await self._handle_warehouse_attachments(job, container, invoice_id, result)
             await self._emit(job, "container_complete", {
                 "containerNumber": container.container_number,
