@@ -15,27 +15,27 @@ import { agentBridge } from '../../shared/agent-client.js';
 //   subfolder:   first-level folder under "Merge Outputs/"
 
 export const MODES = [
-  // Per-container outputs (one PDF per container)
+  // Per-invoice outputs (one PDF per invoice row)
   {
     key: 'per-container',
     group: 'per-container',
-    title: 'Per Container',
-    description: "One PDF per container. Each file contains that container's invoice and its document combined.",
-    subfolder: 'Per Container',
+    title: 'Per Invoice',
+    description: "One PDF per invoice. Each file contains that invoice and its supporting document combined.",
+    subfolder: 'Per Invoice',
   },
   {
     key: 'per-container-invoice',
     group: 'per-container',
-    title: 'Per Container — Invoice Only',
-    description: 'One PDF per container, containing only the invoice.',
-    subfolder: 'Per Container — Invoice Only',
+    title: 'Per Invoice — Invoice Only',
+    description: 'One PDF per invoice, containing only the invoice itself.',
+    subfolder: 'Per Invoice — Invoice Only',
   },
   {
     key: 'per-container-document',
     group: 'per-container',
-    title: 'Per Container — Document Only',
-    description: 'One PDF per container, containing only the supporting document (POD, BL, POL, IT, or ITE).',
-    subfolder: 'Per Container — Document Only',
+    title: 'Per Invoice — Document Only',
+    description: 'One PDF per invoice, containing only the supporting document — POD, BL, POL, IT, ITE, or warehouse attachments.',
+    subfolder: 'Per Invoice — Document Only',
   },
   // Single combined output (one PDF total)
   {
