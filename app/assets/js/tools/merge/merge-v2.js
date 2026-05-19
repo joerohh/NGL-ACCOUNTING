@@ -1233,6 +1233,19 @@ function renderReady() {
 // Doc shape:
 //   { id, name, source: 'qbo'|'tms'|'added', converted,
 //     pageCount, sizeBytes, failReason, _file? }
+function humanizeFailReason(reason) {
+  if (!reason) return '';
+  const r = String(reason);
+  if (r.includes('password'))             return "Couldn't convert — file is password-protected";
+  if (r.includes('corrupt'))              return "Couldn't convert — file is corrupt";
+  if (r.includes('timeout'))              return "Couldn't convert — took too long";
+  if (r.includes('empty'))               return "Couldn't convert — workbook is empty";
+  if (r.includes('excel_not_installed'))  return "Couldn't convert — Excel isn't installed";
+  if (r === 'download_failed')            return "Couldn't download from QBO";
+  if (r === 'unsupported_type')           return "Unsupported file type — only PDF and Excel are converted";
+  return "Couldn't process this file";
+}
+
 function buildInitialDocList(row) {
   const docs = [];
   const fr = row.fetchResult;
@@ -1308,7 +1321,7 @@ function renderAttachmentRow(rowId, doc) {
          </span>`;
 
   const subtitle = doc.failReason
-    ? `<div class="fail-reason">${escHtml(doc.failReason)}</div>`
+    ? `<div class="fail-reason">${escHtml(humanizeFailReason(doc.failReason))}</div>`
     : (doc.pageCount || doc.sizeBytes)
       ? `<div class="meta">${doc.pageCount ? doc.pageCount + ' pages' : ''}${doc.pageCount && doc.sizeBytes ? ' · ' : ''}${doc.sizeBytes ? fmtSize(doc.sizeBytes) : ''}</div>`
       : '';
@@ -1446,6 +1459,29 @@ function renderSidebar(rowIdx) {
     ? renderResolvedBody(row, trace)
     : renderErrorBody(row, trace, docName);
 
+  // Error / empty banners (shown only after the row has been fetched)
+  const docs = row.documents || [];
+  const failedDocs = docs.filter(d => d.failReason);
+  const hasZeroDocs = docs.length === 0;
+  const hasPartialFailure = !hasZeroDocs && failedDocs.length > 0;
+  let banner = '';
+  if (hasZeroDocs && row.fetchResult) {
+    banner = `<div class="panel-empty-banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span><strong>No documents on QBO.</strong> Upload one manually below — this row can't merge without it.</span>
+    </div>`;
+  } else if (hasPartialFailure) {
+    banner = `<div class="panel-error-banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span><strong>${failedDocs.length} attachment${failedDocs.length > 1 ? 's' : ''} couldn't be converted.</strong>
+        The merge will continue with what worked — drop in a replacement if you have one.</span>
+    </div>`;
+  }
+
   // Footer
   const isDone = remaining === 0;
   const footer = `
@@ -1471,6 +1507,7 @@ function renderSidebar(rowIdx) {
         </div>
         <button class="ds-close" onclick="window.v2CloseSidebar()">×</button>
       </div>
+      ${banner}
       <div class="ds-body">
         ${bodyTop}
       </div>
