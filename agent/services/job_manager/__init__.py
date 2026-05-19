@@ -48,6 +48,14 @@ class FetchResult:
         self.pod_missing: bool = False
         self.needs_review: bool = False
         self.error: Optional[str] = None
+        # Routing metadata (set by fetch branch).
+        # routing_type: 'import' | 'export' | 'warehouse' | ''
+        # pod_label:    'POD' | 'BL' | 'POL' | 'Warehouse' | ''
+        self.routing_type: str = ""
+        self.pod_label: str = ""
+        # Warehouse-only: per-attachment success/failure detail.
+        self.warehouse_attachments: list = []
+        self.warehouse_failures: list = []
 
     def to_dict(self) -> dict:
         return {
@@ -58,6 +66,10 @@ class FetchResult:
             "podMissing": self.pod_missing,
             "needsReview": self.needs_review,
             "error": self.error,
+            "routingType": self.routing_type,
+            "podLabel": self.pod_label,
+            "warehouseAttachments": self.warehouse_attachments,
+            "warehouseFailures": self.warehouse_failures,
         }
 
 

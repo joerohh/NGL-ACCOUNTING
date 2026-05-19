@@ -19,6 +19,13 @@ from utils import strip_motw
 logger = logging.getLogger("ngl.job_manager")
 
 
+def _is_warehouse_row(invoice_number: str) -> bool:
+    """Mirror of routingDecisionFor() — warehouse = INV# position-2 is 'W'."""
+    if not invoice_number or len(invoice_number) < 2:
+        return False
+    return invoice_number[1].upper() == "W"
+
+
 class FetchJobMixin:
     """Handles fetch job lifecycle: create, start, process containers via QBO API."""
 
@@ -160,6 +167,106 @@ class FetchJobMixin:
 
         return None, chain_attempted
 
+    async def _handle_warehouse_attachments(
+        self, job, container, invoice_id, result
+    ) -> None:
+        """Fetch every QBO attachment for a warehouse invoice. Convert any
+        xlsx files to PDF. No TMS fallback, no safety cascade — warehouse is
+        QBO-only.
+
+        Populates result.warehouse_attachments and result.warehouse_failures.
+        """
+        from services.excel_converter import EXCEL_AVAILABLE, ExcelSession
+
+        api = self._qbo_api
+
+        attachments = await api.list_attachments(invoice_id)
+        if not attachments:
+            result.warehouse_attachments = []
+            result.warehouse_failures = []
+            result.routing_type = "warehouse"
+            result.pod_label = "Warehouse"
+            await self._emit(job, "warehouse_empty", {
+                "containerNumber": container.container_number,
+                "invoiceNumber": container.invoice_number,
+            })
+            return
+
+        excel_session = None
+        xlsx_present = any(
+            (att.get("fileName", "") or "").lower().endswith((".xlsx", ".xls", ".xlsm"))
+            for att in attachments
+        )
+        if xlsx_present and EXCEL_AVAILABLE:
+            excel_session = ExcelSession()
+            await excel_session.__aenter__()
+
+        successes: list[dict] = []
+        failures: list[dict] = []
+        try:
+            for att in attachments:
+                fname = att.get("fileName", "unknown")
+                lower = (fname or "").lower()
+
+                raw_path = await api.download_attachment(
+                    att["id"], fname, job.download_dir,
+                    temp_download_uri=att.get("tempDownloadUri"),
+                )
+                if not raw_path:
+                    failures.append({"fileName": fname, "reason": "download_failed"})
+                    continue
+
+                strip_motw(raw_path)
+
+                if lower.endswith((".xlsx", ".xls", ".xlsm")):
+                    if not EXCEL_AVAILABLE or excel_session is None:
+                        failures.append({
+                            "fileName": fname,
+                            "reason": "conversion_failed: excel_not_installed",
+                        })
+                        continue
+                    pdf_path = raw_path.with_suffix(".pdf")
+                    conv = await excel_session.convert(raw_path, pdf_path)
+                    if conv.ok:
+                        successes.append({
+                            "fileName": pdf_path.name,
+                            "converted": True,
+                            "pageCount": conv.pages,
+                            "sizeBytes": conv.size_bytes,
+                        })
+                    else:
+                        failures.append({
+                            "fileName": fname,
+                            "reason": conv.error or "conversion_failed",
+                        })
+                elif lower.endswith(".pdf"):
+                    successes.append({
+                        "fileName": raw_path.name,
+                        "converted": False,
+                        "pageCount": 0,  # browser computes during merge
+                        "sizeBytes": raw_path.stat().st_size,
+                    })
+                else:
+                    failures.append({"fileName": fname, "reason": "unsupported_type"})
+        finally:
+            if excel_session is not None:
+                try:
+                    await excel_session.__aexit__(None, None, None)
+                except Exception as e:
+                    logger.warning("ExcelSession teardown failed: %s", e)
+
+        result.warehouse_attachments = successes
+        result.warehouse_failures = failures
+        result.routing_type = "warehouse"
+        result.pod_label = "Warehouse"
+
+        await self._emit(job, "warehouse_fetched", {
+            "containerNumber": container.container_number,
+            "invoiceNumber": container.invoice_number,
+            "attachmentCount": len(successes),
+            "failureCount": len(failures),
+        })
+
     async def _process_one_container(self, job, container, result) -> None:
         """Process a single container via QBO API: search, download invoice, download POD."""
         want_invoice = "invoice" in job.doc_types
@@ -189,6 +296,16 @@ class FetchJobMixin:
             return
 
         invoice_id = invoice_data["Id"]
+
+        # Warehouse rows: fetch all QBO attachments, convert xlsx → PDF.
+        # No TMS fallback, no safety cascade — warehouse is QBO-only.
+        if _is_warehouse_row(container.invoice_number):
+            await self._handle_warehouse_attachments(job, container, invoice_id, result)
+            await self._emit(job, "container_complete", {
+                "containerNumber": container.container_number,
+                "result": result.to_dict(),
+            })
+            return
 
         # Step 2: Download the invoice PDF (only if invoice type is requested)
         if want_invoice:
