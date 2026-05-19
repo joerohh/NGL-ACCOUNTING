@@ -261,27 +261,33 @@ async function parseExcelFile(file) {
   const customerKey  = findCustomerColumn(headers);
   const dateKey      = findColumnKey(headers, CSV_ALIASES.invoiceDate);
 
-  if (!containerKey) {
-    return {
-      error: `Couldn't find a Container column. Looked at: ${headers.join(', ')}. Expected something like "Container Number", "CONT NO", or "Equipment".`,
-    };
-  }
+  // containerKey may be absent for warehouse-only manifests — that is allowed.
 
   const rows = [];
   for (let i = 0; i < sheetRows.length; i++) {
     const r = sheetRows[i];
-    const cn = String(r[containerKey] || '').trim();
-    if (!cn) continue;          // skip blank container rows entirely
+    const inv = invoiceKey ? String(r[invoiceKey] || '').trim() : '';
+    const cn  = containerKey ? String(r[containerKey] || '').trim() : '';
+    const wo  = woKey ? String(r[woKey] || '').trim() : '';
+
+    // INV# is required for all rows. Rows with no INV# are skipped silently
+    // (they are typically blank trailer rows in the Excel export).
+    if (!inv && !cn) continue;  // completely blank row — skip
+
     const decision = routingDecisionFor({
-      invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
-      workOrderNumber: woKey ? String(r[woKey] || '').trim() : '',
+      invoiceNumber: inv,
+      workOrderNumber: wo,
     });
+
+    // Non-warehouse rows require a container number.
+    if (decision.type !== 'warehouse' && !cn) continue;
 
     rows.push({
       rowNum: i + 2,            // sheet row 1 is headers, so first data row → 2
-      containerNumber: cn,
-      invoiceNumber: invoiceKey ? String(r[invoiceKey] || '').trim() : '',
-      workOrderNumber: woKey ? String(r[woKey] || '').trim() : '',
+      // Warehouse rows carry no real container — strip any placeholder value.
+      containerNumber: decision.type === 'warehouse' ? '' : cn,
+      invoiceNumber: inv,
+      workOrderNumber: decision.type === 'warehouse' ? '' : wo,
       customer: customerKey ? String(r[customerKey] || '').trim() : '',
       invoiceDate: dateKey ? formatInvoiceDate(r[dateKey]) : '',
       selected: false,
@@ -297,7 +303,7 @@ async function parseExcelFile(file) {
   }
 
   if (rows.length === 0) {
-    return { error: 'No usable rows — every row had an empty Container cell.' };
+    return { error: 'No usable rows — every row was missing both an INV# and a Container #.' };
   }
 
   return { rows, headers, containerKey, invoiceKey, woKey, customerKey };
@@ -354,7 +360,7 @@ function renderEmpty() {
           </svg>
         </div>
         <div class="drop-title">Drop Excel Manifest</div>
-        <div class="drop-help">Needs a Container Number column to match PDFs automatically</div>
+        <div class="drop-help">Needs an INV# column. Container # is optional (required only for import/export rows).</div>
         <div class="drop-types">.xlsx · .xls · .csv</div>
       </div>
       <div class="hint-chip"><span class="step-num">2</span> We'll check the manifest, then fetch from APIs</div>
