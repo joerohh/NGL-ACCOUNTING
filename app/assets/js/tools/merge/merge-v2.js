@@ -755,60 +755,81 @@ function topBarWithDrop() {
   `;
 }
 
-function v2HandleBulkPdfDrop(fileList) {
-  if (!fileList || fileList.length === 0) return;
+async function v2HandleBulkPdfDrop(fileList) {
   const files = Array.from(fileList).filter(f => f.name.toLowerCase().endsWith('.pdf'));
   if (files.length === 0) {
     alert('Only .pdf files are accepted.');
     return;
   }
 
-  // Match each file to a row whose container number appears in the filename (case-insensitive).
-  // First match wins per row; first row wins per file.
-  let matched = 0;
-  const unmatched = [];
-  const usedRowIdxs = new Set();
-  for (const file of files) {
-    const lower = file.name.toLowerCase();
-    let hit = false;
-    for (let i = 0; i < v2State.rows.length; i++) {
-      if (usedRowIdxs.has(i)) continue;
-      const row = v2State.rows[i];
-      const cn = (row.containerNumber || '').toLowerCase();
-      if (!cn) continue;
-      if (lower.includes(cn)) {
-        row.manualPodFile = file;
-        // Promote the row's fetchResult to "ok" so it counts as ready/selectable.
-        const wasError = row.fetchResult?.podPill === 'miss';
-        row.fetchResult = {
-          invPill: row.fetchResult?.invPill || 'ok',
-          podPill: 'ok',
-          podLabel: row.routingType === 'export' ? 'BL' : 'POD',
-          statusText: 'Manual upload',
-          chainAttempted: row.fetchResult?.chainAttempted || [],
-          message: '',
-        };
-        if (wasError) row.selected = true;   // auto-select rows that were error-blocked
-        usedRowIdxs.add(i);
-        matched++;
-        hit = true;
-        break;
-      }
-    }
-    if (!hit) unmatched.push(file.name);
+  // Build a lookup of every identifier from the manifest.
+  // identifier = { idType: 'container'|'inv', value: 'lowercased', rowIdx: N }
+  const identifiers = [];
+  for (let i = 0; i < v2State.rows.length; i++) {
+    const r = v2State.rows[i];
+    const cn = (r.containerNumber || '').toLowerCase().trim();
+    const inv = (r.invoiceNumber || '').toLowerCase().trim();
+    if (cn) identifiers.push({ idType: 'container', value: cn, rowIdx: i });
+    if (inv) identifiers.push({ idType: 'inv', value: inv, rowIdx: i });
   }
 
-  // Re-render whichever screen we're on so counters + row pills update.
+  const matchedSummary = [];  // [{ fileName, rowNums: [1,2,3] }]
+  const unmatched = [];
+
+  for (const file of files) {
+    const lower = file.name.toLowerCase();
+    const hits = new Map();  // rowIdx → true
+
+    for (const id of identifiers) {
+      if (lower.includes(id.value)) {
+        hits.set(id.rowIdx, true);
+      }
+    }
+
+    if (hits.size === 0) {
+      unmatched.push(file.name);
+      continue;
+    }
+
+    const rowNums = [];
+    for (const rowIdx of hits.keys()) {
+      const row = v2State.rows[rowIdx];
+      // Attach to every matching row's document list
+      row.documents = row.documents || [];
+      row.documents.push({
+        id: uid(), name: file.name, source: 'added',
+        converted: false, pageCount: 0, sizeBytes: file.size,
+        failReason: null, _file: file,
+      });
+      // Promote row to "ready" if it was previously blocked by a missing POD
+      if (row.fetchResult?.podPill === 'miss') {
+        row.fetchResult.podPill = 'ok';
+        row.fetchResult.statusText = 'Manual upload';
+        row.selected = true;
+      }
+      rowNums.push(row.rowNum);
+    }
+    matchedSummary.push({ fileName: file.name, rowNums });
+  }
+
   setStateV2(v2State.subMode);
 
-  // Brief feedback. Use alert for now — matches the rest of the file's pattern.
-  let msg = `${matched} of ${files.length} PDF${files.length === 1 ? '' : 's'} matched to containers.`;
+  // Build the feedback message
+  const multiAttach = matchedSummary.filter(m => m.rowNums.length > 1);
+  const total = matchedSummary.length;
+  let msg = `${total} of ${files.length} PDF${files.length === 1 ? '' : 's'} matched.`;
+  if (multiAttach.length > 0) {
+    msg += '\n\nMulti-row attaches:';
+    for (const m of multiAttach) {
+      msg += `\n  • ${m.fileName} → Rows ${m.rowNums.join(', ')}`;
+    }
+  }
   if (unmatched.length > 0) {
     const sample = unmatched.slice(0, 3).map(n => `\n  • ${n}`).join('');
     const more = unmatched.length > 3 ? `\n  …and ${unmatched.length - 3} more` : '';
-    msg += `\n\nNo container # match in filename for:${sample}${more}`;
+    msg += `\n\nNo container # or INV# match in filename for:${sample}${more}`;
   }
-  if (matched > 0 || unmatched.length > 0) alert(msg);
+  if (total > 0 || unmatched.length > 0) alert(msg);
 }
 window.v2HandleBulkPdfDrop = v2HandleBulkPdfDrop;
 
