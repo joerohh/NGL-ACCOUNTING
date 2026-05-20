@@ -2624,7 +2624,27 @@ function getErrorRows() {
   );
 }
 
-// Maps error rows to the 9-column structure for the Excel export.
+// Builds a single plain-English description of why a row failed, suitable
+// for the "Issue" column of the error xlsx export. Reads the row's
+// fetchResult; falls back to a generic Error if the shape is unexpected.
+function buildIssueText(fr) {
+  fr = fr || {};
+  const invMiss = fr.invPill === 'miss';
+  const podMiss = fr.podPill === 'miss';
+  const chain = Array.isArray(fr.chainAttempted)
+    ? fr.chainAttempted.map(s => s && s.type).filter(Boolean).join(' → ')
+    : '';
+
+  if (invMiss && podMiss) return 'Invoice and POD not found in QBO';
+  if (invMiss)            return 'Invoice not found in QBO';
+  if (podMiss)            return chain ? `POD not found — tried ${chain}` : 'POD not found';
+
+  // Defensive fallback: row landed in the error set but neither pill is "miss".
+  // Surface the message if we have one, otherwise a plain "Error".
+  return fr.message ? `Error: ${fr.message}` : 'Error';
+}
+
+// Maps error rows to the 7-column structure for the Excel export.
 function buildErrorExportRows(errorRows) {
   return errorRows.map(r => {
     const fr = r.fetchResult || {};
