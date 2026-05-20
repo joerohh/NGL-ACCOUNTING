@@ -110,9 +110,24 @@ async def get_auth_token():
 
 @router.get("/setup-required")
 async def setup_required():
-    """Check if first-run setup is needed (no users exist yet)."""
+    """Check if first-run setup is needed (no users exist yet).
+
+    Uses the cloud-aware get_user_count() when Supabase is configured.
+    Falls back to a direct local SQLite count if the cloud call raises
+    so offline users aren't blocked at startup.
+    """
     from services.database import get_user_count
-    return {"setupRequired": get_user_count() == 0}
+    try:
+        count = get_user_count()
+    except Exception as e:
+        logger.warning("get_user_count failed, falling back to local count: %s", e)
+        try:
+            from services.database import _get_conn
+            count = _get_conn().execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        except Exception as inner:
+            logger.error("Local fallback count also failed: %s", inner)
+            count = 0  # Safest default — show Setup so user can at least create local admin
+    return {"setupRequired": count == 0}
 
 
 @router.post("/setup")

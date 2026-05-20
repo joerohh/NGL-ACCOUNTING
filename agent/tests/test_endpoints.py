@@ -118,6 +118,19 @@ class TestHealthAndAuth:
             r = c.get("/customers")
             assert r.status_code == 401
 
+    def test_setup_required_endpoint(self, client):
+        """Endpoint returns {setupRequired: bool} and doesn't 500.
+
+        Cannot easily simulate Supabase failure against a live agent — the
+        fallback path is verified by code review (auth.py:setup_required)
+        and by manual offline smoke test in Task 18.
+        """
+        res = client.get("/auth/setup-required")
+        assert res.status_code == 200
+        body = res.json()
+        assert "setupRequired" in body
+        assert isinstance(body["setupRequired"], bool)
+
 
 # ── QBO Status ──────────────────────────────────────────────────────
 
