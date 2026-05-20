@@ -31,9 +31,20 @@ if (!fs.existsSync(appJsDir)) {
 const files = walk(appJsDir);
 console.log(`[check-js] Validating ${files.length} JS files under app/assets/js/...`);
 
+// We pipe each file's source through stdin with --input-type=module so Node
+// parses it as an ES module. The file-path form (`node --check FILE.js`)
+// silently picks the CommonJS goal, which accepts a few constructs the
+// browser's ESM loader rejects — most notably literal U+2028/U+2029 inside
+// regex literals. Shipped one of those to prod in v2.73 (users.js line 213,
+// which broke the entire login screen). Stdin + module type fixes the gap.
 const failures = [];
 for (const file of files) {
-  const res = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+  const source = fs.readFileSync(file);
+  const res = spawnSync(
+    process.execPath,
+    ["--input-type=module", "--check"],
+    { input: source, encoding: "utf8" }
+  );
   if (res.status !== 0) {
     failures.push({ file, stderr: res.stderr || res.stdout || "(no output)" });
   }

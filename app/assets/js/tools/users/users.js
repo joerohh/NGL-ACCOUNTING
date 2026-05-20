@@ -210,7 +210,7 @@ function escAttr(s) {
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'")
     .replace(/"/g, '&quot;')
-    .replace(/[\r\n  ]/g, ' ');
+    .replace(/[\r\n\u2028\u2029]/g, ' ');
 }
 
 // Expose action handlers on window so inline onclick="" attributes can call them.
