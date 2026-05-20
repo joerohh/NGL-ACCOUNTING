@@ -473,6 +473,21 @@ def sb_get_user_by_id(user_id: int) -> Optional[dict]:
     return _sb_row_to_user(rows[0]) if rows else None
 
 
+def sb_get_user_by_username(username: str) -> Optional[dict]:
+    """Look up a user by username (case-insensitive). Returns user dict or None.
+
+    Mirrors database.get_user_by_username for the local SQLite case.
+    Used by auth.google_callback to check whether a Google account already exists.
+    """
+    resp = httpx.get(
+        f"{_BASE}/users?username=eq.{username}&limit=1&select=*",
+        headers=_HEADERS, timeout=_TIMEOUT,
+    )
+    _check_response(resp, "get_user_by_username")
+    rows = resp.json()
+    return _sb_row_to_user(rows[0]) if rows else None
+
+
 def sb_list_users(active_only: bool = True) -> list:
     params = "select=*&order=username"
     if active_only:
@@ -519,6 +534,37 @@ def sb_create_user(username: str, password: str, display_name: str = "", role: s
     if resp.status_code == 409 or (resp.status_code >= 400 and "duplicate" in resp.text.lower()):
         raise ValueError(f"Username '{username}' already exists")
     _check_response(resp, "create_user")
+    return _sb_row_to_user(resp.json()[0])
+
+
+def sb_create_google_user(email: str, display_name: str, role: str = "operator") -> dict:
+    """Create an account for a Google-authenticated user in Supabase (no password).
+
+    Mirrors database.create_google_user for the Supabase case. Defaults to
+    'operator'. Callers can pass role='admin' for the first-user bootstrap.
+    """
+    import bcrypt
+    import secrets as _secrets
+    if role not in ("admin", "operator"):
+        raise ValueError(f"Invalid role: {role!r}")
+    now = datetime.now(timezone.utc).isoformat()
+    # Random password hash so this account can't be used for password login.
+    pw_hash = bcrypt.hashpw(_secrets.token_bytes(32), bcrypt.gensalt()).decode("utf-8")
+
+    row = {
+        "username": email,
+        "display_name": display_name,
+        "password_hash": pw_hash,
+        "role": role,
+        "active": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    resp = httpx.post(f"{_BASE}/users", headers=_HEADERS, timeout=_TIMEOUT, json=row)
+    if resp.status_code == 409 or (resp.status_code >= 400 and "duplicate" in resp.text.lower()):
+        raise ValueError(f"Username '{email}' already exists")
+    _check_response(resp, "create_google_user")
     return _sb_row_to_user(resp.json()[0])
 
 

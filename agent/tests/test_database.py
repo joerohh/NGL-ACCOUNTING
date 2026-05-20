@@ -50,3 +50,46 @@ def test_create_google_user_rejects_invalid_role(monkeypatch, tmp_path):
     db = _setup_clean_db(monkeypatch, tmp_path)
     with pytest.raises(ValueError):
         db.create_google_user("test3@ngltrans.net", "Test Three", role="superuser")
+
+
+def test_sb_get_user_by_username_returns_user_when_found(monkeypatch):
+    """sb_get_user_by_username returns a user dict when Supabase finds one."""
+    from services import supabase_client as sc
+    class FakeResp:
+        status_code = 200
+        text = ""
+        def raise_for_status(self): pass
+        def json(self):
+            return [{
+                "id": 1, "username": "alice@ngltrans.net", "display_name": "Alice",
+                "role": "operator", "active": True,
+                "created_at": "2026-05-19T00:00:00Z", "updated_at": "2026-05-19T00:00:00Z",
+                "password_hash": "$2b$12$..."
+            }]
+    monkeypatch.setattr(sc.httpx, "get", lambda *a, **k: FakeResp())
+    result = sc.sb_get_user_by_username("alice@ngltrans.net")
+    assert result is not None
+    assert result["username"] == "alice@ngltrans.net"
+    assert result["role"] == "operator"
+
+
+def test_sb_get_user_by_username_returns_none_when_missing(monkeypatch):
+    """sb_get_user_by_username returns None when Supabase has no match."""
+    from services import supabase_client as sc
+    class FakeResp:
+        status_code = 200
+        text = ""
+        def raise_for_status(self): pass
+        def json(self):
+            return []
+    monkeypatch.setattr(sc.httpx, "get", lambda *a, **k: FakeResp())
+    result = sc.sb_get_user_by_username("nobody@ngltrans.net")
+    assert result is None
+
+
+def test_sb_create_google_user_rejects_invalid_role():
+    """sb_create_google_user rejects roles outside admin/operator."""
+    import pytest
+    from services import supabase_client as sc
+    with pytest.raises(ValueError):
+        sc.sb_create_google_user("test@ngltrans.net", "Test", role="superuser")
