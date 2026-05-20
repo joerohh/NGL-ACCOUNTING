@@ -729,18 +729,26 @@ def get_user_by_username(username: str) -> Optional[dict]:
     return _row_to_user(row) if row else None
 
 
-def create_google_user(email: str, display_name: str) -> dict:
-    """Create an operator account for a Google-authenticated user (no password)."""
+def create_google_user(email: str, display_name: str, role: str = "operator") -> dict:
+    """Create an account for a Google-authenticated user (no password).
+
+    Defaults to 'operator'. Callers can pass role='admin' when the system
+    has zero users (the first Google sign-in bootstraps the admin).
+    Validates role is in the allowed set BEFORE any SQL runs.
+    """
+    if role not in ("admin", "operator"):
+        raise ValueError(f"Invalid role: {role!r}")
     conn = _get_conn()
     now = datetime.now(timezone.utc).isoformat()
     # Random password hash — account is Google-only, password login won't work
     pw_hash = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode("utf-8")
     conn.execute("""
         INSERT INTO users (username, display_name, password_hash, role, active, created_at, updated_at)
-        VALUES (?, ?, ?, 'operator', 1, ?, ?)
-    """, (email, display_name, pw_hash, now, now))
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+    """, (email, display_name, pw_hash, role, now, now))
     conn.commit()
-    return get_user_by_id(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+    row = conn.execute("SELECT * FROM users WHERE username = ?", (email,)).fetchone()
+    return _row_to_user(row)
 
 
 def list_users(active_only: bool = True) -> list[dict]:
