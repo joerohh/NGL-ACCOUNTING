@@ -56,6 +56,12 @@ function showApp(user) {
   const roleEl = document.getElementById('sidebarUserRole');
   if (nameEl) nameEl.textContent = user.displayName || user.username;
   if (roleEl) roleEl.textContent = user.role;
+
+  // Admin-only sidebar items
+  const navUsers = document.getElementById('navUsers');
+  if (navUsers) {
+    navUsers.style.display = (user && user.role === 'admin') ? '' : 'none';
+  }
 }
 
 async function doLogin() {
@@ -392,7 +398,7 @@ function switchTool(tool) {
   const subtitles = {
     'home': 'Accounting Suite',
     'merge': 'Merging Tool',
-    'chassis-finder': 'INI Chassis Finder',
+    'chassis-finder': 'Chassis Finder',
     'invoice-sender': 'Invoice Sender',
     'customers': 'Customer Management',
     'session-history': 'Session History',
