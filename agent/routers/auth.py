@@ -254,11 +254,14 @@ async def google_callback(code: str = "", state: str = ""):
         """)
 
     # Find or create user
-    from services.database import get_user_by_username, create_google_user
+    from services.database import get_user_by_username, create_google_user, get_user_count
     user = get_user_by_username(email)
     if not user:
-        user = create_google_user(email, name)
-        logger.info("Google login: created new operator account for %s", email)
+        # First user in the system gets admin role; everyone else is operator.
+        is_first_user = (get_user_count() == 0)
+        new_role = "admin" if is_first_user else "operator"
+        user = create_google_user(email, name, role=new_role)
+        logger.info("Google login: created new %s account for %s", new_role, email)
     elif not user.get("active"):
         return HTMLResponse("""
             <html><body style="font-family:sans-serif;text-align:center;padding:60px;">
