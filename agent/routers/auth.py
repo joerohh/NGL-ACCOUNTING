@@ -258,7 +258,11 @@ async def google_callback(code: str = "", state: str = ""):
     user = get_user_by_username(email)
     if not user:
         # First user in the system gets admin role; everyone else is operator.
-        is_first_user = (get_user_count() == 0)
+        try:
+            is_first_user = (get_user_count() == 0)
+        except Exception as e:
+            logger.warning("get_user_count failed in Google callback, assuming first-user bootstrap: %s", e)
+            is_first_user = True  # Fail-open: better to grant admin (recoverable) than lock the user out
         new_role = "admin" if is_first_user else "operator"
         user = create_google_user(email, name, role=new_role)
         logger.info("Google login: created new %s account for %s", new_role, email)
