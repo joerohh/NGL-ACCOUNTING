@@ -2646,28 +2646,15 @@ function buildIssueText(fr) {
 
 // Maps error rows to the 7-column structure for the Excel export.
 function buildErrorExportRows(errorRows) {
-  return errorRows.map(r => {
-    const fr = r.fetchResult || {};
-    const invMiss = fr.invPill === 'miss';
-    const podMiss = fr.podPill === 'miss';
-    const whatsMissing =
-      invMiss && podMiss ? 'Invoice + POD missing'
-      : invMiss          ? 'Invoice missing'
-      : podMiss          ? 'POD missing'
-                         : '';
-    const chain = Array.isArray(fr.chainAttempted) ? fr.chainAttempted.join(' → ') : '';
-    return {
-      'Row #':            r.rowNum,
-      'Invoice Date':     r.invoiceDate || '',
-      'Customer':         r.customer || '',
-      'Container #':      r.containerNumber || '',
-      'INV #':            r.invoiceNumber || '',
-      'WO #':             r.workOrderNumber || '',
-      "What's missing":   whatsMissing,
-      'Where we looked':  chain,
-      'Status detail':    fr.statusText || '',
-    };
-  });
+  return errorRows.map(r => ({
+    'Row #':        r.rowNum,
+    'Invoice Date': r.invoiceDate || '',
+    'Customer':     r.customer || '',
+    'Container #':  r.containerNumber || '',
+    'INV #':        r.invoiceNumber || '',
+    'WO #':         r.workOrderNumber || '',
+    'Issue':        buildIssueText(r.fetchResult),
+  }));
 }
 
 function downloadErrorsXlsx() {
