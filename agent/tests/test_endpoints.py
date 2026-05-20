@@ -439,6 +439,15 @@ def _unique(prefix: str) -> str:
     return f"{prefix}_{_uuid.uuid4().hex[:8]}"
 
 
+def _cleanup_user(client, user_id):
+    """Best-effort soft-delete used by test cleanup. Swallows errors so
+    teardown never masks the original assertion failure."""
+    try:
+        client.delete(f"/auth/users/{user_id}")
+    except Exception:
+        pass
+
+
 def test_list_users_admin_only(client, operator_token):
     """Operator JWT gets 403 on GET /auth/users; admin gets 200."""
     res = client.get("/auth/users", headers={"Authorization": f"Bearer {operator_token}"})
@@ -448,6 +457,7 @@ def test_list_users_admin_only(client, operator_token):
     res = client.get("/auth/users")
     assert res.status_code == 200
     assert "users" in res.json()
+    assert isinstance(res.json()["users"], list)
 
 
 def test_create_user_validation(client):
@@ -466,18 +476,23 @@ def test_create_user_validation(client):
     )
     assert res.status_code == 400
 
-    # Duplicate username — first create succeeds, second yields 409
+    # Duplicate username — first create succeeds, second yields 409. Clean up after.
     dup_name = _unique("dupetest")
     first = client.post(
         "/auth/users",
         json={"username": dup_name, "password": "abcd", "role": "operator"},
     )
     assert first.status_code in (200, 201), first.text
-    res = client.post(
-        "/auth/users",
-        json={"username": dup_name, "password": "abcd", "role": "operator"},
-    )
-    assert res.status_code == 409
+    created_id = first.json().get("id")
+    try:
+        res = client.post(
+            "/auth/users",
+            json={"username": dup_name, "password": "abcd", "role": "operator"},
+        )
+        assert res.status_code == 409
+    finally:
+        if created_id is not None:
+            _cleanup_user(client, created_id)
 
 
 def test_update_user_password_reset_allows_login(client):
@@ -489,19 +504,23 @@ def test_update_user_password_reset_allows_login(client):
         json={"username": username, "password": "old1234", "role": "operator"},
     )
     assert create_res.status_code in (200, 201), create_res.text
+    assert "id" in create_res.json(), create_res.text
     user_id = create_res.json()["id"]
 
-    # Reset their password
-    res = client.put(f"/auth/users/{user_id}", json={"password": "new5678"})
-    assert res.status_code == 200, res.text
+    try:
+        # Reset their password
+        res = client.put(f"/auth/users/{user_id}", json={"password": "new5678"})
+        assert res.status_code == 200, res.text
 
-    # Old password should fail (auth/login is exempt from middleware so no header needed)
-    res = client.post("/auth/login", json={"username": username, "password": "old1234"})
-    assert res.status_code == 401
+        # Old password should fail (auth/login is exempt from middleware so no header needed)
+        res = client.post("/auth/login", json={"username": username, "password": "old1234"})
+        assert res.status_code == 401
 
-    # New password should work
-    res = client.post("/auth/login", json={"username": username, "password": "new5678"})
-    assert res.status_code == 200
+        # New password should work
+        res = client.post("/auth/login", json={"username": username, "password": "new5678"})
+        assert res.status_code == 200
+    finally:
+        _cleanup_user(client, user_id)
 
 
 def test_reactivate_user(client):
@@ -511,19 +530,24 @@ def test_reactivate_user(client):
         json={"username": _unique("reactme"), "password": "abcd1234", "role": "operator"},
     )
     assert create_res.status_code in (200, 201), create_res.text
+    assert "id" in create_res.json(), create_res.text
     user_id = create_res.json()["id"]
 
-    client.delete(f"/auth/users/{user_id}")  # soft-delete
-    res = client.put(f"/auth/users/{user_id}", json={"active": True})
-    assert res.status_code == 200, res.text
-    assert res.json()["active"] is True
+    try:
+        client.delete(f"/auth/users/{user_id}")  # soft-delete
+        res = client.put(f"/auth/users/{user_id}", json={"active": True})
+        assert res.status_code == 200, res.text
+        assert res.json()["active"] is True
+    finally:
+        _cleanup_user(client, user_id)
 
 
 def test_deactivate_user_blocks_self(client):
     """Admin cannot deactivate their own account (regression test for existing behavior).
 
-    The client fixture mints a JWT for user id=0 (sub='0'), so DELETE /auth/users/0
-    should fail with a self-deactivation block (400).
+    The test client's JWT claims sub='0'. The self-block check
+    (int(admin["sub"]) == user_id) fires before any DB lookup, so
+    DELETE /auth/users/0 returns 400 even though no user with id=0 exists.
     """
     res = client.delete("/auth/users/0")
     assert res.status_code == 400
