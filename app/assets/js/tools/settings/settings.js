@@ -320,10 +320,10 @@ function showOAuthPolling() {
   if (existing) existing.remove();
   if (_oauthPollTimer) { clearInterval(_oauthPollTimer); _oauthPollTimer = null; }
 
-  // Attach next to the QBO action button (inside the Connections card row)
+  // Attach immediately under the QBO row (inside the Connections card)
   const actionBtn = document.getElementById('qboConnAction');
-  const container = actionBtn ? actionBtn.closest('.connections-card') : null;
-  if (!container) {
+  const qboRow = actionBtn ? actionBtn.closest('.conn-row') : null;
+  if (!qboRow) {
     // Fallback: settings result message
     settingsShowResult('Waiting for QBO authorization in your browser…', true);
     return;
@@ -357,7 +357,7 @@ function showOAuthPolling() {
     style.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
     document.head.appendChild(style);
   }
-  container.parentElement.insertBefore(box, container.nextSibling);
+  qboRow.parentElement.insertBefore(box, qboRow.nextSibling);
 
   // Poll /qbo/status every 2 seconds for up to 5 minutes
   const startTime = Date.now();
