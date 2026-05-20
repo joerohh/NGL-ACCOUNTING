@@ -59,7 +59,7 @@ function renderUserRow(u, currentUser, isInactive) {
     ? '<span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600;">ADMIN</span>'
     : '<span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600;">OPERATOR</span>';
 
-  const editBtn = `<button onclick="window.openEditUserModal(${u.id}, '${escAttr(u.username)}', '${escAttr(u.displayName || '')}', '${u.role}', ${u.active})"
+  const editBtn = `<button onclick="window.openEditUserModal(${u.id}, '${escAttr(u.username)}', '${escAttr(u.displayName || '')}', '${escAttr(u.role)}', ${u.active})"
         style="background:none; border:1px solid transparent; cursor:pointer; padding:6px; border-radius:6px; color:#64748b;"
         title="Edit user (also resets password)"
         onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#e2e8f0';"
@@ -110,6 +110,70 @@ function renderUserRow(u, currentUser, isInactive) {
     </div>`;
 }
 
+// ── Modal handlers (moved from settings.js in Task 11) ──
+
+function openAddUserModal() {
+  document.getElementById('userModalTitle').textContent = 'Add User';
+  document.getElementById('userModalId').value = '';
+  document.getElementById('userModalUsername').value = '';
+  document.getElementById('userModalUsername').disabled = false;
+  document.getElementById('userModalDisplayName').value = '';
+  document.getElementById('userModalPassword').value = '';
+  document.getElementById('userModalPassword').placeholder = 'Enter password';
+  document.getElementById('userModalPwHint').style.display = 'none';
+  document.getElementById('userModalRole').value = 'operator';
+  document.getElementById('userModalError').style.display = 'none';
+  document.getElementById('userModal').classList.add('open');
+}
+
+function openEditUserModal(id, username, displayName, role, active) {
+  document.getElementById('userModalTitle').textContent = 'Edit User';
+  document.getElementById('userModalId').value = id;
+  document.getElementById('userModalUsername').value = username;
+  document.getElementById('userModalUsername').disabled = true;
+  document.getElementById('userModalDisplayName').value = displayName;
+  document.getElementById('userModalPassword').value = '';
+  document.getElementById('userModalPassword').placeholder = '(unchanged)';
+  document.getElementById('userModalPwHint').style.display = '';
+  document.getElementById('userModalRole').value = role;
+  document.getElementById('userModalError').style.display = 'none';
+  document.getElementById('userModal').classList.add('open');
+}
+
+async function saveUser() {
+  const id = document.getElementById('userModalId').value;
+  const username = document.getElementById('userModalUsername').value.trim();
+  const displayName = document.getElementById('userModalDisplayName').value.trim();
+  const password = document.getElementById('userModalPassword').value;
+  const role = document.getElementById('userModalRole').value;
+  const errorEl = document.getElementById('userModalError');
+
+  if (!id && !username) {
+    errorEl.textContent = 'Username is required'; errorEl.style.display = ''; return;
+  }
+  if (!id && password.length < 4) {
+    errorEl.textContent = 'Password must be at least 4 characters'; errorEl.style.display = ''; return;
+  }
+
+  let result;
+  if (id) {
+    // Edit existing
+    const data = { displayName, role };
+    if (password) data.password = password;
+    result = await agentBridge.updateUser(id, data);
+  } else {
+    // Create new
+    result = await agentBridge.createUser({ username, password, displayName, role });
+  }
+
+  if (result.error) {
+    errorEl.textContent = result.error; errorEl.style.display = ''; return;
+  }
+
+  document.getElementById('userModal').classList.remove('open');
+  await renderUserList();
+}
+
 // ── Action handlers exposed on window ──
 
 async function confirmDeactivateUser(id, displayName) {
@@ -139,12 +203,19 @@ function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 function escAttr(s) {
-  return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  // Backslashes first (so subsequent \' and &quot; aren't re-escaped),
+  // then JS-string-terminator quotes, then strip newlines/line-separators
+  // so a displayName containing \n can't break out of an inline JS literal.
+  return String(s ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/[\r\n  ]/g, ' ');
 }
 
 // Expose action handlers on window so inline onclick="" attributes can call them.
-// (Task 11 will move openAddUserModal / openEditUserModal / saveUser here from
-// settings.js — for now they're still in settings.js, so renderUserRow's edit
-// button references window.openEditUserModal which is set up by settings.js.)
+window.openAddUserModal = openAddUserModal;
+window.openEditUserModal = openEditUserModal;
+window.saveUser = saveUser;
 window.confirmDeactivateUser = confirmDeactivateUser;
 window.reactivateUser = reactivateUser;
