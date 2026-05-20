@@ -19,6 +19,7 @@ import { settingsLoad } from './tools/settings/settings.js';
 import { renderSessionHistory } from './tools/session-history/session-history.js';
 import { chassisInitDropZones } from './tools/chassis-finder/chassis-finder.js';
 import { usersLoad } from './tools/users/users.js';
+import { storageLoad } from './tools/storage/storage.js';
 
 // Prevent browser from opening files dropped anywhere on the page
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -354,6 +355,7 @@ function switchTool(tool) {
   document.getElementById('settingsView').style.display = 'none';
   document.getElementById('sessionHistoryView').style.display = 'none';
   document.getElementById('usersView').style.display = 'none';
+  document.getElementById('storageView').style.display = 'none';
 
   // Show selected view
   if (tool === 'home') {
@@ -381,6 +383,9 @@ function switchTool(tool) {
   } else if (tool === 'users') {
     document.getElementById('usersView').style.display = '';
     usersLoad();
+  } else if (tool === 'storage') {
+    document.getElementById('storageView').style.display = '';
+    storageLoad();
   }
 
   // Update sidebar subtitle
@@ -393,6 +398,7 @@ function switchTool(tool) {
     'session-history': 'Session History',
     'settings': 'Settings',
     'users': 'User Management',
+    'storage': 'Storage',
   };
   document.getElementById('headerSubtitle').textContent = subtitles[tool] || '';
 
@@ -409,6 +415,8 @@ function switchTool(tool) {
   document.getElementById('navSettings').classList.toggle('active', tool === 'settings');
   const navUsers = document.getElementById('navUsers');
   if (navUsers) navUsers.classList.toggle('active', tool === 'users');
+  const navStorage = document.getElementById('navStorage');
+  if (navStorage) navStorage.classList.toggle('active', tool === 'storage');
 }
 
 // ── Home Dashboard Metrics ──
