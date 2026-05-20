@@ -415,7 +415,11 @@ async def update_existing_user(user_id: int, data: UpdateUserRequest, request: R
             return JSONResponse(status_code=400, content={"detail": "Password must be at least 4 characters"})
         update_data["password"] = data.password
 
-    user = update_user(user_id, update_data)
+    try:
+        user = update_user(user_id, update_data)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
+
     if not user:
         return JSONResponse(status_code=404, content={"detail": "User not found"})
 

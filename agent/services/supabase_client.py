@@ -575,6 +575,22 @@ def sb_create_google_user(email: str, display_name: str, role: str = "operator")
 def sb_update_user(user_id: int, data: dict) -> Optional[dict]:
     """Update user fields in Supabase."""
     import bcrypt
+
+    # Last-admin guard (same rule as local update_user)
+    if data.get("role") == "operator" or data.get("active") is False:
+        current = sb_get_user_by_id(user_id)
+        if current and current.get("role") == "admin" and (
+            (data.get("role") == "operator") or
+            (data.get("active") is False and current.get("active"))
+        ):
+            all_users = sb_list_users(active_only=True)
+            active_admins = [u for u in all_users if u.get("role") == "admin"]
+            if len(active_admins) <= 1:
+                if data.get("role") == "operator":
+                    raise ValueError("Cannot demote the last active admin")
+                if data.get("active") is False:
+                    raise ValueError("Cannot deactivate the last active admin")
+
     row = {}
     if "displayName" in data:
         row["display_name"] = data["displayName"].strip()

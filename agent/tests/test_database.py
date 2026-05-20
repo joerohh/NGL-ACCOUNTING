@@ -93,3 +93,40 @@ def test_sb_create_google_user_rejects_invalid_role():
     from services import supabase_client as sc
     with pytest.raises(ValueError):
         sc.sb_create_google_user("test@ngltrans.net", "Test", role="superuser")
+
+
+def test_update_user_blocks_demoting_last_admin(monkeypatch, tmp_path):
+    """The only active admin cannot be demoted to operator."""
+    db = _setup_clean_db(monkeypatch, tmp_path)
+    # Create exactly one admin
+    admin = db.create_user("solo_admin", "abcd1234", "Solo Admin", "admin")
+    with pytest.raises(ValueError, match="last active admin"):
+        db.update_user(admin["id"], {"role": "operator"})
+
+
+def test_update_user_blocks_deactivating_last_admin(monkeypatch, tmp_path):
+    """The only active admin cannot be deactivated."""
+    db = _setup_clean_db(monkeypatch, tmp_path)
+    admin = db.create_user("solo_admin", "abcd1234", "Solo Admin", "admin")
+    with pytest.raises(ValueError, match="last active admin"):
+        db.update_user(admin["id"], {"active": False})
+
+
+def test_update_user_allows_demoting_when_other_admins_exist(monkeypatch, tmp_path):
+    """When two admins exist, either can be demoted to operator."""
+    db = _setup_clean_db(monkeypatch, tmp_path)
+    admin_a = db.create_user("admin_a", "abcd1234", "Admin A", "admin")
+    admin_b = db.create_user("admin_b", "abcd1234", "Admin B", "admin")
+    result = db.update_user(admin_a["id"], {"role": "operator"})
+    assert result is not None
+    assert result["role"] == "operator"
+
+
+def test_update_user_allows_deactivating_when_other_admins_exist(monkeypatch, tmp_path):
+    """When two admins exist, either can be deactivated."""
+    db = _setup_clean_db(monkeypatch, tmp_path)
+    admin_a = db.create_user("admin_a", "abcd1234", "Admin A", "admin")
+    admin_b = db.create_user("admin_b", "abcd1234", "Admin B", "admin")
+    result = db.update_user(admin_a["id"], {"active": False})
+    assert result is not None
+    assert result["active"] is False

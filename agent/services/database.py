@@ -783,6 +783,21 @@ def update_user(user_id: int, data: dict) -> Optional[dict]:
     if not existing:
         return None
 
+    # Last-admin guard: prevent demoting or deactivating the only active admin.
+    if data.get("role") == "operator" and existing["role"] == "admin":
+        active_admin_count = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1"
+        ).fetchone()[0]
+        if active_admin_count <= 1:
+            raise ValueError("Cannot demote the last active admin")
+
+    if data.get("active") is False and existing["role"] == "admin" and existing["active"]:
+        active_admin_count = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1"
+        ).fetchone()[0]
+        if active_admin_count <= 1:
+            raise ValueError("Cannot deactivate the last active admin")
+
     sets = []
     params = []
 
