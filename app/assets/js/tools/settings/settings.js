@@ -1,59 +1,139 @@
 // ══════════════════════════════════════════════════════════
-//  SETTINGS — Credentials, user management, notifications
+//  SETTINGS — Connections (QBO / TMS / Gmail), Preferences, Advanced
 // ══════════════════════════════════════════════════════════
 import { state } from '../../shared/state.js';
 import { agentBridge } from '../../shared/agent-client.js';
 import { agentHealthCheck } from '../../agent-ui.js';
 
+// ── Entry point ──
 export async function settingsLoad() {
   loadNotificationState();
 
   if (!state.agentConnected) {
-    document.getElementById('settingsQboStatus').textContent = 'Agent offline';
-    document.getElementById('settingsTmsStatus').textContent = 'Agent offline';
+    const qboS = document.getElementById('qboConnStatus');
+    const tmsS = document.getElementById('tmsConnStatus');
+    const gmailS = document.getElementById('gmailConnStatus');
+    if (qboS) qboS.textContent = 'Agent offline';
+    if (tmsS) tmsS.textContent = 'Agent offline';
+    if (gmailS) gmailS.textContent = 'Agent offline';
     return;
   }
+
+  await Promise.all([
+    loadQboConnRow(),
+    loadTmsConnRow(),
+    loadGmailConnRow(),
+  ]);
+}
+
+// ── Row loaders ──
+async function loadQboConnRow() {
+  const statusEl = document.getElementById('qboConnStatus');
+  const pillEl = document.getElementById('qboConnPill');
+  const actionEl = document.getElementById('qboConnAction');
+  if (!statusEl || !pillEl || !actionEl) return;
+
+  try {
+    const status = await agentBridge.checkQBOStatus();
+    const api = (status && status.api) || {};
+
+    if (api.connected) {
+      let statusText = 'Connected';
+      if (api.realm_id) statusText += ` — Company ${api.realm_id}${api.sandbox ? ' (Sandbox)' : ''}`;
+      if (api.refresh_token_days_remaining != null) {
+        statusText += ` · token expires in ${api.refresh_token_days_remaining}d`;
+      }
+      statusEl.textContent = statusText;
+      pillEl.textContent = api.needs_reauth_warning ? 'Re-auth soon' : 'Connected';
+      pillEl.className = 'status-pill ' + (api.needs_reauth_warning ? 'pill-warn' : 'pill-ok');
+      actionEl.textContent = api.needs_reauth_warning ? 'Re-authorize' : 'Disconnect';
+      window.qboConnAction = api.needs_reauth_warning ? connectQboApi : disconnectQboApi;
+    } else {
+      statusEl.textContent = 'Not connected';
+      pillEl.textContent = 'Not connected';
+      pillEl.className = 'status-pill pill-off';
+      actionEl.textContent = 'Connect';
+      window.qboConnAction = connectQboApi;
+    }
+  } catch (e) {
+    statusEl.textContent = 'Could not load';
+    pillEl.textContent = 'Error';
+    pillEl.className = 'status-pill pill-warn';
+    actionEl.textContent = 'Connect';
+    window.qboConnAction = connectQboApi;
+  }
+}
+
+async function loadTmsConnRow() {
+  const statusEl = document.getElementById('tmsConnStatus');
+  const pillEl = document.getElementById('tmsConnPill');
+  if (!statusEl || !pillEl) return;
 
   const creds = await agentBridge.getCredentials();
   if (creds.error) {
+    statusEl.textContent = 'Could not load';
+    pillEl.textContent = 'Error';
+    pillEl.className = 'status-pill pill-warn';
     return;
   }
 
-  // Pre-fill TMS email (never pre-fill passwords)
-  if (creds.tms_email) {
-    document.getElementById('settingsTmsEmail').value = creds.tms_email;
+  if (creds.tms_configured) {
+    statusEl.textContent = creds.tms_email || 'Configured';
+    pillEl.textContent = 'Configured';
+    pillEl.className = 'status-pill pill-ok';
+  } else {
+    statusEl.textContent = 'Not configured';
+    pillEl.textContent = 'Not set';
+    pillEl.className = 'status-pill pill-warn';
   }
-  document.getElementById('settingsTmsStatus').textContent = creds.tms_configured ? 'Configured' : 'Not configured';
-  document.getElementById('settingsTmsStatus').style.color = creds.tms_configured ? '#16a34a' : '#94a3b8';
 
-  // Clear password fields
-  document.getElementById('settingsTmsPassword').value = '';
-  document.getElementById('settingsTmsPassword').placeholder = creds.tms_configured ? '(saved \u2014 enter new to change)' : 'Enter password';
-
-  // Load QBO API status
-  await loadQboApiStatus();
-
-  // Load email config
-  await loadEmailConfig();
+  // Pre-fill the modal inputs for when user opens Edit
+  const emailInput = document.getElementById('settingsTmsEmail');
+  const pwInput = document.getElementById('settingsTmsPassword');
+  if (emailInput && creds.tms_email) emailInput.value = creds.tms_email;
+  if (pwInput) {
+    pwInput.value = '';
+    pwInput.placeholder = creds.tms_configured ? '(saved — enter new to change)' : 'Enter password';
+  }
 }
 
-// ── Email (Gmail) Settings ──
-async function loadEmailConfig() {
-  const statusEl = document.getElementById('settingsEmailStatus');
-  const addrEl = document.getElementById('settingsGmailAddress');
-  const pwEl = document.getElementById('settingsGmailAppPassword');
-  if (!statusEl) return;
+async function loadGmailConnRow() {
+  const statusEl = document.getElementById('gmailConnStatus');
+  const pillEl = document.getElementById('gmailConnPill');
+  if (!statusEl || !pillEl) return;
 
   const cfg = await agentBridge.getEmailConfig();
   if (cfg.error) {
     statusEl.textContent = 'Could not load';
+    pillEl.textContent = 'Error';
+    pillEl.className = 'status-pill pill-warn';
     return;
   }
-  if (cfg.gmail_address) addrEl.value = cfg.gmail_address;
-  pwEl.value = '';
-  pwEl.placeholder = cfg.configured ? '(saved \u2014 enter new to change)' : '16-character app password';
-  statusEl.textContent = cfg.configured ? ('Configured (' + cfg.gmail_address + ')') : 'Not configured';
-  statusEl.style.color = cfg.configured ? '#16a34a' : '#94a3b8';
+
+  if (cfg.configured) {
+    statusEl.textContent = cfg.gmail_address || 'Configured';
+    pillEl.textContent = 'Configured';
+    pillEl.className = 'status-pill pill-ok';
+  } else {
+    statusEl.textContent = 'App password not set';
+    pillEl.textContent = 'Not set';
+    pillEl.className = 'status-pill pill-warn';
+  }
+
+  // Pre-fill the modal inputs
+  const addrInput = document.getElementById('settingsGmailAddress');
+  const pwInput = document.getElementById('settingsGmailAppPassword');
+  if (addrInput && cfg.gmail_address) addrInput.value = cfg.gmail_address;
+  if (pwInput) {
+    pwInput.value = '';
+    pwInput.placeholder = cfg.configured ? '(saved — enter new to change)' : '16-character app password';
+  }
+}
+
+// ── Email (Gmail) Settings helpers ──
+async function loadEmailConfig() {
+  // Backwards-compatible thin wrapper used by other callers (if any).
+  return loadGmailConnRow();
 }
 
 function showEmailResult(msg, success) {
@@ -64,34 +144,42 @@ function showEmailResult(msg, success) {
   el.style.color = success ? '#15803d' : '#dc2626';
   el.style.background = success ? '#f0fdf4' : '#fef2f2';
   el.style.border = '1px solid ' + (success ? '#bbf7d0' : '#fecaca');
+  el.style.padding = '8px 10px';
+  el.style.borderRadius = '8px';
   setTimeout(function() { el.style.display = 'none'; }, 10000);
 }
 
 async function saveEmailConfig() {
-  if (!state.agentConnected) { showEmailResult('Agent is offline.', false); return; }
+  if (!state.agentConnected) { showEmailResult('Agent is offline.', false); return { ok: false }; }
   const btn = document.getElementById('emailSaveBtn');
   const btnText = document.getElementById('emailSaveBtnText');
   const addr = document.getElementById('settingsGmailAddress').value.trim();
   const pw = document.getElementById('settingsGmailAppPassword').value;
 
-  if (!addr) { showEmailResult('Enter your Gmail address.', false); return; }
+  if (!addr) { showEmailResult('Enter your Gmail address.', false); return { ok: false }; }
 
   const payload = { gmail_address: addr };
   if (pw) payload.gmail_app_password = pw;
 
-  btn.disabled = true; btnText.textContent = 'Saving...';
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Saving...';
   const result = await agentBridge.saveEmailConfig(payload);
-  btn.disabled = false; btnText.textContent = 'Save';
+  if (btn) btn.disabled = false;
+  if (btnText) btnText.textContent = 'Save';
 
-  if (result.error) { showEmailResult('Failed: ' + result.error, false); return; }
-  showEmailResult(result.configured ? 'Saved! Emails will be sent from ' + result.gmail_address + '.' : 'Saved (app password still needed).', result.configured);
-  await loadEmailConfig();
+  if (result.error) { showEmailResult('Failed: ' + result.error, false); return { ok: false }; }
+  showEmailResult(
+    result.configured ? 'Saved! Emails will be sent from ' + result.gmail_address + '.' : 'Saved (app password still needed).',
+    !!result.configured
+  );
+  await loadGmailConnRow();
+  return { ok: true, configured: !!result.configured };
 }
 
 async function testEmailConfig() {
   if (!state.agentConnected) { showEmailResult('Agent is offline.', false); return; }
   const btn = document.getElementById('emailTestBtn');
-  const btnText = document.getElementById('emailTestBtnText');
+  const origText = btn ? btn.textContent : 'Test';
   const addr = document.getElementById('settingsGmailAddress').value.trim();
   const pw = document.getElementById('settingsGmailAppPassword').value;
 
@@ -100,9 +188,9 @@ async function testEmailConfig() {
   if (pw) payload.gmail_app_password = pw;
   if (addr) payload.to = addr; // send test to self
 
-  btn.disabled = true; btnText.textContent = 'Sending...';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
   const result = await agentBridge.testEmailConfig(payload);
-  btn.disabled = false; btnText.textContent = 'Send Test';
+  if (btn) { btn.disabled = false; btn.textContent = origText || 'Test'; }
 
   if (result.sent) {
     showEmailResult('Test email sent! Check your inbox at ' + (addr || 'the saved address') + '.', true);
@@ -111,59 +199,9 @@ async function testEmailConfig() {
   }
 }
 
-async function settingsSaveAndConnect() {
-  if (!state.agentConnected) {
-    settingsShowResult('Agent is offline. Start the agent first.', false);
-    return;
-  }
-
-  const btn = document.getElementById('settingsSaveBtn');
-  const btnText = document.getElementById('settingsSaveBtnText');
-  btn.disabled = true;
-  btnText.textContent = 'Saving & connecting...';
-
-  const data = {};
-  const tmsEmail = document.getElementById('settingsTmsEmail').value.trim();
-  const tmsPass = document.getElementById('settingsTmsPassword').value;
-
-  if (tmsEmail) data.tms_email = tmsEmail;
-  if (tmsPass) data.tms_password = tmsPass;
-
-  if (Object.keys(data).length === 0) {
-    settingsShowResult('Enter at least one credential to save.', false);
-    btn.disabled = false;
-    btnText.textContent = 'Save & Connect';
-    return;
-  }
-
-  const result = await agentBridge.saveAndConnect(data);
-  btn.disabled = false;
-  btnText.textContent = 'Save & Connect';
-
-  if (result.error) {
-    settingsShowResult('Failed: ' + result.error, false);
-    return;
-  }
-
-  // Show results
-  let msg = 'Credentials saved. ';
-  const r = result.results || {};
-  if (r.qbo === 'logged_in') msg += 'QBO: Connected! ';
-  else if (r.qbo) msg += 'QBO: ' + r.qbo + '. ';
-  if (r.tms === 'logged_in') msg += 'TMS: Logged in! ';
-  else if (r.tms === 'needs_manual_login') msg += 'TMS: Needs manual login (check Chrome for 2FA). ';
-  else if (r.tms) msg += 'TMS: ' + r.tms + '. ';
-
-  const allGood = r.qbo === 'logged_in' || r.tms === 'logged_in';
-  settingsShowResult(msg, allGood);
-
-  // Refresh status
-  settingsLoad();
-  agentHealthCheck();
-}
-
 function settingsShowResult(msg, success) {
   const el = document.getElementById('settingsResultMsg');
+  if (!el) return;
   el.textContent = msg;
   el.style.display = '';
   el.style.color = success ? '#16a34a' : '#dc2626';
@@ -182,17 +220,16 @@ async function runSelectorHealthCheck() {
   }
 
   const btn = document.getElementById('healthCheckBtn');
-  btn.disabled = true;
-  btn.textContent = 'Checking...';
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
 
   const resultsDiv = document.getElementById('healthCheckResults');
-  resultsDiv.style.display = '';
+  if (resultsDiv) resultsDiv.style.display = '';
 
   const tms = await agentBridge.checkTmsSelectorHealth();
-  document.getElementById('healthCheckTms').innerHTML = formatHealthResult('TMS', tms);
+  const tmsEl = document.getElementById('healthCheckTms');
+  if (tmsEl) tmsEl.innerHTML = formatHealthResult('TMS', tms);
 
-  btn.disabled = false;
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Run Check`;
+  if (btn) { btn.disabled = false; btn.textContent = 'Run Check'; }
 }
 
 function formatHealthResult(label, data) {
@@ -234,7 +271,8 @@ async function toggleNotifications(enabled) {
   if (enabled && 'Notification' in window) {
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') {
-      document.getElementById('settingsNotifyEnabled').checked = false;
+      const cb = document.getElementById('settingsNotifyEnabled');
+      if (cb) cb.checked = false;
       settingsShowResult('Browser notification permission was denied. Enable it in your browser settings.', false);
       return;
     }
@@ -251,80 +289,7 @@ function loadNotificationState() {
   if (checkbox) checkbox.checked = enabled;
 }
 
-async function doChangePassword() {
-  const current = document.getElementById('changeCurrentPw').value;
-  const newPw = document.getElementById('changeNewPw').value;
-  const resultEl = document.getElementById('changePwResult');
-
-  if (!current || !newPw) {
-    resultEl.textContent = 'Both fields are required.';
-    resultEl.style.color = '#dc2626'; resultEl.style.display = ''; return;
-  }
-  if (newPw.length < 4) {
-    resultEl.textContent = 'New password must be at least 4 characters.';
-    resultEl.style.color = '#dc2626'; resultEl.style.display = ''; return;
-  }
-
-  const result = await agentBridge.changePassword(current, newPw);
-  if (result.error) {
-    resultEl.textContent = result.error;
-    resultEl.style.color = '#dc2626'; resultEl.style.display = ''; return;
-  }
-
-  resultEl.textContent = 'Password changed successfully!';
-  resultEl.style.color = '#16a34a'; resultEl.style.display = '';
-  document.getElementById('changeCurrentPw').value = '';
-  document.getElementById('changeNewPw').value = '';
-  setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
-}
-
 // ── QBO API Connection ──
-async function loadQboApiStatus() {
-  if (!state.agentConnected) {
-    document.getElementById('settingsQboApiStatus').textContent = 'Agent offline';
-    return;
-  }
-
-  try {
-    const status = await agentBridge.checkQBOStatus();
-
-    // Update API connection status
-    const api = status.api || {};
-    const statusEl = document.getElementById('settingsQboApiStatus');
-    const connectedInfo = document.getElementById('qboApiConnectedInfo');
-    const connectBtn = document.getElementById('qboApiConnectBtn');
-    const disconnectBtn = document.getElementById('qboApiDisconnectBtn');
-    const reauthWarning = document.getElementById('qboApiReauthWarning');
-
-    if (api.connected) {
-      statusEl.textContent = 'Connected';
-      statusEl.style.color = '#16a34a';
-      connectedInfo.style.display = '';
-      disconnectBtn.style.display = '';
-      document.getElementById('qboApiConnectBtnText').textContent = 'Re-authorize';
-
-      const realmInfo = document.getElementById('qboApiRealmInfo');
-      realmInfo.textContent = `Company ID: ${api.realm_id || 'unknown'}${api.sandbox ? ' (Sandbox)' : ''}`;
-
-      const tokenInfo = document.getElementById('qboApiTokenInfo');
-      if (api.refresh_token_days_remaining != null) {
-        tokenInfo.textContent = `Token expires in ${api.refresh_token_days_remaining} days`;
-      }
-
-      reauthWarning.style.display = api.needs_reauth_warning ? '' : 'none';
-    } else {
-      statusEl.textContent = 'Not connected \u2014 authorize below';
-      statusEl.style.color = '#94a3b8';
-      connectedInfo.style.display = 'none';
-      disconnectBtn.style.display = 'none';
-      reauthWarning.style.display = 'none';
-      document.getElementById('qboApiConnectBtnText').textContent = 'Connect QBO API';
-    }
-  } catch (e) {
-    document.getElementById('settingsQboApiStatus').textContent = 'Error loading status';
-  }
-}
-
 let _oauthPollTimer = null;
 
 async function connectQboApi() {
@@ -355,10 +320,17 @@ function showOAuthPolling() {
   if (existing) existing.remove();
   if (_oauthPollTimer) { clearInterval(_oauthPollTimer); _oauthPollTimer = null; }
 
-  const container = document.getElementById('qboApiConnectBtn').parentElement;
+  // Attach next to the QBO action button (inside the Connections card row)
+  const actionBtn = document.getElementById('qboConnAction');
+  const container = actionBtn ? actionBtn.closest('.connections-card') : null;
+  if (!container) {
+    // Fallback: settings result message
+    settingsShowResult('Waiting for QBO authorization in your browser…', true);
+    return;
+  }
   const box = document.createElement('div');
   box.id = 'qboOAuthPasteBox';
-  box.style.cssText = 'margin-top:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;text-align:center;';
+  box.style.cssText = 'margin:10px 0 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:16px;text-align:center;';
   box.innerHTML = `
     <div id="qboOAuthSpinner" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;">
       <svg width="20" height="20" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;">
@@ -385,7 +357,7 @@ function showOAuthPolling() {
     style.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
     document.head.appendChild(style);
   }
-  container.appendChild(box);
+  container.parentElement.insertBefore(box, container.nextSibling);
 
   // Poll /qbo/status every 2 seconds for up to 5 minutes
   const startTime = Date.now();
@@ -407,7 +379,7 @@ function showOAuthPolling() {
         `;
         setTimeout(() => {
           document.getElementById('qboOAuthPasteBox')?.remove();
-          loadQboApiStatus();
+          loadQboConnRow();
         }, 2000);
         return;
       }
@@ -454,7 +426,7 @@ window.submitOAuthUrl = async function() {
     if (resp.ok && text.includes('Connected')) {
       msg.innerHTML = '<strong style="color:#16a34a;">QBO API Connected!</strong>';
       msg.style.display = ''; msg.style.background = '#f0fdf4'; msg.style.border = '1px solid #bbf7d0';
-      setTimeout(() => { document.getElementById('qboOAuthPasteBox')?.remove(); loadQboApiStatus(); }, 2000);
+      setTimeout(() => { document.getElementById('qboOAuthPasteBox')?.remove(); loadQboConnRow(); }, 2000);
     } else {
       msg.textContent = 'Connection failed: ' + text;
       msg.style.display = ''; msg.style.color = '#dc2626';
@@ -465,7 +437,7 @@ window.submitOAuthUrl = async function() {
     msg.style.display = ''; msg.style.color = '#dc2626';
     btn.disabled = false; btn.textContent = 'Complete Connection';
   }
-}
+};
 
 async function disconnectQboApi() {
   if (!state.agentConnected) return;
@@ -477,19 +449,79 @@ async function disconnectQboApi() {
       return;
     }
     settingsShowResult('QBO API disconnected.', true);
-    await loadQboApiStatus();
+    await loadQboConnRow();
   } catch (e) {
     settingsShowResult('Failed to disconnect: ' + e.message, false);
   }
 }
 
+// ── TMS / Gmail modal open helpers + save handlers ──
+function openTmsEditModal() {
+  // Refresh the pre-filled email value if creds are loaded
+  document.getElementById('tmsEditError').style.display = 'none';
+  document.getElementById('tmsEditModal').classList.add('open');
+}
+
+function openGmailEditModal() {
+  document.getElementById('gmailEditError').style.display = 'none';
+  const emailResult = document.getElementById('emailResultMsg');
+  if (emailResult) emailResult.style.display = 'none';
+  document.getElementById('gmailEditModal').classList.add('open');
+}
+
+async function saveTmsCredentials() {
+  const email = document.getElementById('settingsTmsEmail').value.trim();
+  const password = document.getElementById('settingsTmsPassword').value;
+  const errEl = document.getElementById('tmsEditError');
+  errEl.style.display = 'none';
+
+  if (!email) {
+    errEl.textContent = 'Email is required';
+    errEl.style.display = '';
+    return;
+  }
+  if (!state.agentConnected) {
+    errEl.textContent = 'Agent is offline. Start the agent first.';
+    errEl.style.display = '';
+    return;
+  }
+
+  const payload = { tms_email: email };
+  if (password) payload.tms_password = password;
+
+  const result = await agentBridge.saveAndConnect(payload);
+  if (result.error) {
+    errEl.textContent = 'Failed: ' + result.error;
+    errEl.style.display = '';
+    return;
+  }
+
+  document.getElementById('tmsEditModal').classList.remove('open');
+  settingsShowResult('TMS credentials saved.', true);
+  await loadTmsConnRow();
+  agentHealthCheck();
+}
+
+async function saveGmailCredentials() {
+  const result = await saveEmailConfig();
+  if (result && result.ok) {
+    // Brief delay so user sees the success message inside the modal before close
+    setTimeout(() => {
+      document.getElementById('gmailEditModal').classList.remove('open');
+      loadGmailConnRow();
+    }, 800);
+  }
+}
+
 // ── Window assignments for inline HTML handlers ──
-window.settingsSaveAndConnect = settingsSaveAndConnect;
 window.settingsLoad = settingsLoad;
 window.runSelectorHealthCheck = runSelectorHealthCheck;
 window.toggleNotifications = toggleNotifications;
-window.doChangePassword = doChangePassword;
 window.connectQboApi = connectQboApi;
 window.disconnectQboApi = disconnectQboApi;
 window.saveEmailConfig = saveEmailConfig;
 window.testEmailConfig = testEmailConfig;
+window.openTmsEditModal = openTmsEditModal;
+window.openGmailEditModal = openGmailEditModal;
+window.saveTmsCredentials = saveTmsCredentials;
+window.saveGmailCredentials = saveGmailCredentials;

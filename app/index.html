@@ -1194,243 +1194,79 @@
 
 
 <!-- ═══════════════════════════════════════════ SETTINGS VIEW ═══════════════════════════════════════════ -->
-<div id="settingsView" style="display:none;">
-  <div style="max-width:640px; margin:0 auto; padding:24px;">
-    <h2 style="font-size:1.2rem; font-weight:700; color:#0f172a; margin-bottom:4px;">Settings</h2>
-    <p style="font-size:0.82rem; color:#64748b; margin-bottom:24px;">
-      Auto-login credentials and connection settings. Saved locally in your agent's .env file.
-    </p>
+<div id="settingsView" style="display:none; padding:24px 32px;">
+  <div style="margin-bottom:18px;">
+    <h1 style="font-size:1.2rem; font-weight:800; color:#0f172a; margin:0;">Settings</h1>
+    <p style="font-size:0.78rem; color:#94a3b8; margin:4px 0 0;">Connections, preferences, and diagnostics</p>
+  </div>
 
-    <!-- TMS Credentials -->
-    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-        <div style="width:36px; height:36px; background:#eff6ff; border-radius:8px; display:flex; align-items:center; justify-content:center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-          </svg>
-        </div>
-        <div>
-          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">TMS Portal (Google SSO)</div>
-          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsTmsStatus">Not configured</div>
-        </div>
+  <h3 style="font-size:0.95rem; font-weight:700; color:#0f172a; margin:0 0 4px;">Connections</h3>
+  <p style="font-size:0.74rem; color:#94a3b8; margin:0 0 10px;">Sign in to the three services this app talks to</p>
+
+  <div class="connections-card">
+    <!-- QBO row -->
+    <div class="conn-row">
+      <div class="conn-icon qbo">Qb</div>
+      <div class="conn-meta">
+        <div class="conn-name">QuickBooks Online</div>
+        <div class="conn-status" id="qboConnStatus">Checking&hellip;</div>
       </div>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <div>
-          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Google Email</label>
-          <input type="email" id="settingsTmsEmail" placeholder="your-email@ngltrans.net"
-            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
-            onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" />
-        </div>
-        <div>
-          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Password</label>
-          <input type="password" id="settingsTmsPassword" placeholder="Enter password"
-            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
-            onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" />
-        </div>
-      </div>
+      <span id="qboConnPill" class="status-pill pill-off">&mdash;</span>
+      <button class="conn-action" id="qboConnAction" onclick="window.qboConnAction&&window.qboConnAction()">&hellip;</button>
     </div>
 
-    <!-- QBO API Connection -->
-    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-        <div style="width:36px; height:36px; background:#f0fdf4; border-radius:8px; display:flex; align-items:center; justify-content:center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-        </div>
-        <div style="flex:1;">
-          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">QBO API Connection</div>
-          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsQboApiStatus">Not connected</div>
-        </div>
+    <!-- TMS row -->
+    <div class="conn-row">
+      <div class="conn-icon tms">Tm</div>
+      <div class="conn-meta">
+        <div class="conn-name">TMS Portal</div>
+        <div class="conn-status" id="tmsConnStatus">Checking&hellip;</div>
       </div>
-
-      <!-- API connection status + connect button -->
-      <div id="qboApiSection">
-        <div id="qboApiConnectedInfo" style="display:none; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; margin-bottom:10px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            <span style="font-size:0.82rem; color:#15803d; font-weight:600;">Connected to QBO API</span>
-          </div>
-          <div style="font-size:0.72rem; color:#64748b; margin-top:4px;" id="qboApiRealmInfo"></div>
-          <div style="font-size:0.72rem; color:#64748b;" id="qboApiTokenInfo"></div>
-        </div>
-
-        <div id="qboApiReauthWarning" style="display:none; background:#fef3c7; border:1px solid #fde68a; border-radius:8px; padding:10px; margin-bottom:10px; font-size:0.78rem; color:#92400e;">
-          Your QBO API authorization expires soon. Please re-authorize to keep the connection active.
-        </div>
-
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-primary" onclick="connectQboApi()" id="qboApiConnectBtn"
-            style="flex:1; justify-content:center; padding:9px 14px; font-size:0.82rem; background:#16a34a; border-color:#16a34a;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-            </svg>
-            <span id="qboApiConnectBtnText">Connect QBO API</span>
-          </button>
-          <button class="btn btn-secondary" onclick="disconnectQboApi()" id="qboApiDisconnectBtn"
-            style="padding:9px 14px; font-size:0.82rem; display:none;">
-            Disconnect
-          </button>
-        </div>
-      </div>
+      <span id="tmsConnPill" class="status-pill pill-off">&mdash;</span>
+      <button class="conn-action" onclick="window.openTmsEditModal&&window.openTmsEditModal()">Edit</button>
     </div>
 
-    <!-- Email Sending (Gmail) -->
-    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-        <div style="width:36px; height:36px; background:#fef3c7; border-radius:8px; display:flex; align-items:center; justify-content:center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-          </svg>
-        </div>
-        <div style="flex:1;">
-          <div style="font-weight:600; font-size:0.92rem; color:#0f172a;">Email Sending (Gmail)</div>
-          <div style="font-size:0.72rem; color:#94a3b8;" id="settingsEmailStatus">Not configured</div>
-        </div>
+    <!-- Gmail row -->
+    <div class="conn-row">
+      <div class="conn-icon gmail">Gm</div>
+      <div class="conn-meta">
+        <div class="conn-name">Gmail (for sending invoices)</div>
+        <div class="conn-status" id="gmailConnStatus">Checking&hellip;</div>
       </div>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <div>
-          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Your Gmail Address</label>
-          <input type="email" id="settingsGmailAddress" placeholder="you@ngltrans.net"
-            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
-            onfocus="this.style.borderColor='#d97706'" onblur="this.style.borderColor='#e2e8f0'" />
-        </div>
-        <div>
-          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Gmail App Password</label>
-          <input type="password" id="settingsGmailAppPassword" placeholder="16-character app password"
-            style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;"
-            onfocus="this.style.borderColor='#d97706'" onblur="this.style.borderColor='#e2e8f0'" />
-        </div>
-        <div style="display:flex; gap:8px; margin-top:4px;">
-          <button class="btn btn-primary" onclick="saveEmailConfig()" id="emailSaveBtn"
-            style="flex:1; justify-content:center; padding:9px 14px; font-size:0.82rem; background:#d97706; border-color:#d97706;">
-            <span id="emailSaveBtnText">Save</span>
-          </button>
-          <button class="btn btn-secondary" onclick="testEmailConfig()" id="emailTestBtn"
-            style="padding:9px 14px; font-size:0.82rem;">
-            <span id="emailTestBtnText">Send Test</span>
-          </button>
-        </div>
-        <div id="emailResultMsg" style="display:none; margin-top:4px; font-size:0.78rem; padding:9px 12px; border-radius:8px;"></div>
-        <details style="margin-top:6px; font-size:0.76rem; color:#64748b;">
-          <summary style="cursor:pointer; color:#2563eb;">How do I get a Gmail App Password?</summary>
-          <ol style="margin:8px 0 0 0; padding-left:20px; line-height:1.6;">
-            <li>Make sure <strong>2-Step Verification</strong> is turned on for your Google account.</li>
-            <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#2563eb;">myaccount.google.com/apppasswords</a>.</li>
-            <li>Create a new app password (name it e.g. "NGL Accounting"). Google gives you 16 letters.</li>
-            <li>Paste the 16-character code above (spaces are okay), then click <strong>Save</strong> and <strong>Send Test</strong>.</li>
-          </ol>
-          <p style="margin:8px 0 0;">Emails will be sent <strong>from your own Gmail</strong> and appear in <strong>your Sent folder</strong>.</p>
-        </details>
+      <span id="gmailConnPill" class="status-pill pill-off">&mdash;</span>
+      <button class="conn-action" onclick="window.openGmailEditModal&&window.openGmailEditModal()">Set up</button>
+    </div>
+  </div>
+
+  <h3 style="font-size:0.95rem; font-weight:700; color:#0f172a; margin:18px 0 4px;">Preferences</h3>
+  <p style="font-size:0.74rem; color:#94a3b8; margin:0 0 10px;">Personal settings for this device</p>
+
+  <div class="preferences-card">
+    <div class="pref-toggle">
+      <div>
+        <div class="pref-label">Desktop notifications</div>
+        <div class="pref-desc">Alerts when something needs attention</div>
+      </div>
+      <input type="checkbox" id="settingsNotifyEnabled" onchange="toggleNotifications(this.checked)"
+        style="width:36px; height:20px; accent-color:#ea580c;" />
+    </div>
+  </div>
+
+  <details style="margin-top:14px; font-size:0.8rem; color:#64748b;">
+    <summary style="cursor:pointer; padding:8px 0;">Advanced &mdash; Selector Health check</summary>
+    <div style="padding:10px 0 0;">
+      <p style="margin:0 0 8px; font-size:0.74rem; color:#94a3b8;">Diagnostic tool &mdash; verifies QBO/TMS page elements are still working.</p>
+      <button class="btn btn-secondary" onclick="runSelectorHealthCheck()" id="healthCheckBtn" style="padding:6px 12px; font-size:0.74rem;">Run Check</button>
+      <div id="healthCheckResults" style="display:none; margin-top:10px;">
+        <div id="healthCheckTms" style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:0.78rem;"></div>
       </div>
     </div>
+  </details>
 
-    <!-- Info banner -->
-    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; margin-bottom:16px; font-size:0.78rem; color:#15803d; line-height:1.5;">
-      <strong>How it works:</strong> Credentials are saved locally to your agent's .env file (never sent to the internet).
-      On startup, the agent auto-fills login forms. If your account requires 2FA, the Chrome window will
-      open for you to complete that step manually.
-    </div>
+  <div id="settingsResultMsg" style="margin-top:14px; font-size:0.82rem; display:none;"></div>
 
-    <!-- Action buttons -->
-    <div style="display:flex; gap:10px;">
-      <button class="btn btn-primary" onclick="settingsSaveAndConnect()" id="settingsSaveBtn"
-        style="flex:1; justify-content:center; padding:10px 16px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-        </svg>
-        <span id="settingsSaveBtnText">Save & Connect</span>
-      </button>
-      <button class="btn btn-secondary" onclick="settingsLoad()" style="padding:10px 16px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
-        Reload
-      </button>
-    </div>
-
-    <!-- Result message -->
-    <div id="settingsResultMsg" style="margin-top:12px; font-size:0.82rem; display:none;"></div>
-
-    <!-- Selector Health Checks -->
-    <div style="margin-top:28px; border-top:1px solid #e2e8f0; padding-top:24px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <div>
-          <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0;">Selector Health</h3>
-          <p style="font-size:0.75rem; color:#94a3b8; margin:2px 0 0;">Check if QBO/TMS page elements are still working</p>
-        </div>
-        <button class="btn btn-secondary" onclick="runSelectorHealthCheck()" id="healthCheckBtn" style="padding:8px 14px; font-size:0.8rem;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-          Run Check
-        </button>
-      </div>
-      <div id="healthCheckResults" style="display:none;">
-        <div id="healthCheckTms" style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px; font-size:0.8rem;"></div>
-      </div>
-    </div>
-
-    <!-- Notification Settings -->
-    <div style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:24px;">
-      <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 4px;">Notifications</h3>
-      <p style="font-size:0.75rem; color:#94a3b8; margin:0 0 14px;">Desktop alerts when something needs your attention</p>
-      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
-        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:0.85rem; color:#334155;">
-          <input type="checkbox" id="settingsNotifyEnabled" onchange="toggleNotifications(this.checked)"
-            style="width:18px; height:18px; accent-color:#ea580c;" />
-          Enable desktop notifications
-        </label>
-        <p style="font-size:0.72rem; color:#94a3b8; margin:6px 0 0 28px;">
-          Get notified when a session expires, a job fails, or the agent needs attention.
-        </p>
-      </div>
-    </div>
-
-    <!-- User Management (admin only) -->
-    <div id="userManagementSection" style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:24px; display:none;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <div>
-          <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0;">User Management</h3>
-          <p style="font-size:0.75rem; color:#94a3b8; margin:2px 0 0;">Add, edit, or deactivate user accounts</p>
-        </div>
-        <button class="btn btn-primary" onclick="window.openAddUserModal&&window.openAddUserModal()" style="padding:8px 14px; font-size:0.8rem;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add User
-        </button>
-      </div>
-      <div id="userList" style="display:flex; flex-direction:column; gap:8px;">
-        <!-- Dynamically populated -->
-      </div>
-    </div>
-
-    <!-- Change Password -->
-    <div style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:24px;">
-      <h3 style="font-size:1rem; font-weight:700; color:#0f172a; margin:0 0 4px;">Change Password</h3>
-      <p style="font-size:0.75rem; color:#94a3b8; margin:0 0 14px;">Update your account password</p>
-      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px;">
-        <div style="display:flex; flex-direction:column; gap:10px;">
-          <div>
-            <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Current Password</label>
-            <input type="password" id="changeCurrentPw" placeholder="Enter current password"
-              style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
-          </div>
-          <div>
-            <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">New Password</label>
-            <input type="password" id="changeNewPw" placeholder="Enter new password"
-              style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box;" />
-          </div>
-          <button class="btn btn-secondary" onclick="window.doChangePassword&&window.doChangePassword()" style="padding:8px 14px; align-self:flex-start;">
-            Update Password
-          </button>
-          <div id="changePwResult" style="font-size:0.82rem; display:none;"></div>
-        </div>
-      </div>
-    </div>
-
+  <div style="margin-top:24px; padding-top:12px; border-top:1px solid #f1f5f9; font-size:0.68rem; color:#94a3b8; line-height:1.5;">
+    Credentials are saved locally to your agent &mdash; never sent online.
   </div>
 </div>
 
@@ -1567,6 +1403,73 @@
       <button class="btn btn-primary" onclick="window.saveUser&&window.saveUser()" id="userModalSaveBtn">Save</button>
     </div>
     <div id="userModalError" style="padding:0 20px 14px; font-size:0.82rem; color:#dc2626; display:none;"></div>
+  </div>
+</div>
+
+<!-- TMS Edit Modal -->
+<div id="tmsEditModal" class="modal-overlay">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="modal-header">
+      <h3 style="margin:0; font-size:1rem; font-weight:700;">TMS Portal</h3>
+      <button class="modal-close" onclick="document.getElementById('tmsEditModal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Email</label>
+          <input type="email" id="settingsTmsEmail" style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; box-sizing:border-box;" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Password</label>
+          <input type="password" id="settingsTmsPassword" style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; box-sizing:border-box;" />
+        </div>
+      </div>
+      <div id="tmsEditError" style="margin-top:8px; font-size:0.78rem; color:#dc2626; display:none;"></div>
+    </div>
+    <div class="modal-footer" style="padding:14px 20px; display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="document.getElementById('tmsEditModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="window.saveTmsCredentials&&window.saveTmsCredentials()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gmail Edit Modal -->
+<div id="gmailEditModal" class="modal-overlay">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="modal-header">
+      <h3 style="margin:0; font-size:1rem; font-weight:700;">Gmail App Password</h3>
+      <button class="modal-close" onclick="document.getElementById('gmailEditModal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">Gmail Address</label>
+          <input type="email" id="settingsGmailAddress" placeholder="you@gmail.com" style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; box-sizing:border-box;" />
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#64748b; display:block; margin-bottom:4px;">App Password (16 letters)</label>
+          <input type="password" id="settingsGmailAppPassword" placeholder="abcd efgh ijkl mnop" style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.85rem; box-sizing:border-box;" />
+        </div>
+      </div>
+      <details style="margin-top:10px; font-size:0.76rem; color:#64748b;">
+        <summary style="cursor:pointer; color:#2563eb;">How do I get one?</summary>
+        <ol style="margin:8px 0 0 0; padding-left:20px; line-height:1.6;">
+          <li>Make sure 2-Step Verification is on for your Google account.</li>
+          <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#2563eb;">myaccount.google.com/apppasswords</a>.</li>
+          <li>Create a new app password (name it "NGL Accounting"). Google gives you 16 letters.</li>
+          <li>Paste them above (spaces are fine) and Save.</li>
+        </ol>
+      </details>
+      <div id="emailResultMsg" style="margin-top:10px; font-size:0.78rem; display:none;"></div>
+      <div id="gmailEditError" style="margin-top:8px; font-size:0.78rem; color:#dc2626; display:none;"></div>
+    </div>
+    <div class="modal-footer" style="padding:14px 20px; display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="document.getElementById('gmailEditModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-secondary" onclick="window.testEmailConfig&&window.testEmailConfig()" id="emailTestBtn">Test</button>
+      <button class="btn btn-primary" onclick="window.saveGmailCredentials&&window.saveGmailCredentials()" id="emailSaveBtn">
+        <span id="emailSaveBtnText">Save</span>
+      </button>
+    </div>
   </div>
 </div>
 
