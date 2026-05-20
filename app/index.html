@@ -1487,6 +1487,23 @@
   </div>
 </div>
 
+<!-- Users tab (admin-only) -->
+<div id="usersView" style="display:none; padding:24px 32px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+    <div>
+      <h1 style="font-size:1.2rem; font-weight:800; color:#0f172a; margin:0;">Users</h1>
+      <p style="font-size:0.78rem; color:#94a3b8; margin:4px 0 0;">Manage who has access to NGL Accounting</p>
+    </div>
+    <button class="btn btn-primary" onclick="window.openAddUserModal&&window.openAddUserModal()" style="padding:8px 14px; font-size:0.8rem;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Add User
+    </button>
+  </div>
+  <div id="userListV2"></div>
+</div>
+
 <!-- ── Add/Edit User Modal ── -->
 <div id="userModal" class="modal-overlay">
   <div class="modal-box" style="max-width:420px;">

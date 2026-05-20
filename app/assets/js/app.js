@@ -18,6 +18,7 @@ import { custLoadCustomers } from './tools/customers/customers.js';
 import { settingsLoad } from './tools/settings/settings.js';
 import { renderSessionHistory } from './tools/session-history/session-history.js';
 import { chassisInitDropZones } from './tools/chassis-finder/chassis-finder.js';
+import { usersLoad } from './tools/users/users.js';
 
 // Prevent browser from opening files dropped anywhere on the page
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -352,6 +353,7 @@ function switchTool(tool) {
   document.getElementById('customerView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'none';
   document.getElementById('sessionHistoryView').style.display = 'none';
+  document.getElementById('usersView').style.display = 'none';
 
   // Show selected view
   if (tool === 'home') {
@@ -376,6 +378,9 @@ function switchTool(tool) {
   } else if (tool === 'settings') {
     document.getElementById('settingsView').style.display = '';
     settingsLoad();
+  } else if (tool === 'users') {
+    document.getElementById('usersView').style.display = '';
+    usersLoad();
   }
 
   // Update sidebar subtitle
@@ -387,6 +392,7 @@ function switchTool(tool) {
     'customers': 'Customer Management',
     'session-history': 'Session History',
     'settings': 'Settings',
+    'users': 'User Management',
   };
   document.getElementById('headerSubtitle').textContent = subtitles[tool] || '';
 
@@ -401,6 +407,8 @@ function switchTool(tool) {
   document.getElementById('navCustomers').classList.toggle('active', tool === 'customers');
   document.getElementById('navSessionHistory').classList.toggle('active', tool === 'session-history');
   document.getElementById('navSettings').classList.toggle('active', tool === 'settings');
+  const navUsers = document.getElementById('navUsers');
+  if (navUsers) navUsers.classList.toggle('active', tool === 'users');
 }
 
 // ── Home Dashboard Metrics ──
