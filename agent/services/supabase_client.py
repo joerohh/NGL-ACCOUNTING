@@ -476,11 +476,15 @@ def sb_get_user_by_id(user_id: int) -> Optional[dict]:
 def sb_get_user_by_username(username: str) -> Optional[dict]:
     """Look up a user by username (case-insensitive). Returns user dict or None.
 
-    Mirrors database.get_user_by_username for the local SQLite case.
+    Mirrors database.get_user_by_username for the local SQLite case where the
+    column is COLLATE NOCASE. Uses ilike here so a coworker typing
+    'Joseph@ngltrans.net' still matches an existing 'joseph@ngltrans.net' row.
     Used by auth.google_callback to check whether a Google account already exists.
     """
+    from urllib.parse import quote
+    safe_username = quote(username.strip(), safe="")
     resp = httpx.get(
-        f"{_BASE}/users?username=eq.{username}&limit=1&select=*",
+        f"{_BASE}/users?username=ilike.{safe_username}&limit=1&select=*",
         headers=_HEADERS, timeout=_TIMEOUT,
     )
     _check_response(resp, "get_user_by_username")
@@ -552,8 +556,8 @@ def sb_create_google_user(email: str, display_name: str, role: str = "operator")
     pw_hash = bcrypt.hashpw(_secrets.token_bytes(32), bcrypt.gensalt()).decode("utf-8")
 
     row = {
-        "username": email,
-        "display_name": display_name,
+        "username": email.strip(),
+        "display_name": (display_name.strip() or email.strip()),
         "password_hash": pw_hash,
         "role": role,
         "active": True,
