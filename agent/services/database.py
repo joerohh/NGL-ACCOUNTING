@@ -850,6 +850,7 @@ def _maybe_use_supabase() -> None:
             # Users
             sb_authenticate_user,
             sb_get_user_by_id,
+            sb_get_user_count,
             sb_list_users,
             sb_create_user,
             sb_update_user,
@@ -916,6 +917,7 @@ def _maybe_use_supabase() -> None:
     # Override user functions
     _self.authenticate_user = sb_authenticate_user
     _self.get_user_by_id = sb_get_user_by_id
+    _self.get_user_count = sb_get_user_count
     _self.list_users = sb_list_users
     _self.create_user = sb_create_user
     _self.update_user = sb_update_user

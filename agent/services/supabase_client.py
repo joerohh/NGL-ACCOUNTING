@@ -482,6 +482,23 @@ def sb_list_users(active_only: bool = True) -> list:
     return [_sb_row_to_user(r) for r in resp.json()]
 
 
+def sb_get_user_count() -> int:
+    """Return the total number of users in Supabase (active + inactive)."""
+    params = "select=id&limit=1"
+    resp = httpx.head(
+        f"{_BASE}/users?{params}",
+        headers={**_HEADERS, "Prefer": "count=exact"},
+        timeout=_TIMEOUT,
+    )
+    _check_response(resp, "get_user_count")
+    # Supabase returns the count in the content-range header: "0-0/N"
+    content_range = resp.headers.get("content-range", "0-0/0")
+    try:
+        return int(content_range.split("/")[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
 def sb_create_user(username: str, password: str, display_name: str = "", role: str = "operator") -> dict:
     """Create a new user in Supabase. Raises ValueError if username taken."""
     import bcrypt
