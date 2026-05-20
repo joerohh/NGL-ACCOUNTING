@@ -97,6 +97,38 @@ def client():
         yield c
 
 
+def _mint_jwt_with_role(secret: str, role: str = "operator") -> str | None:
+    """Mint a short-lived test JWT with the given role, signed with the given secret."""
+    from datetime import datetime, timezone, timedelta
+    try:
+        import jwt as _jwt
+    except ImportError:
+        return None
+    payload = {
+        "sub": "999",
+        "username": f"_test_{role}",
+        "role": role,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        "iat": datetime.now(timezone.utc),
+    }
+    return _jwt.encode(payload, secret, algorithm="HS256")
+
+
+@pytest.fixture(scope="module")
+def operator_token(client):
+    """Mint a JWT with role='operator' using whichever secret authenticates the admin client."""
+    # Re-discover the secret on disk; probe each by hitting an admin-only route
+    # and expecting 403 (auth succeeded, admin check failed = operator role recognized).
+    for secret in _candidate_jwt_secrets():
+        t = _mint_jwt_with_role(secret, "operator")
+        if not t:
+            continue
+        probe = client.get("/auth/users", headers={"Authorization": f"Bearer {t}"})
+        if probe.status_code == 403:
+            return t
+    pytest.skip("Could not mint a valid operator JWT against the running agent")
+
+
 # ── Health & Auth ───────────────────────────────────────────────────
 
 
@@ -395,3 +427,103 @@ class TestFolderPickerAndOpenPath:
         # FastAPI returns 405 for OPTIONS on a POST-only route by default,
         # OR 200 with the allowed methods listed. Either confirms the route exists.
         assert r.status_code in (200, 405)
+
+
+# ── User CRUD smoke tests (Task 8) ───────────────────────────────────
+
+import uuid as _uuid
+
+
+def _unique(prefix: str) -> str:
+    """Return a unique username so tests are idempotent across re-runs."""
+    return f"{prefix}_{_uuid.uuid4().hex[:8]}"
+
+
+def test_list_users_admin_only(client, operator_token):
+    """Operator JWT gets 403 on GET /auth/users; admin gets 200."""
+    res = client.get("/auth/users", headers={"Authorization": f"Bearer {operator_token}"})
+    assert res.status_code == 403
+
+    # The client fixture is an admin token — no header override needed
+    res = client.get("/auth/users")
+    assert res.status_code == 200
+    assert "users" in res.json()
+
+
+def test_create_user_validation(client):
+    """Short password rejected, invalid role rejected, duplicate username 409."""
+    # Short password
+    res = client.post(
+        "/auth/users",
+        json={"username": _unique("shortpw"), "password": "abc", "role": "operator"},
+    )
+    assert res.status_code == 400
+
+    # Invalid role
+    res = client.post(
+        "/auth/users",
+        json={"username": _unique("badrole"), "password": "abcd", "role": "superuser"},
+    )
+    assert res.status_code == 400
+
+    # Duplicate username — first create succeeds, second yields 409
+    dup_name = _unique("dupetest")
+    first = client.post(
+        "/auth/users",
+        json={"username": dup_name, "password": "abcd", "role": "operator"},
+    )
+    assert first.status_code in (200, 201), first.text
+    res = client.post(
+        "/auth/users",
+        json={"username": dup_name, "password": "abcd", "role": "operator"},
+    )
+    assert res.status_code == 409
+
+
+def test_update_user_password_reset_allows_login(client):
+    """Admin resets another user's password; that user can then log in with the new password."""
+    # Create a fresh user
+    username = _unique("resetme")
+    create_res = client.post(
+        "/auth/users",
+        json={"username": username, "password": "old1234", "role": "operator"},
+    )
+    assert create_res.status_code in (200, 201), create_res.text
+    user_id = create_res.json()["id"]
+
+    # Reset their password
+    res = client.put(f"/auth/users/{user_id}", json={"password": "new5678"})
+    assert res.status_code == 200, res.text
+
+    # Old password should fail (auth/login is exempt from middleware so no header needed)
+    res = client.post("/auth/login", json={"username": username, "password": "old1234"})
+    assert res.status_code == 401
+
+    # New password should work
+    res = client.post("/auth/login", json={"username": username, "password": "new5678"})
+    assert res.status_code == 200
+
+
+def test_reactivate_user(client):
+    """A deactivated user can be reactivated via PUT active=True."""
+    create_res = client.post(
+        "/auth/users",
+        json={"username": _unique("reactme"), "password": "abcd1234", "role": "operator"},
+    )
+    assert create_res.status_code in (200, 201), create_res.text
+    user_id = create_res.json()["id"]
+
+    client.delete(f"/auth/users/{user_id}")  # soft-delete
+    res = client.put(f"/auth/users/{user_id}", json={"active": True})
+    assert res.status_code == 200, res.text
+    assert res.json()["active"] is True
+
+
+def test_deactivate_user_blocks_self(client):
+    """Admin cannot deactivate their own account (regression test for existing behavior).
+
+    The client fixture mints a JWT for user id=0 (sub='0'), so DELETE /auth/users/0
+    should fail with a self-deactivation block (400).
+    """
+    res = client.delete("/auth/users/0")
+    assert res.status_code == 400
