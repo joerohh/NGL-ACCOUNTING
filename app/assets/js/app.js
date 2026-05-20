@@ -167,8 +167,11 @@ async function initGoogleSignIn() {
     const data = await res.json();
     if (!data.available) return;
 
-    const section = document.getElementById('googleLoginSection');
-    if (section) section.style.display = '';
+    // Un-hide whichever Google sections exist — Login screen, Setup screen, or both.
+    ['googleLoginSection', 'setupGoogleLoginSection'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
   } catch { /* Google Sign-In not available */ }
 }
 
@@ -296,6 +299,7 @@ async function startup() {
         const data = await res.json();
         if (data.setupRequired) {
           showSetup();
+          await initGoogleSignIn();  // Also un-hides the Setup-screen Google section
           document.getElementById('setupUsername').focus();
           return;
         }
