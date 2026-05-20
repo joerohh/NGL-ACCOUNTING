@@ -130,3 +130,21 @@ def test_update_user_allows_deactivating_when_other_admins_exist(monkeypatch, tm
     result = db.update_user(admin_a["id"], {"active": False})
     assert result is not None
     assert result["active"] is False
+
+
+def test_update_user_allows_demoting_inactive_admin(monkeypatch, tmp_path):
+    """Demoting an already-inactive admin doesn't reduce active count, so it should succeed.
+
+    Regression: earlier guard checked existing.role == 'admin' without
+    existing.active, which incorrectly blocked this safe case.
+    """
+    db = _setup_clean_db(monkeypatch, tmp_path)
+    db.create_user("active_admin", "abcd1234", "Active", "admin")
+    inactive = db.create_user("inactive_admin", "abcd1234", "Inactive", "admin")
+    # Deactivate the second admin (allowed because two active admins exist at this moment)
+    db.update_user(inactive["id"], {"active": False})
+    # Now demote the inactive one — should succeed because the only ACTIVE admin (active_admin) is unaffected
+    result = db.update_user(inactive["id"], {"role": "operator"})
+    assert result is not None
+    assert result["role"] == "operator"
+    assert result["active"] is False
