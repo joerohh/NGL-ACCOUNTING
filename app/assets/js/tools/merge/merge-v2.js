@@ -1636,26 +1636,6 @@ function renderErrorBody(row, traceHtml, docName) {
 }
 
 function renderResolvedBody(row, traceHtml) {
-  // If the user did a manual upload that isn't already part of row.documents,
-  // surface it as an "added" doc so it shows in the list and ships with the merge.
-  if (row.manualPodFile) {
-    ensureDocList(row);
-    const already = (row.documents || []).some(d => d._file === row.manualPodFile);
-    if (!already) {
-      row.documents = row.documents || [];
-      row.documents.push({
-        id: uid(),
-        name: row.manualPodFile.name,
-        source: 'added',
-        converted: false,
-        pageCount: 0,
-        sizeBytes: row.manualPodFile.size || 0,
-        failReason: null,
-        _file: row.manualPodFile,
-      });
-    }
-  }
-
   return `
     <div class="ds-section">
       <div class="ds-section-label">Customer</div>
@@ -2704,6 +2684,24 @@ function v2HandleSidebarUpload(rowIdx, fileList) {
   }
 
   row.manualPodFile = file;
+  // Surface the manual upload as an "added" doc so it shows in the docs list
+  // and ships with the merge. Done here (not at render time) so the row's
+  // shape is correct before any code reads row.documents.
+  ensureDocList(row);
+  const already = (row.documents || []).some(d => d._file === file);
+  if (!already) {
+    row.documents = row.documents || [];
+    row.documents.push({
+      id: uid(),
+      name: file.name,
+      source: 'added',
+      converted: false,
+      pageCount: 0,
+      sizeBytes: file.size || 0,
+      failReason: null,
+      _file: file,
+    });
+  }
   // Mark fetchResult as "ok" — manual upload bypasses the chain
   row.fetchResult = {
     invPill: 'ok',

@@ -201,6 +201,8 @@ class ExcelSession:
         return ConvertResult(ok=True, pages=pages, size_bytes=size)
 
     def _apply_page_setup(self, ws) -> None:
+        import pywintypes
+
         try:
             used = ws.UsedRange
             rows = used.Rows.Count
@@ -224,8 +226,10 @@ class ExcelSession:
             try:
                 if not ps.PrintTitleRows:
                     ps.PrintTitleRows = "$1:$2"
-            except Exception:
-                pass
+            except pywintypes.com_error as e:
+                # Some sheet kinds (chart sheets, protected layouts) reject
+                # PrintTitleRows; not fatal — keep going without repeating headers.
+                logger.debug("PrintTitleRows skipped: %s", e)
 
 
 def _count_pdf_pages(pdf_path: Path) -> int:

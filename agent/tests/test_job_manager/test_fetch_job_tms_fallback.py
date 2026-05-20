@@ -52,7 +52,7 @@ async def test_pod_fallback_falls_through_to_bol_for_export(tmp_path):
     layer = MagicMock()
 
     async def fake_get_document(job_id, invoice_data, doc_type, dest_dir, source="api"):
-        if doc_type == "BOL":
+        if doc_type == "BL":
             p = Path(dest_dir) / f"LE_{doc_type}.pdf"
             p.write_bytes(b"%PDF-bol")
             return p
@@ -67,7 +67,7 @@ async def test_pod_fallback_falls_through_to_bol_for_export(tmp_path):
 
     result, _chain = await jm._tms_pod_fallback(job, container, {"Id": "2"}, dest)
 
-    assert result == "BOL"
+    assert result == "BL"
     assert dest.exists()
     assert dest.read_bytes() == b"%PDF-bol"
     # POD attempted, BOL succeeded — no POL call
@@ -116,7 +116,7 @@ async def test_pod_fallback_returns_none_when_nothing_found(tmp_path):
     assert not dest.exists()
     # Safety chain (no INV# / WO# letters) tries POD, BOL, POL, IT, ITE
     assert layer.get_document.call_count == 5
-    assert [c["type"] for c in chain] == ["POD", "BOL", "POL", "IT", "ITE"]
+    assert [c["type"] for c in chain] == ["POD", "BL", "POL", "IT", "ITE"]
 
 
 @pytest.mark.asyncio
@@ -148,7 +148,7 @@ async def test_pod_fallback_export_wo_skips_pod_uses_bol(tmp_path):
 
     async def fake_get_document(job_id, invoice_data, doc_type, dest_dir, source="api"):
         calls.append(doc_type)
-        if doc_type == "BOL":
+        if doc_type == "BL":
             p = Path(dest_dir) / f"WO_{doc_type}.pdf"
             p.write_bytes(b"%PDF-bol")
             return p
@@ -165,10 +165,10 @@ async def test_pod_fallback_export_wo_skips_pod_uses_bol(tmp_path):
         job, container, _wo_invoice("LX2604170040"), dest,
     )
 
-    assert result == "BOL"
+    assert result == "BL"
     assert dest.exists()
     assert "POD" not in calls
-    assert calls == ["BOL"]
+    assert calls == ["BL"]
 
 
 @pytest.mark.asyncio
@@ -197,7 +197,7 @@ async def test_pod_fallback_export_wo_falls_through_to_pol(tmp_path):
     )
 
     assert result == "POL"
-    assert calls == ["BOL", "POL"]
+    assert calls == ["BL", "POL"]
     assert "POD" not in calls
 
 
@@ -224,7 +224,7 @@ async def test_pod_fallback_import_wo_only_tries_pod(tmp_path):
 
     assert result is None
     # M3 extension — import chain now includes IT after POD/BOL/POL
-    assert calls == ["POD", "BOL", "POL", "IT"]
+    assert calls == ["POD", "BL", "POL", "IT"]
 
 
 @pytest.mark.asyncio
@@ -250,7 +250,7 @@ async def test_pod_fallback_unknown_wo_tries_full_chain(tmp_path):
 
     assert result is None
     # M3 extension — safety chain now includes IT and ITE after POD/BOL/POL
-    assert calls == ["POD", "BOL", "POL", "IT", "ITE"]
+    assert calls == ["POD", "BL", "POL", "IT", "ITE"]
 
 
 @pytest.mark.asyncio
@@ -262,7 +262,7 @@ async def test_pod_fallback_continues_past_timeout(tmp_path):
     async def fake_get_document(job_id, invoice_data, doc_type, dest_dir, source="api"):
         if doc_type == "POD":
             raise _asyncio.TimeoutError()
-        if doc_type == "BOL":
+        if doc_type == "BL":
             p = Path(dest_dir) / f"LE_{doc_type}.pdf"
             p.write_bytes(b"%PDF-bol")
             return p
@@ -278,5 +278,5 @@ async def test_pod_fallback_continues_past_timeout(tmp_path):
 
     result, _chain = await jm._tms_pod_fallback(job, container, {"Id": "6"}, dest)
 
-    assert result == "BOL"
+    assert result == "BL"
     assert dest.exists()

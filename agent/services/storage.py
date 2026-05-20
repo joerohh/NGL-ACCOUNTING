@@ -137,18 +137,23 @@ def get_storage_info(output_root: Path, downloads_root: Path,
 
     base = output_root / "Merge Outputs"
     if base.exists():
-        for mode_dir in base.iterdir():
-            if not mode_dir.is_dir():
-                continue
-            for month_dir in mode_dir.iterdir():
-                if not month_dir.is_dir():
-                    continue
-                for date_dir in month_dir.iterdir():
-                    if date_dir.is_dir():
-                        info.output_folder_count += 1
-        size, count = _dir_size(base)
-        info.output_size_bytes = size
-        info.output_file_count = count
+        total_bytes = 0
+        file_count = 0
+        folder_count = 0
+        base_depth = len(base.parts)
+        for entry in base.rglob("*"):
+            if entry.is_file():
+                try:
+                    total_bytes += entry.stat().st_size
+                    file_count += 1
+                except OSError:
+                    pass
+            elif entry.is_dir() and len(entry.parts) - base_depth == 3:
+                # <mode>/<YYYY-MM>/<YYYY-MM-DD> — only the date layer counts
+                folder_count += 1
+        info.output_folder_count = folder_count
+        info.output_size_bytes = total_bytes
+        info.output_file_count = file_count
 
     if downloads_root.exists():
         info.downloads_batch_count = sum(
