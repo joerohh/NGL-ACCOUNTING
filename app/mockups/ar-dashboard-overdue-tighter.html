@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Overdue (tighter)</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; margin-bottom:24px }
+  .ngl-app h3 { color:#0f172a; margin:0 }
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:#fff; padding:0 20px }
+  .ngl-tabs { display:flex; gap:2px }
+  .ngl-tab { padding:9px 12px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.8rem; font-weight:600; color:#64748b; display:flex; align-items:center; gap:6px }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+  .ngl-tab .count { background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:999px; font-size:0.68rem; font-weight:700 }
+  .ngl-tab.active .count { background:#ea580c; color:white }
+  .ngl-screen { padding:14px 20px }
+  .ngl-section-h { display:flex; align-items:center; gap:10px; font-size:0.95rem; font-weight:800; color:#0f172a; padding:8px 12px; margin:0 0 10px; background:#fff; border-left:4px solid #ea580c; border-radius:0 6px 6px 0; border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.03) }
+  .ngl-section-h .ngl-section-sub { font-size:0.75rem; color:#64748b; font-weight:500; margin-left:auto }
+  .ngl-toolbar { display:flex; align-items:center; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e2e8f0; border-bottom:none; border-radius:8px 8px 0 0; font-size:0.78rem; color:#64748b; flex-wrap:wrap }
+  .ngl-toolbar input.search { flex:1; min-width:160px; padding:5px 10px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.8rem; color:#334155 }
+  .ngl-toolbar .filter-meta { color:#94a3b8; margin-left:auto; font-size:0.72rem; font-weight:600 }
+  .ngl-table-wrap { background:#fff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px; overflow:hidden }
+
+  .ngl-table { border-collapse:collapse; font-size:0.82rem; width:100% }
+  .ngl-table th { text-align:left; font-size:0.66rem; font-weight:700; color:#94a3b8; letter-spacing:0.03em; text-transform:uppercase; padding:7px 10px; border-bottom:1px solid #e2e8f0; background:#fafafa; white-space:nowrap }
+  .ngl-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; color:#1e293b; vertical-align:middle; white-space:nowrap }
+  .ngl-table tr:last-child td { border-bottom:none }
+  .ngl-table tr:hover td { background:#fafafa }
+  .ngl-table .num { font-variant-numeric:tabular-nums; text-align:right }
+  .ngl-table .id { font-family:'Consolas',monospace; font-size:0.74rem; color:#64748b }
+  .ngl-table .customer { font-weight:700; color:#0f172a }
+  .ngl-table th.col-customer, .ngl-table td.col-customer { width:1%; max-width:280px; white-space:normal }
+  .ngl-table th.spacer, .ngl-table td.spacer { width:100%; padding:0 }
+
+  .ngl-btn { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:6px; font-size:0.74rem; font-weight:700; cursor:pointer; border:1px solid; white-space:nowrap }
+  .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569 }
+
+  .late-tag { display:inline-flex; align-items:center; gap:5px; font-weight:700; font-size:0.78rem }
+  .late-tag .dot { width:9px; height:9px; border-radius:50%; display:inline-block }
+  .late-green  { color:#15803d } .late-green  .dot { background:#16a34a }
+  .late-yellow { color:#a16207 } .late-yellow .dot { background:#facc15 }
+  .late-orange { color:#c2410c } .late-orange .dot { background:#f97316 }
+  .late-red    { color:#b91c1c } .late-red    .dot { background:#dc2626 }
+  .late-brown  { color:#7c2d12 } .late-brown  .dot { background:#7c2d12 }
+
+  .preview-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; background:#0f172a; padding:4px 10px; border-radius:4px; margin-bottom:6px }
+</style>
+</head>
+<body>
+
+<h2>Tighter column spacing</h2>
+<p class="subtitle">Columns now hug their content. A "spacer" column on the right eats any extra width so nothing stretches.</p>
+
+<!-- ====================== OVERDUE — tighter ====================== -->
+<span class="preview-label">Tab: Overdue</span>
+<div class="ngl-app">
+  <div class="ngl-tabs-row"><div class="ngl-tabs">
+    <div class="ngl-tab">Summary</div>
+    <div class="ngl-tab">Collections <span class="count">42</span></div>
+    <div class="ngl-tab active">Overdue <span class="count">936</span></div>
+    <div class="ngl-tab">Partial Pays <span class="count">38</span></div>
+    <div class="ngl-tab">New Invoices <span class="count">135</span></div>
+    <div class="ngl-tab">TMS <span class="count">147</span></div>
+    <div class="ngl-tab">Adjustments <span class="count">13</span></div>
+    <div class="ngl-tab">Customers <span class="count">183</span></div>
+  </div></div>
+  <div class="ngl-screen">
+    <h3 class="ngl-section-h">Customers to chase <span class="ngl-section-sub">sorted by oldest unpaid invoice</span></h3>
+    <div class="ngl-toolbar">
+      <input class="search" placeholder="Search customer or invoice" />
+      <span class="filter-meta">134 customers &middot; $1.83M overdue</span>
+    </div>
+    <div class="ngl-table-wrap">
+      <table class="ngl-table">
+        <tr>
+          <th class="col-customer">Customer</th>
+          <th class="num">Total owed</th>
+          <th class="num">Invoices</th>
+          <th>How late</th>
+          <th></th>
+          <th class="spacer"></th>
+        </tr>
+        <tr>
+          <td class="customer col-customer">TOPOCEAN CONSOLIDATION</td>
+          <td class="num"><strong>$48,200</strong></td>
+          <td class="num">17</td>
+          <td><span class="late-tag late-brown"><span class="dot"></span>Over 120 days</span></td>
+          <td><button class="ngl-btn ngl-btn-secondary">Email &rarr;</button></td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">MAN WAH TRADING</td>
+          <td class="num"><strong>$184,500</strong></td>
+          <td class="num">42</td>
+          <td><span class="late-tag late-brown"><span class="dot"></span>Over 120 days</span></td>
+          <td><button class="ngl-btn ngl-btn-secondary">Email &rarr;</button></td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">UNAPPL01 Unapplied Cash</td>
+          <td class="num"><strong>&minus;$8,420</strong></td>
+          <td class="num">6</td>
+          <td><span class="late-tag late-brown"><span class="dot"></span>Over 120 days</span></td>
+          <td><button class="ngl-btn ngl-btn-secondary">Resolve &rarr;</button></td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">HL LOGISTICS AMERICA</td>
+          <td class="num"><strong>$32,150</strong></td>
+          <td class="num">28</td>
+          <td><span class="late-tag late-orange"><span class="dot"></span>60&ndash;89 days</span></td>
+          <td><button class="ngl-btn ngl-btn-secondary">Email &rarr;</button></td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">JSL LOGISTICS</td>
+          <td class="num"><strong>$11,400</strong></td>
+          <td class="num">9</td>
+          <td><span class="late-tag late-yellow"><span class="dot"></span>30&ndash;59 days</span></td>
+          <td><button class="ngl-btn ngl-btn-secondary">Email &rarr;</button></td>
+          <td class="spacer"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ====================== CUSTOMERS — tighter ====================== -->
+<span class="preview-label">Tab: Customers</span>
+<div class="ngl-app">
+  <div class="ngl-tabs-row"><div class="ngl-tabs">
+    <div class="ngl-tab">Summary</div>
+    <div class="ngl-tab">Collections <span class="count">42</span></div>
+    <div class="ngl-tab">Overdue <span class="count">936</span></div>
+    <div class="ngl-tab">Partial Pays <span class="count">38</span></div>
+    <div class="ngl-tab">New Invoices <span class="count">135</span></div>
+    <div class="ngl-tab">TMS <span class="count">147</span></div>
+    <div class="ngl-tab">Adjustments <span class="count">13</span></div>
+    <div class="ngl-tab active">Customers <span class="count">183</span></div>
+  </div></div>
+  <div class="ngl-screen">
+    <h3 class="ngl-section-h">All customers with open balances <span class="ngl-section-sub">click a row for their invoice list</span></h3>
+    <div class="ngl-toolbar">
+      <input class="search" placeholder="Search customer name or ID" />
+      <span class="filter-meta">183 customers &middot; $2,847,392 open</span>
+    </div>
+    <div class="ngl-table-wrap">
+      <table class="ngl-table">
+        <tr>
+          <th class="col-customer">Customer</th>
+          <th>ID</th>
+          <th class="num">Total owed</th>
+          <th class="num">Invoices</th>
+          <th>Oldest invoice</th>
+          <th class="num">Last payment</th>
+          <th class="spacer"></th>
+        </tr>
+        <tr>
+          <td class="customer col-customer">MAN WAH TRADING</td>
+          <td class="id">MANWAH12</td>
+          <td class="num"><strong>$184,500</strong></td>
+          <td class="num">42</td>
+          <td><span class="late-tag late-brown"><span class="dot"></span>Over 120 days</span></td>
+          <td class="num">2026-05-18</td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">TOPOCEAN CONSOLIDATION</td>
+          <td class="id">TOPOCE01</td>
+          <td class="num"><strong>$48,200</strong></td>
+          <td class="num">17</td>
+          <td><span class="late-tag late-brown"><span class="dot"></span>Over 120 days</span></td>
+          <td class="num">2025-11-22</td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">HL LOGISTICS AMERICA</td>
+          <td class="id">HLLOGI01</td>
+          <td class="num"><strong>$32,150</strong></td>
+          <td class="num">28</td>
+          <td><span class="late-tag late-orange"><span class="dot"></span>60&ndash;89 days</span></td>
+          <td class="num">2026-05-18</td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">AGL AMERICAN GLOBAL LOGISTICS</td>
+          <td class="id">AGLAME01</td>
+          <td class="num">$14,250</td>
+          <td class="num">12</td>
+          <td><span class="late-tag late-green"><span class="dot"></span>Under 30 days</span></td>
+          <td class="num">2026-05-18</td>
+          <td class="spacer"></td>
+        </tr>
+        <tr>
+          <td class="customer col-customer">JSL LOGISTICS</td>
+          <td class="id">JSLLOG02</td>
+          <td class="num">$11,400</td>
+          <td class="num">9</td>
+          <td><span class="late-tag late-yellow"><span class="dot"></span>30&ndash;59 days</span></td>
+          <td class="num">2026-05-10</td>
+          <td class="spacer"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

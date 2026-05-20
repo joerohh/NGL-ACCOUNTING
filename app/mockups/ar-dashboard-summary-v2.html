@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Summary tab v2 (post-TAB BANK design lock)</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; margin-bottom:24px }
+  .ngl-app h3 { color:#0f172a; margin:0 }
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:#fff; padding:0 20px }
+  .ngl-tabs { display:flex; gap:2px; overflow-x:auto }
+  .ngl-tab { padding:9px 12px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.8rem; font-weight:600; color:#64748b; display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:default }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+  .ngl-tab .count { background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:999px; font-size:0.68rem; font-weight:700 }
+  .ngl-tab.active .count { background:#ea580c; color:white }
+  .ngl-tab .count.urgent { background:#fee2e2; color:#b91c1c }
+  .ngl-screen { padding:14px 20px }
+
+  .ngl-section-h { display:flex; align-items:center; gap:10px; font-size:0.95rem; font-weight:800; color:#0f172a; padding:8px 12px; margin:0 0 10px; background:#fff; border-left:4px solid #ea580c; border-radius:0 6px 6px 0; border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.03) }
+  .ngl-section-h .ngl-section-sub { font-size:0.75rem; color:#64748b; font-weight:500; margin-left:auto }
+
+  .preview-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; background:#0f172a; padding:4px 10px; border-radius:4px; margin-bottom:6px }
+
+  /* Top alert banner — sticky-ish suspense + quick actions row */
+  .suspense-banner { display:flex; align-items:center; gap:14px; background:linear-gradient(90deg, #fff7ed 0%, #fffbeb 100%); border:1px solid #fed7aa; border-left:4px solid #ea580c; border-radius:8px; padding:10px 14px; margin-bottom:12px }
+  .suspense-banner .sb-ico { width:28px; height:28px; border-radius:50%; background:#ea580c; color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.95rem; font-weight:800; flex-shrink:0 }
+  .suspense-banner .sb-body { flex:1; min-width:0 }
+  .suspense-banner .sb-title { font-size:0.86rem; font-weight:800; color:#9a3412 }
+  .suspense-banner .sb-sub { font-size:0.74rem; color:#9a3412; opacity:0.85; margin-top:1px }
+  .suspense-banner .sb-cta { background:#ea580c; color:#fff; padding:7px 13px; border-radius:6px; font-size:0.78rem; font-weight:700; border:none; cursor:pointer; white-space:nowrap }
+
+  /* File source bar */
+  .data-bar { display:flex; gap:8px; align-items:center; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:7px 12px; margin-bottom:12px; font-size:0.76rem; color:#475569; flex-wrap:wrap }
+  .data-bar .data-pill { background:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-size:0.68rem; font-weight:700; display:flex; align-items:center; gap:4px }
+  .data-bar .data-pill .dot { width:6px; height:6px; background:#15803d; border-radius:50%; display:inline-block }
+  .data-bar .data-file { color:#0f172a; font-weight:700; font-family:'Consolas',monospace; font-size:0.74rem }
+  .data-bar .data-sep { color:#cbd5e1 }
+  .data-bar .data-link { color:#ea580c; font-weight:700; margin-left:auto; cursor:pointer; text-decoration:none; font-size:0.74rem }
+  .data-bar .manual-tag { background:#f3e8ff; color:#6b21a8; padding:2px 7px; border-radius:4px; font-size:0.66rem; font-weight:700 }
+
+  /* Headline — today's AR snapshot */
+  .headline { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px; margin-bottom:12px; display:flex; align-items:center; gap:18px }
+  .headline .date { font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:700 }
+  .headline .total-owed { font-size:1.95rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; line-height:1.1 }
+  .headline .total-owed-label { font-size:0.7rem; color:#64748b; margin-top:2px }
+  .headline .deltas { display:flex; gap:8px; margin-left:auto }
+  .headline .delta { padding:8px 12px; background:#dcfce7; border-radius:6px; font-size:0.78rem; font-weight:700; color:#166534; display:flex; flex-direction:column; align-items:center; min-width:96px }
+  .headline .delta.down { background:#fee2e2; color:#991b1b }
+  .headline .delta.flat { background:#f1f5f9; color:#475569 }
+  .headline .delta .d-label { font-size:0.6rem; color:inherit; opacity:0.85; text-transform:uppercase; letter-spacing:0.04em; font-weight:700 }
+  .headline .delta .d-val { font-size:1rem; font-variant-numeric:tabular-nums }
+
+  /* KPI strip */
+  .kpi-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:12px }
+  .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:11px 13px; cursor:pointer; transition:border-color 0.12s, box-shadow 0.12s; position:relative }
+  .kpi:hover { border-color:#ea580c; box-shadow:0 2px 6px rgba(234,88,12,0.08) }
+  .kpi.alert { border-color:#fed7aa; background:linear-gradient(180deg, #fff7ed 0%, #fff 60%) }
+  .kpi .kpi-label { font-size:0.63rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; margin-bottom:3px; display:flex; align-items:center; gap:6px }
+  .kpi .kpi-icon { width:16px; height:16px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800 }
+  .kpi .kpi-icon.green { background:#dcfce7; color:#15803d }
+  .kpi .kpi-icon.blue { background:#dbeafe; color:#1d4ed8 }
+  .kpi .kpi-icon.orange { background:#ffedd5; color:#c2410c }
+  .kpi .kpi-icon.red { background:#fee2e2; color:#b91c1c }
+  .kpi .kpi-val { font-size:1.25rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; margin-bottom:1px }
+  .kpi.alert .kpi-val { color:#9a3412 }
+  .kpi .kpi-sub { font-size:0.7rem; color:#64748b }
+  .kpi .kpi-link { font-size:0.68rem; color:#ea580c; font-weight:700; margin-top:6px }
+
+  /* Aging breakdown bar */
+  .aging-block { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; margin-bottom:12px }
+  .aging-block .ab-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px }
+  .aging-block .ab-title { font-size:0.82rem; font-weight:800; color:#0f172a }
+  .aging-block .ab-total { font-size:0.76rem; color:#64748b; font-variant-numeric:tabular-nums }
+  .aging-bar { display:flex; height:22px; border-radius:5px; overflow:hidden; border:1px solid #e2e8f0; margin-bottom:8px }
+  .aging-bar .seg { display:flex; align-items:center; justify-content:center; font-size:0.68rem; font-weight:700; color:#fff; text-shadow:0 1px 0 rgba(0,0,0,0.15) }
+  .seg.s-green { background:#16a34a }
+  .seg.s-yellow { background:#facc15; color:#78350f; text-shadow:none }
+  .seg.s-orange { background:#f97316 }
+  .seg.s-red { background:#dc2626 }
+  .seg.s-brown { background:#7c2d12 }
+  .aging-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:0.72rem; color:#475569 }
+  .aging-legend .lg { display:flex; align-items:center; gap:5px }
+  .aging-legend .lg .dot { width:9px; height:9px; border-radius:50%; display:inline-block }
+  .aging-legend .lg .amt { font-variant-numeric:tabular-nums; font-weight:700; color:#0f172a; margin-left:3px }
+
+  /* Bottom split */
+  .bottom-grid { display:grid; grid-template-columns: 1.15fr 1fr; gap:12px; margin-bottom:12px }
+  .panel { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px }
+  .panel .p-title { font-size:0.82rem; font-weight:800; color:#0f172a; margin-bottom:8px; display:flex; align-items:center; gap:8px }
+  .panel .p-title .badge { background:#f1f5f9; color:#475569; padding:1px 7px; border-radius:999px; font-size:0.66rem; font-weight:700 }
+  .panel .p-title .right-link { margin-left:auto; color:#ea580c; font-weight:700; font-size:0.7rem; cursor:pointer; text-decoration:none }
+
+  /* Notable changes feed */
+  .change-item { display:flex; gap:10px; padding:7px 0; border-bottom:1px solid #f1f5f9 }
+  .change-item:last-child { border-bottom:none }
+  .change-item .ci-icon { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:0.74rem; font-weight:800; flex-shrink:0 }
+  .ci-icon.add { background:#dcfce7; color:#15803d }
+  .ci-icon.paid { background:#dbeafe; color:#1d4ed8 }
+  .ci-icon.partial { background:#fef3c7; color:#92400e }
+  .ci-icon.short { background:#fee2e2; color:#991b1b }
+  .ci-icon.adj { background:#f3e8ff; color:#6b21a8 }
+  .ci-icon.manual { background:#fce7f3; color:#9d174d }
+  .change-item .ci-body { flex:1; font-size:0.76rem; color:#1e293b }
+  .change-item .ci-body strong { color:#0f172a }
+  .change-item .ci-amt { font-variant-numeric:tabular-nums; font-weight:700; color:#0f172a; font-size:0.8rem; align-self:center }
+
+  /* Action list (right panel) */
+  .action-row { display:flex; gap:10px; padding:8px 10px; border-radius:6px; margin-bottom:6px; font-size:0.76rem; align-items:center; border:1px solid #e2e8f0; background:#fff; cursor:pointer }
+  .action-row:hover { border-color:#ea580c; background:#fff7ed }
+  .action-row .ar-ico { width:30px; height:30px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.9rem; flex-shrink:0; font-weight:800 }
+  .ar-ico.primary { background:#ea580c; color:#fff }
+  .ar-ico.warn { background:#fef3c7; color:#92400e }
+  .ar-ico.info { background:#dbeafe; color:#1d4ed8 }
+  .action-row .ar-body { flex:1; min-width:0 }
+  .action-row .ar-title { font-weight:700; color:#0f172a }
+  .action-row .ar-sub { font-size:0.7rem; color:#64748b; margin-top:1px }
+  .action-row .ar-chev { color:#94a3b8; font-size:0.9rem }
+
+</style>
+</head>
+<body>
+
+<h2>AR Dashboard — Summary tab v2</h2>
+<p class="subtitle">First thing she sees each morning. v2 reflects the locked design: TAB BANK suspense is the headline action item, payment classification uses QBO arithmetic only, manual entries (credit memos / warehouse) carry forward, no TMS amount checks for new invoices.</p>
+
+<span class="preview-label">Tab: Summary &middot; 2026-05-19 (built from 5/18 sources)</span>
+<div class="ngl-app">
+
+  <div class="ngl-tabs-row"><div class="ngl-tabs">
+    <div class="ngl-tab active">Summary</div>
+    <div class="ngl-tab">Collections <span class="count">42</span></div>
+    <div class="ngl-tab">Overdue <span class="count">561</span></div>
+    <div class="ngl-tab">Partial Pays <span class="count">38</span></div>
+    <div class="ngl-tab">New Invoices <span class="count">134</span></div>
+    <div class="ngl-tab">TMS <span class="count">134</span></div>
+    <div class="ngl-tab">Adjustments <span class="count">13</span></div>
+    <div class="ngl-tab">Suspense <span class="count urgent">3</span></div>
+    <div class="ngl-tab">Customers <span class="count">183</span></div>
+  </div></div>
+
+  <div class="ngl-screen">
+
+    <!-- TOP: action banner -->
+    <div class="suspense-banner">
+      <div class="sb-ico">!</div>
+      <div class="sb-body">
+        <div class="sb-title">3 unapplied payments need to be matched today &middot; $8,420 unposted</div>
+        <div class="sb-sub">Name mismatches between customer remittance and our records (e.g., "Amnex Inc" vs "Amnex Solutions Corp"). 12 more are non-factored and auto-resolved.</div>
+      </div>
+      <button class="sb-cta">Open Suspense worklist →</button>
+    </div>
+
+    <!-- File source bar -->
+    <div class="data-bar">
+      <span class="data-pill"><span class="dot"></span>Workbook built</span>
+      <span>Today:</span><span class="data-file">AR_AGING_05_19_2026.xlsx</span>
+      <span class="data-sep">|</span>
+      <span>Yesterday:</span><span class="data-file">AR_AGING_05_18_2026.xlsx</span>
+      <span class="data-sep">|</span>
+      <span class="manual-tag">+1 manual entry carried fwd</span>
+      <a class="data-link">Rebuild today &rarr;</a>
+    </div>
+
+    <!-- Headline -->
+    <div class="headline">
+      <div>
+        <div class="date">As of 2026-05-19</div>
+        <div class="total-owed">$2,847,392</div>
+        <div class="total-owed-label">Total open AR &middot; 800 invoices &middot; 183 customers</div>
+      </div>
+      <div class="deltas">
+        <div class="delta down">
+          <span class="d-label">vs yesterday</span>
+          <span class="d-val">&minus;$3,966</span>
+        </div>
+        <div class="delta down">
+          <span class="d-label">Collected</span>
+          <span class="d-val">$176,861</span>
+        </div>
+        <div class="delta">
+          <span class="d-label">New invoiced</span>
+          <span class="d-val">$211,440</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI strip -->
+    <h3 class="ngl-section-h">What happened yesterday <span class="ngl-section-sub">click any tile to jump to that tab</span></h3>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label"><span class="kpi-icon green">$</span>Collected</div>
+        <div class="kpi-val">$176,861</div>
+        <div class="kpi-sub">201 invoices &middot; 28 checks via TAB BANK + 2 direct</div>
+        <div class="kpi-link">View collections &rarr;</div>
+      </div>
+      <div class="kpi alert">
+        <div class="kpi-label"><span class="kpi-icon orange">!</span>Suspense (real)</div>
+        <div class="kpi-val">3</div>
+        <div class="kpi-sub">$8,420 unapplied &middot; needs research</div>
+        <div class="kpi-link">Open worklist &rarr;</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><span class="kpi-icon red">⏰</span>Overdue (30+ days)</div>
+        <div class="kpi-val">561</div>
+        <div class="kpi-sub">$1.83M outstanding &middot; today's call list</div>
+        <div class="kpi-link">View overdue &rarr;</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><span class="kpi-icon blue">+</span>New invoices</div>
+        <div class="kpi-val">134</div>
+        <div class="kpi-sub">$211,440 added to AR</div>
+        <div class="kpi-link">View new &rarr;</div>
+      </div>
+    </div>
+
+    <!-- Aging -->
+    <h3 class="ngl-section-h">Aging breakdown <span class="ngl-section-sub">$1.83M is over 30 days late</span></h3>
+    <div class="aging-block">
+      <div class="aging-bar">
+        <div class="seg s-green"  style="width:36%">36%</div>
+        <div class="seg s-yellow" style="width:19%">19%</div>
+        <div class="seg s-orange" style="width:14%">14%</div>
+        <div class="seg s-red"    style="width:11%">11%</div>
+        <div class="seg s-brown"  style="width:20%">20%</div>
+      </div>
+      <div class="aging-legend">
+        <span class="lg"><span class="dot" style="background:#16a34a"></span>Under 30 days<span class="amt">$1.02M</span></span>
+        <span class="lg"><span class="dot" style="background:#facc15"></span>30&ndash;59<span class="amt">$541K</span></span>
+        <span class="lg"><span class="dot" style="background:#f97316"></span>60&ndash;89<span class="amt">$398K</span></span>
+        <span class="lg"><span class="dot" style="background:#dc2626"></span>90&ndash;119<span class="amt">$313K</span></span>
+        <span class="lg"><span class="dot" style="background:#7c2d12"></span>Over 120 days<span class="amt">$573K</span></span>
+      </div>
+    </div>
+
+    <!-- Bottom: changes feed + quick actions -->
+    <div class="bottom-grid">
+
+      <div class="panel">
+        <div class="p-title">Notable changes vs yesterday <span class="badge">8</span><a class="right-link">See all activity &rarr;</a></div>
+
+        <div class="change-item">
+          <div class="ci-icon paid">$</div>
+          <div class="ci-body"><strong>AMNEX SOLUTIONS CORP</strong> paid 11 invoices via 2 checks</div>
+          <div class="ci-amt">$63,650</div>
+        </div>
+        <div class="change-item">
+          <div class="ci-icon paid">$</div>
+          <div class="ci-body"><strong>AGL AMERICAN GLOBAL</strong> paid 5 invoices via check #A0905186835</div>
+          <div class="ci-amt">$10,470</div>
+        </div>
+        <div class="change-item">
+          <div class="ci-icon paid">$</div>
+          <div class="ci-body"><strong>101 FOODS TRADING LLC</strong> paid 2 invoices (non-factored, direct to QBO)</div>
+          <div class="ci-amt">$3,966</div>
+        </div>
+        <div class="change-item">
+          <div class="ci-icon short">!</div>
+          <div class="ci-body"><strong>AMNEX SOLUTIONS CORP</strong> short pay on <code style="font-family:Consolas;color:#0f172a">PM26010003F</code>, still owes $50</div>
+          <div class="ci-amt">$3,460</div>
+        </div>
+        <div class="change-item">
+          <div class="ci-icon add">+</div>
+          <div class="ci-body"><strong>134 new invoices</strong> added from QBO Schedule</div>
+          <div class="ci-amt">$211,440</div>
+        </div>
+        <div class="change-item">
+          <div class="ci-icon adj">Δ</div>
+          <div class="ci-body"><strong>13 amount fixes</strong> from TMS (older invoices revised)</div>
+          <div class="ci-amt">−$1,890</div>
+        </div>
+        <div class="change-item">
+          <div class="ci-icon manual">M</div>
+          <div class="ci-body"><strong>1 manual entry</strong> carried forward (<code style="font-family:Consolas;color:#0f172a">PM26050241F</code> credit)</div>
+          <div class="ci-amt">−$1,200</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="p-title">Quick actions <a class="right-link">Customize &rarr;</a></div>
+
+        <div class="action-row">
+          <div class="ar-ico primary">📋</div>
+          <div class="ar-body">
+            <div class="ar-title">Copy TAB BANK report</div>
+            <div class="ar-sub">Daily summary to paste back to TAB BANK</div>
+          </div>
+          <span class="ar-chev">›</span>
+        </div>
+        <div class="action-row">
+          <div class="ar-ico warn">!</div>
+          <div class="ar-body">
+            <div class="ar-title">Resolve 3 suspense items</div>
+            <div class="ar-sub">Match unapplied payments to customers</div>
+          </div>
+          <span class="ar-chev">›</span>
+        </div>
+        <div class="action-row">
+          <div class="ar-ico info">📞</div>
+          <div class="ar-body">
+            <div class="ar-title">Today's call list (over 30d)</div>
+            <div class="ar-sub">561 invoices · grouped by customer</div>
+          </div>
+          <span class="ar-chev">›</span>
+        </div>
+        <div class="action-row">
+          <div class="ar-ico info">✉</div>
+          <div class="ar-body">
+            <div class="ar-title">Email overdue summary</div>
+            <div class="ar-sub">Auto-draft via Invoice Sender</div>
+          </div>
+          <span class="ar-chev">›</span>
+        </div>
+        <div class="action-row">
+          <div class="ar-ico info">+</div>
+          <div class="ar-body">
+            <div class="ar-title">Add manual entry</div>
+            <div class="ar-sub">Credit memo, warehouse invoice, etc.</div>
+          </div>
+          <span class="ar-chev">›</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

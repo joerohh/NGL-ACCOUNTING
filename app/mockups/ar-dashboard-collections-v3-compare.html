@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Collections: compare panel-on-load options</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+  .compare-grid { display:grid; grid-template-columns: 1fr; gap:20px }
+  .compare-grid > div { min-width:0 }
+
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0 }
+  .ngl-app h3 { color:#0f172a; margin:0 }
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:#fff; padding:0 20px }
+  .ngl-tabs { display:flex; gap:2px; overflow-x:auto }
+  .ngl-tab { padding:9px 12px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.8rem; font-weight:600; color:#64748b; display:flex; align-items:center; gap:6px; white-space:nowrap }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+  .ngl-tab .count { background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:999px; font-size:0.68rem; font-weight:700 }
+  .ngl-tab.active .count { background:#ea580c; color:white }
+  .ngl-screen { padding:14px 20px }
+
+  .ngl-section-h { display:flex; align-items:center; gap:10px; font-size:0.95rem; font-weight:800; color:#0f172a; padding:8px 12px; margin:0 0 10px; background:#fff; border-left:4px solid #ea580c; border-radius:0 6px 6px 0; border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.03) }
+  .ngl-section-h .ngl-section-sub { font-size:0.75rem; color:#64748b; font-weight:500 }
+  .ngl-section-h .header-actions { display:flex; gap:6px; margin-left:auto }
+
+  .ngl-toolbar { display:flex; align-items:center; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e2e8f0; border-bottom:none; border-radius:8px 8px 0 0; font-size:0.78rem; color:#64748b; flex-wrap:wrap }
+  .ngl-toolbar input.search { flex:1; min-width:120px; padding:5px 10px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.8rem; color:#334155 }
+  .ngl-toolbar .toggle-all { font-size:0.7rem; color:#475569; font-weight:700; cursor:pointer; padding:4px 8px; border:1px solid #e2e8f0; border-radius:4px; background:#fff }
+  .ngl-toolbar .filter-meta { color:#94a3b8; margin-left:auto; font-size:0.72rem; font-weight:600 }
+  .ngl-table-wrap { background:#fff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px; overflow:hidden }
+
+  .ngl-table { border-collapse:collapse; font-size:0.82rem; width:100% }
+  .ngl-table th { text-align:left; font-size:0.66rem; font-weight:700; color:#94a3b8; letter-spacing:0.03em; text-transform:uppercase; padding:7px 10px; border-bottom:1px solid #e2e8f0; background:#fafafa; white-space:nowrap }
+  .ngl-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; color:#1e293b; vertical-align:middle; white-space:nowrap }
+  .ngl-table .num { font-variant-numeric:tabular-nums; text-align:right }
+  .ngl-table .id { font-family:'Consolas',monospace; font-size:0.74rem; color:#64748b }
+  .ngl-table .customer { font-weight:700; color:#0f172a }
+
+  .ngl-table tr.group-row { background:#fff7ed; cursor:pointer }
+  .ngl-table tr.group-row td { background:#fff7ed; font-weight:700; color:#9a3412; font-size:0.78rem; padding:6px 10px; border-top:1px solid #fed7aa; border-bottom:1px solid #fed7aa }
+  .ngl-table tr.group-row:hover td { background:#ffedd5 }
+  .ngl-table tr.group-row.row-selected td { background:#fed7aa }
+  .ngl-table tr.group-row .chevron { display:inline-block; width:12px; color:#c2410c; font-size:0.7rem; transition:transform 0.15s; margin-right:6px }
+
+  .ngl-btn { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:6px; font-size:0.74rem; font-weight:700; cursor:pointer; border:1px solid; white-space:nowrap }
+  .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569 }
+  .ngl-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff }
+
+  .preview-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; padding:4px 10px; border-radius:4px; margin-bottom:6px }
+  .preview-label.a { background:#0369a1 }
+  .preview-label.b { background:#7c3aed }
+
+  .kpi-strip { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:14px }
+  .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px }
+  .kpi .kpi-label { font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; margin-bottom:2px }
+  .kpi .kpi-val { font-size:1.15rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+  .kpi .kpi-sub { font-size:0.7rem; color:#64748b; margin-top:1px }
+  .kpi.accent .kpi-val { color:#15803d }
+
+  /* Split layout */
+  .ngl-split { display:grid; grid-template-columns: 1fr 320px; gap:14px }
+  .ngl-detail { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px; font-size:0.82rem; align-self:start }
+  .ngl-detail .det-name { font-weight:800; color:#0f172a; font-size:0.95rem; margin-bottom:2px }
+  .ngl-detail .det-sub { color:#64748b; font-size:0.74rem; margin-bottom:12px; font-family:'Consolas',monospace }
+  .ngl-detail .det-kpi { display:flex; gap:12px; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #f1f5f9 }
+  .ngl-detail .det-kpi .k { flex:1 }
+  .ngl-detail .det-kpi .k-label { font-size:0.65rem; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px }
+  .ngl-detail .det-kpi .k-val { font-size:1rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+  .ngl-detail .det-section-label { font-size:0.66rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin:10px 0 6px }
+  .ngl-detail .det-row { display:flex; justify-content:space-between; padding:4px 0; font-size:0.78rem; border-bottom:1px solid #f8fafc }
+  .ngl-detail .det-row:last-child { border-bottom:none }
+  .ngl-detail .det-row .amt { font-variant-numeric:tabular-nums; font-weight:600 }
+  .ngl-detail .det-row .id { font-family:'Consolas',monospace; color:#475569 }
+  .ngl-detail .det-actions { display:flex; gap:6px; margin-top:14px }
+  .ngl-detail .det-actions .ngl-btn { flex:1; justify-content:center }
+
+  .tab-bank-preview { background:#0f172a; color:#cbd5e1; font-family:'Consolas',monospace; font-size:0.74rem; padding:10px 12px; border-radius:6px; line-height:1.5; white-space:pre; overflow-x:auto; margin-top:6px }
+
+  /* Empty-state "Today summary" panel */
+  .ngl-detail.empty .summary-block { padding:8px 10px; background:#fafafa; border-radius:6px; margin-bottom:8px }
+  .ngl-detail.empty .summary-block .sb-label { font-size:0.65rem; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:3px }
+  .ngl-detail.empty .summary-block .sb-val { font-size:0.95rem; font-weight:800; color:#0f172a }
+  .ngl-detail.empty .summary-block .sb-sub { font-size:0.72rem; color:#64748b; margin-top:1px }
+  .ngl-detail.empty .alert-row { display:flex; align-items:center; gap:8px; padding:6px 8px; background:#fef3c7; border-left:3px solid #f59e0b; border-radius:4px; margin-bottom:5px; font-size:0.76rem; color:#78350f }
+  .ngl-detail.empty .alert-row.danger { background:#fee2e2; border-left-color:#dc2626; color:#7f1d1d }
+
+  .verdict-bar { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; margin-top:8px; font-size:0.85rem; color:#475569 }
+  .verdict-bar strong { color:#0f172a }
+</style>
+</head>
+<body>
+
+<h2>Two ways the right panel can behave on cold load</h2>
+<p class="subtitle">Same table, same drilled-in behavior &mdash; the only difference is what shows in the panel when nothing's selected yet.</p>
+
+<div class="compare-grid">
+
+<!-- ====================== OPTION A — auto-select row 1 ====================== -->
+<div>
+<span class="preview-label a">Option A &middot; Auto-select row 1</span>
+<div class="ngl-app">
+  <div class="ngl-tabs-row"><div class="ngl-tabs">
+    <div class="ngl-tab">Summary</div>
+    <div class="ngl-tab active">Collections <span class="count">42</span></div>
+    <div class="ngl-tab">Overdue <span class="count">936</span></div>
+    <div class="ngl-tab">Partial Pays <span class="count">38</span></div>
+    <div class="ngl-tab">New Invoices <span class="count">135</span></div>
+    <div class="ngl-tab">TMS <span class="count">147</span></div>
+  </div></div>
+
+  <div class="ngl-screen">
+    <div class="kpi-strip">
+      <div class="kpi accent"><div class="kpi-label">Collected</div><div class="kpi-val">$284,150</div></div>
+      <div class="kpi"><div class="kpi-label">Paid full</div><div class="kpi-val">$251,800</div></div>
+      <div class="kpi"><div class="kpi-label">Partial</div><div class="kpi-val">$28,400</div></div>
+      <div class="kpi"><div class="kpi-label">Short</div><div class="kpi-val">$3,950</div></div>
+    </div>
+
+    <h3 class="ngl-section-h">
+      Yesterday's payments
+      <span class="ngl-section-sub">first row selected automatically</span>
+      <span class="header-actions">
+        <button class="ngl-btn ngl-btn-primary">Copy TAB BANK report</button>
+      </span>
+    </h3>
+
+    <div class="ngl-split">
+      <div>
+        <div class="ngl-toolbar">
+          <input class="search" placeholder="Search" />
+          <button class="toggle-all">Expand all</button>
+          <span class="filter-meta">17 payments</span>
+        </div>
+        <div class="ngl-table-wrap">
+          <table class="ngl-table">
+            <tr>
+              <th>Payment</th>
+              <th>Customer</th>
+              <th class="num">Inv</th>
+              <th class="num">Amount</th>
+            </tr>
+
+            <tr class="group-row row-selected">
+              <td><span class="chevron">&rsaquo;</span>CHECK #41827</td>
+              <td class="customer">MAN WAH TRADING</td>
+              <td class="num">3</td>
+              <td class="num">$18,420</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>ACH #88142</td>
+              <td class="customer">HL LOGISTICS AMERICA</td>
+              <td class="num">2</td>
+              <td class="num">$14,200</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>CHECK #41891</td>
+              <td class="customer">JSL LOGISTICS</td>
+              <td class="num">1</td>
+              <td class="num">$3,950</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>WIRE #WT-26051801</td>
+              <td class="customer">AGL AMERICAN GLOBAL</td>
+              <td class="num">4</td>
+              <td class="num">$24,300</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>ACH #88157</td>
+              <td class="customer">TOPOCEAN CONSOLIDATION</td>
+              <td class="num">8</td>
+              <td class="num">$67,400</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>CHECK #41902</td>
+              <td class="customer">KFW LINE USA</td>
+              <td class="num">2</td>
+              <td class="num">$9,800</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pre-filled with row 1 (CHECK #41827) -->
+      <div class="ngl-detail">
+        <div class="det-name">CHECK #41827</div>
+        <div class="det-sub">MAN WAH TRADING &middot; 2026-05-18</div>
+
+        <div class="det-kpi">
+          <div class="k"><div class="k-label">Total paid</div><div class="k-val">$18,420</div></div>
+          <div class="k"><div class="k-label">Invoices</div><div class="k-val">3</div></div>
+        </div>
+
+        <div class="det-section-label">Invoices in this payment</div>
+        <div class="det-row"><span class="id">PM26041204</span><span class="amt">$6,200</span></div>
+        <div class="det-row"><span class="id">PM26041318</span><span class="amt">$8,950</span></div>
+        <div class="det-row"><span class="id">PM26041542</span><span class="amt">$3,270</span></div>
+
+        <div class="det-section-label">TAB BANK line</div>
+        <div class="tab-bank-preview">2026-05-18  CHECK-41827
+MAN WAH TRADING
+PM26041204  $6,200.00
+PM26041318  $8,950.00
+PM26041542  $3,270.00
+TOTAL       $18,420.00</div>
+
+        <div class="det-actions">
+          <button class="ngl-btn ngl-btn-secondary">Copy line</button>
+          <button class="ngl-btn ngl-btn-primary">Open in QBO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="verdict-bar">
+  <strong>How A feels:</strong> First payment is already showing &mdash; click another row to swap. No empty state to design. But the panel never tells you "the big picture for today" &mdash; it's always just one payment.
+</div>
+</div>
+
+<!-- ====================== OPTION B — "Today summary" empty state ====================== -->
+<div>
+<span class="preview-label b">Option B &middot; "Today summary" empty state</span>
+<div class="ngl-app">
+  <div class="ngl-tabs-row"><div class="ngl-tabs">
+    <div class="ngl-tab">Summary</div>
+    <div class="ngl-tab active">Collections <span class="count">42</span></div>
+    <div class="ngl-tab">Overdue <span class="count">936</span></div>
+    <div class="ngl-tab">Partial Pays <span class="count">38</span></div>
+    <div class="ngl-tab">New Invoices <span class="count">135</span></div>
+    <div class="ngl-tab">TMS <span class="count">147</span></div>
+  </div></div>
+
+  <div class="ngl-screen">
+    <div class="kpi-strip">
+      <div class="kpi accent"><div class="kpi-label">Collected</div><div class="kpi-val">$284,150</div></div>
+      <div class="kpi"><div class="kpi-label">Paid full</div><div class="kpi-val">$251,800</div></div>
+      <div class="kpi"><div class="kpi-label">Partial</div><div class="kpi-val">$28,400</div></div>
+      <div class="kpi"><div class="kpi-label">Short</div><div class="kpi-val">$3,950</div></div>
+    </div>
+
+    <h3 class="ngl-section-h">
+      Yesterday's payments
+      <span class="ngl-section-sub">click a row to see its detail</span>
+      <span class="header-actions">
+        <button class="ngl-btn ngl-btn-primary">Copy TAB BANK report</button>
+      </span>
+    </h3>
+
+    <div class="ngl-split">
+      <div>
+        <div class="ngl-toolbar">
+          <input class="search" placeholder="Search" />
+          <button class="toggle-all">Expand all</button>
+          <span class="filter-meta">17 payments</span>
+        </div>
+        <div class="ngl-table-wrap">
+          <table class="ngl-table">
+            <tr>
+              <th>Payment</th>
+              <th>Customer</th>
+              <th class="num">Inv</th>
+              <th class="num">Amount</th>
+            </tr>
+
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>CHECK #41827</td>
+              <td class="customer">MAN WAH TRADING</td>
+              <td class="num">3</td>
+              <td class="num">$18,420</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>ACH #88142</td>
+              <td class="customer">HL LOGISTICS AMERICA</td>
+              <td class="num">2</td>
+              <td class="num">$14,200</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>CHECK #41891</td>
+              <td class="customer">JSL LOGISTICS</td>
+              <td class="num">1</td>
+              <td class="num">$3,950</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>WIRE #WT-26051801</td>
+              <td class="customer">AGL AMERICAN GLOBAL</td>
+              <td class="num">4</td>
+              <td class="num">$24,300</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>ACH #88157</td>
+              <td class="customer">TOPOCEAN CONSOLIDATION</td>
+              <td class="num">8</td>
+              <td class="num">$67,400</td>
+            </tr>
+            <tr class="group-row">
+              <td><span class="chevron">&rsaquo;</span>CHECK #41902</td>
+              <td class="customer">KFW LINE USA</td>
+              <td class="num">2</td>
+              <td class="num">$9,800</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Empty-state "Today summary" panel -->
+      <div class="ngl-detail empty">
+        <div class="det-name">Today's collections</div>
+        <div class="det-sub">2026-05-18 &middot; click a payment for details</div>
+
+        <div class="det-kpi">
+          <div class="k"><div class="k-label">Collected</div><div class="k-val">$284,150</div></div>
+          <div class="k"><div class="k-label">Payments</div><div class="k-val">17</div></div>
+        </div>
+
+        <div class="det-section-label">Top payer</div>
+        <div class="summary-block">
+          <div class="sb-label">Single biggest</div>
+          <div class="sb-val">TOPOCEAN CONSOLIDATION</div>
+          <div class="sb-sub">ACH #88157 &middot; $67,400 &middot; 8 invoices</div>
+        </div>
+
+        <div class="det-section-label">Needs attention</div>
+        <div class="alert-row danger">1 short pay &middot; JSL LOGISTICS &minus;$1,250</div>
+        <div class="alert-row">5 partial pays totaling $28,400</div>
+
+        <div class="det-actions">
+          <button class="ngl-btn ngl-btn-secondary">Expand all</button>
+          <button class="ngl-btn ngl-btn-primary">Copy TAB BANK report</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="verdict-bar">
+  <strong>How B feels:</strong> Panel acts like a "morning briefing" until you click. Tells you the things that matter most at a glance &mdash; biggest payment, any short pays, total. Click any row and it becomes a detail panel like A.
+</div>
+</div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Collections</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; margin-bottom:24px }
+  .ngl-app h3 { color:#0f172a; margin:0 }
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:#fff; padding:0 20px }
+  .ngl-tabs { display:flex; gap:2px }
+  .ngl-tab { padding:9px 12px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.8rem; font-weight:600; color:#64748b; display:flex; align-items:center; gap:6px }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+  .ngl-tab .count { background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:999px; font-size:0.68rem; font-weight:700 }
+  .ngl-tab.active .count { background:#ea580c; color:white }
+  .ngl-screen { padding:14px 20px }
+
+  .ngl-section-h { display:flex; align-items:center; gap:10px; font-size:0.95rem; font-weight:800; color:#0f172a; padding:8px 12px; margin:0 0 10px; background:#fff; border-left:4px solid #ea580c; border-radius:0 6px 6px 0; border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.03) }
+  .ngl-section-h .ngl-section-sub { font-size:0.75rem; color:#64748b; font-weight:500; margin-left:auto }
+  .ngl-section-h .header-actions { display:flex; gap:6px; margin-left:auto }
+
+  .ngl-toolbar { display:flex; align-items:center; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e2e8f0; border-bottom:none; border-radius:8px 8px 0 0; font-size:0.78rem; color:#64748b; flex-wrap:wrap }
+  .ngl-toolbar input.search { flex:1; min-width:120px; padding:5px 10px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.8rem; color:#334155 }
+  .ngl-toolbar .filter-meta { color:#94a3b8; margin-left:auto; font-size:0.72rem; font-weight:600 }
+  .ngl-table-wrap { background:#fff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px; overflow:hidden }
+
+  .ngl-table { border-collapse:collapse; font-size:0.82rem; width:100% }
+  .ngl-table th { text-align:left; font-size:0.66rem; font-weight:700; color:#94a3b8; letter-spacing:0.03em; text-transform:uppercase; padding:7px 10px; border-bottom:1px solid #e2e8f0; background:#fafafa; white-space:nowrap }
+  .ngl-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; color:#1e293b; vertical-align:middle; white-space:nowrap }
+  .ngl-table tr.payment-group td { background:#fff7ed; font-weight:700; color:#9a3412; font-size:0.78rem; padding:5px 10px; border-top:1px solid #fed7aa }
+  .ngl-table tr.payment-group td .grp-meta { font-weight:600; color:#c2410c; margin-left:8px; font-size:0.74rem }
+  .ngl-table tr.payment-group td .grp-amt { float:right; font-variant-numeric:tabular-nums; color:#7c2d12 }
+  .ngl-table tr:hover td { background:#fafafa; cursor:pointer }
+  .ngl-table tr.row-selected td { background:#fff7ed }
+  .ngl-table tr.row-selected.payment-group td { background:#fed7aa }
+  .ngl-table .num { font-variant-numeric:tabular-nums; text-align:right }
+  .ngl-table .id { font-family:'Consolas',monospace; font-size:0.74rem; color:#64748b }
+  .ngl-table .customer { font-weight:700; color:#0f172a }
+
+  .pay-tag { display:inline-block; font-size:0.66rem; font-weight:700; padding:2px 6px; border-radius:3px; text-transform:uppercase; letter-spacing:0.03em }
+  .pay-tag.partial { background:#fef3c7; color:#92400e }
+  .pay-tag.short   { background:#fee2e2; color:#991b1b }
+  .pay-tag.full    { background:#dcfce7; color:#166534 }
+
+  .ngl-btn { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:6px; font-size:0.74rem; font-weight:700; cursor:pointer; border:1px solid; white-space:nowrap }
+  .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569 }
+  .ngl-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff }
+
+  .preview-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; background:#0f172a; padding:4px 10px; border-radius:4px; margin-bottom:6px }
+
+  /* KPI strip above the split */
+  .kpi-strip { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:14px }
+  .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px }
+  .kpi .kpi-label { font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; margin-bottom:2px }
+  .kpi .kpi-val { font-size:1.15rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+  .kpi .kpi-sub { font-size:0.7rem; color:#64748b; margin-top:1px }
+  .kpi.accent .kpi-val { color:#15803d }
+
+  /* Split layout */
+  .ngl-split { display:grid; grid-template-columns: 1fr 340px; gap:14px }
+  .ngl-detail { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px; font-size:0.82rem; align-self:start }
+  .ngl-detail .det-name { font-weight:800; color:#0f172a; font-size:0.95rem; margin-bottom:2px }
+  .ngl-detail .det-sub { color:#64748b; font-size:0.74rem; margin-bottom:12px; font-family:'Consolas',monospace }
+  .ngl-detail .det-kpi { display:flex; gap:12px; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #f1f5f9 }
+  .ngl-detail .det-kpi .k { flex:1 }
+  .ngl-detail .det-kpi .k-label { font-size:0.65rem; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px }
+  .ngl-detail .det-kpi .k-val { font-size:1rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+  .ngl-detail .det-section-label { font-size:0.66rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin:10px 0 6px }
+  .ngl-detail .det-row { display:flex; justify-content:space-between; padding:4px 0; font-size:0.78rem; border-bottom:1px solid #f8fafc }
+  .ngl-detail .det-row:last-child { border-bottom:none }
+  .ngl-detail .det-row .amt { font-variant-numeric:tabular-nums; font-weight:600 }
+  .ngl-detail .det-row .id { font-family:'Consolas',monospace; color:#475569 }
+  .ngl-detail .det-actions { display:flex; gap:6px; margin-top:14px }
+  .ngl-detail .det-actions .ngl-btn { flex:1; justify-content:center }
+
+  /* TAB BANK preview block on the right panel */
+  .tab-bank-preview { background:#0f172a; color:#cbd5e1; font-family:'Consolas',monospace; font-size:0.74rem; padding:10px 12px; border-radius:6px; line-height:1.5; white-space:pre; overflow-x:auto; margin-top:6px }
+</style>
+</head>
+<body>
+
+<h2>Collections &mdash; what got paid yesterday</h2>
+<p class="subtitle">Used to (a) report yesterday's collections to TAB BANK and (b) catch partial / short pays. Detail panel on the right shows the selected payment or invoice.</p>
+
+<span class="preview-label">Tab: Collections</span>
+<div class="ngl-app">
+  <div class="ngl-tabs-row"><div class="ngl-tabs">
+    <div class="ngl-tab">Summary</div>
+    <div class="ngl-tab active">Collections <span class="count">42</span></div>
+    <div class="ngl-tab">Overdue <span class="count">936</span></div>
+    <div class="ngl-tab">Partial Pays <span class="count">38</span></div>
+    <div class="ngl-tab">New Invoices <span class="count">135</span></div>
+    <div class="ngl-tab">TMS <span class="count">147</span></div>
+    <div class="ngl-tab">Adjustments <span class="count">13</span></div>
+    <div class="ngl-tab">Customers <span class="count">183</span></div>
+  </div></div>
+
+  <div class="ngl-screen">
+
+    <!-- KPI strip -->
+    <div class="kpi-strip">
+      <div class="kpi accent"><div class="kpi-label">Total collected</div><div class="kpi-val">$284,150</div><div class="kpi-sub">42 invoices, 17 payments</div></div>
+      <div class="kpi"><div class="kpi-label">Paid in full</div><div class="kpi-val">$251,800</div><div class="kpi-sub">36 invoices</div></div>
+      <div class="kpi"><div class="kpi-label">Partial pays</div><div class="kpi-val">$28,400</div><div class="kpi-sub">5 invoices</div></div>
+      <div class="kpi"><div class="kpi-label">Short pays</div><div class="kpi-val">$3,950</div><div class="kpi-sub">1 invoice</div></div>
+    </div>
+
+    <h3 class="ngl-section-h">
+      Yesterday's payments
+      <span class="ngl-section-sub">grouped by check# / payment ref</span>
+      <span class="header-actions">
+        <button class="ngl-btn ngl-btn-secondary">Export CSV</button>
+        <button class="ngl-btn ngl-btn-primary">Copy TAB BANK report</button>
+      </span>
+    </h3>
+
+    <div class="ngl-split">
+      <div>
+        <div class="ngl-toolbar">
+          <input class="search" placeholder="Search customer, invoice, or check#" />
+          <span class="filter-meta">42 invoices &middot; 17 payments &middot; $284,150</span>
+        </div>
+        <div class="ngl-table-wrap">
+          <table class="ngl-table">
+            <tr>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Invoice</th>
+              <th class="num">Paid</th>
+              <th class="num">Open bal</th>
+              <th>Status</th>
+            </tr>
+
+            <!-- Payment group 1 -->
+            <tr class="payment-group"><td colspan="6">CHECK #41827 &middot; MAN WAH TRADING <span class="grp-meta">3 invoices</span> <span class="grp-amt">$18,420</span></td></tr>
+            <tr>
+              <td>05-18</td>
+              <td class="customer">MAN WAH TRADING</td>
+              <td class="id">PM26041204</td>
+              <td class="num">$6,200</td>
+              <td class="num">$0</td>
+              <td><span class="pay-tag full">Paid</span></td>
+            </tr>
+            <tr>
+              <td>05-18</td>
+              <td class="customer">MAN WAH TRADING</td>
+              <td class="id">PM26041318</td>
+              <td class="num">$8,950</td>
+              <td class="num">$0</td>
+              <td><span class="pay-tag full">Paid</span></td>
+            </tr>
+            <tr>
+              <td>05-18</td>
+              <td class="customer">MAN WAH TRADING</td>
+              <td class="id">PM26041542</td>
+              <td class="num">$3,270</td>
+              <td class="num">$0</td>
+              <td><span class="pay-tag full">Paid</span></td>
+            </tr>
+
+            <!-- Payment group 2 (selected) -->
+            <tr class="payment-group row-selected"><td colspan="6">ACH #88142 &middot; HL LOGISTICS AMERICA <span class="grp-meta">2 invoices</span> <span class="grp-amt">$14,200</span></td></tr>
+            <tr class="row-selected">
+              <td>05-18</td>
+              <td class="customer">HL LOGISTICS AMERICA</td>
+              <td class="id">PM26042108</td>
+              <td class="num">$9,500</td>
+              <td class="num">$2,300</td>
+              <td><span class="pay-tag partial">Partial</span></td>
+            </tr>
+            <tr class="row-selected">
+              <td>05-18</td>
+              <td class="customer">HL LOGISTICS AMERICA</td>
+              <td class="id">PM26042210</td>
+              <td class="num">$4,700</td>
+              <td class="num">$0</td>
+              <td><span class="pay-tag full">Paid</span></td>
+            </tr>
+
+            <!-- Payment group 3 -->
+            <tr class="payment-group"><td colspan="6">CHECK #41891 &middot; JSL LOGISTICS <span class="grp-meta">1 invoice</span> <span class="grp-amt">$3,950</span></td></tr>
+            <tr>
+              <td>05-18</td>
+              <td class="customer">JSL LOGISTICS</td>
+              <td class="id">PM26043011</td>
+              <td class="num">$3,950</td>
+              <td class="num">$1,250</td>
+              <td><span class="pay-tag short">Short</span></td>
+            </tr>
+
+            <!-- Payment group 4 -->
+            <tr class="payment-group"><td colspan="6">WIRE #WT-26051801 &middot; AGL AMERICAN GLOBAL LOGISTICS <span class="grp-meta">4 invoices</span> <span class="grp-amt">$24,300</span></td></tr>
+            <tr>
+              <td>05-18</td>
+              <td class="customer">AGL AMERICAN GLOBAL LOGISTICS</td>
+              <td class="id">PM26044020</td>
+              <td class="num">$8,200</td>
+              <td class="num">$0</td>
+              <td><span class="pay-tag full">Paid</span></td>
+            </tr>
+            <tr>
+              <td>05-18</td>
+              <td class="customer">AGL AMERICAN GLOBAL LOGISTICS</td>
+              <td class="id">PM26044108</td>
+              <td class="num">$5,400</td>
+              <td class="num">$0</td>
+              <td><span class="pay-tag full">Paid</span></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right detail panel: selected payment -->
+      <div class="ngl-detail">
+        <div class="det-name">ACH #88142</div>
+        <div class="det-sub">HL LOGISTICS AMERICA &middot; 2026-05-18</div>
+
+        <div class="det-kpi">
+          <div class="k"><div class="k-label">Total paid</div><div class="k-val">$14,200</div></div>
+          <div class="k"><div class="k-label">Invoices</div><div class="k-val">2</div></div>
+        </div>
+
+        <div class="det-section-label">Invoices in this payment</div>
+        <div class="det-row"><span class="id">PM26042108</span><span class="amt">$9,500</span></div>
+        <div class="det-row"><span class="id">PM26042210</span><span class="amt">$4,700</span></div>
+
+        <div class="det-section-label">TAB BANK line</div>
+        <div class="tab-bank-preview">2026-05-18  ACH-88142
+HL LOGISTICS AMERICA
+PM26042108  $9,500.00
+PM26042210  $4,700.00
+TOTAL       $14,200.00</div>
+
+        <div class="det-actions">
+          <button class="ngl-btn ngl-btn-secondary">Copy line</button>
+          <button class="ngl-btn ngl-btn-primary">Open in QBO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

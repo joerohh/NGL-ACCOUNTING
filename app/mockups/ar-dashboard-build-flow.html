@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Build Today's Workbook flow</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+  .scenes { display:flex; flex-direction:column; gap:28px }
+
+  /* shared shell */
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.04); position:relative }
+  .scene-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; padding:4px 10px; border-radius:4px; margin-bottom:8px; background:#0369a1 }
+  .scene-label.b { background:#7c3aed }
+  .scene-label.c { background:#0f766e }
+
+  /* app shell with sidebar */
+  .shell { display:grid; grid-template-columns: 184px 1fr; min-height:520px }
+  .sidebar { background:#0f172a; color:#cbd5e1; padding:16px 0 }
+  .sidebar .brand { color:#fff; font-weight:800; font-size:0.95rem; padding:0 16px 14px; border-bottom:1px solid #1e293b; margin-bottom:10px; letter-spacing:0.02em }
+  .sidebar .brand .accent { color:#ea580c }
+  .sidebar .nav-section-label { font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase; color:#64748b; font-weight:700; padding:6px 16px 2px }
+  .sidebar .nav-item { display:flex; align-items:center; gap:8px; padding:8px 16px; font-size:0.82rem; color:#cbd5e1; cursor:pointer; border-left:3px solid transparent }
+  .sidebar .nav-item:hover { background:#1e293b }
+  .sidebar .nav-item.active { color:#fff; background:#1e293b; border-left-color:#ea580c; font-weight:700 }
+  .sidebar .nav-item .ico { width:14px; text-align:center; opacity:0.8 }
+
+  .main { background:#f8fafc; padding:20px 24px; position:relative; overflow:hidden }
+  .top-banner { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; margin-bottom:14px; font-size:0.78rem; color:#475569 }
+  .top-banner .health { display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#15803d }
+  .top-banner .health::before { content:''; display:inline-block; width:8px; height:8px; background:#22c55e; border-radius:50% }
+  .top-banner .right { margin-left:auto; color:#94a3b8 }
+
+  .page-h { display:flex; align-items:flex-end; gap:10px; margin-bottom:14px }
+  .page-h h3 { font-size:1.1rem; font-weight:800; color:#0f172a }
+  .page-h .date { color:#64748b; font-size:0.8rem; font-weight:600 }
+
+  /* tabs */
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:transparent; margin-bottom:18px }
+  .ngl-tab { padding:8px 12px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.8rem; font-weight:600; color:#64748b; display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:default }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+
+  /* empty state */
+  .empty-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:40px 32px; display:flex; flex-direction:column; align-items:center; text-align:center }
+  .empty-card .ico-big { width:48px; height:48px; border-radius:50%; background:#fff7ed; color:#ea580c; display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin-bottom:14px; border:1px solid #fed7aa }
+  .empty-card h4 { font-size:1.05rem; font-weight:800; color:#0f172a; margin-bottom:6px }
+  .empty-card p { font-size:0.83rem; color:#64748b; max-width:420px; margin-bottom:14px }
+  .empty-card .small-note { font-size:0.72rem; color:#94a3b8; margin-top:8px }
+
+  /* buttons */
+  .ngl-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; font-size:0.8rem; font-weight:700; cursor:pointer; border:1px solid; white-space:nowrap }
+  .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569 }
+  .ngl-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff }
+  .ngl-btn-primary:disabled, .ngl-btn-primary.disabled { background:#fde6d3; border-color:#fde6d3; color:#c2410c; cursor:not-allowed; opacity:0.7 }
+  .ngl-btn-ghost { background:transparent; border-color:transparent; color:#0369a1; padding:6px 8px; text-decoration:underline }
+  .ngl-btn.small { padding:5px 10px; font-size:0.72rem }
+
+  /* modal overlay */
+  .modal-overlay { position:absolute; inset:0; background:rgba(15,23,42,0.45); display:flex; align-items:flex-start; justify-content:center; padding:32px 24px; backdrop-filter:blur(2px) }
+  .modal { background:#fff; border-radius:12px; width:100%; max-width:580px; max-height:100%; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.16) }
+  .modal-header { padding:14px 18px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:10px }
+  .modal-header h4 { font-size:1rem; font-weight:800; color:#0f172a }
+  .modal-header .date-sub { font-size:0.74rem; color:#64748b; font-weight:600 }
+  .modal-header .close-x { margin-left:auto; color:#94a3b8; font-size:1.3rem; cursor:pointer; line-height:1 }
+  .modal-body { padding:14px 18px; overflow-y:auto }
+  .modal-footer { padding:12px 18px; border-top:1px solid #e2e8f0; display:flex; gap:10px; align-items:center; background:#f8fafc }
+  .modal-footer .footer-note { font-size:0.72rem; color:#64748b; margin-right:auto }
+
+  /* checklist rows */
+  .input-list { display:flex; flex-direction:column; gap:8px }
+  .input-row { display:flex; align-items:center; gap:12px; padding:11px 13px; border:1px solid #e2e8f0; border-radius:8px; background:#fff }
+  .input-row.done { background:#f0fdf4; border-color:#bbf7d0 }
+  .input-row.pending { background:#fff }
+  .input-row.error { background:#fef2f2; border-color:#fecaca }
+  .input-row .step-num { width:22px; height:22px; border-radius:50%; background:#f1f5f9; color:#64748b; display:flex; align-items:center; justify-content:center; font-size:0.72rem; font-weight:800; flex-shrink:0 }
+  .input-row.done .step-num { background:#22c55e; color:#fff }
+  .input-row.error .step-num { background:#dc2626; color:#fff }
+  .input-row .step-body { flex:1; min-width:0 }
+  .input-row .step-title { font-size:0.84rem; font-weight:700; color:#0f172a }
+  .input-row .step-sub { font-size:0.72rem; color:#64748b; margin-top:1px; font-variant-numeric:tabular-nums }
+  .input-row .step-sub.done-sub { color:#15803d; font-weight:600 }
+  .input-row .step-sub.error-sub { color:#b91c1c; font-weight:600 }
+  .input-row .step-sub .filename { font-family:'Consolas',monospace; color:#334155; font-weight:600 }
+  .input-row .step-action { display:flex; gap:6px; flex-shrink:0 }
+  .input-row .step-action .ngl-btn { padding:5px 10px; font-size:0.72rem }
+  .input-row .step-action .change { font-size:0.7rem; color:#0369a1; text-decoration:underline; cursor:pointer; font-weight:600 }
+
+  /* drop zone variant */
+  .drop-mini { border:2px dashed #cbd5e1; border-radius:6px; padding:6px 12px; font-size:0.74rem; color:#64748b; cursor:pointer; background:#fff }
+  .drop-mini:hover { border-color:#ea580c; color:#ea580c }
+
+  /* preview cards */
+  .preview-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px }
+  .preview-card { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px }
+  .preview-card .pv-label { font-size:0.65rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; margin-bottom:3px }
+  .preview-card .pv-val { font-size:1.1rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+  .preview-card .pv-detail { font-size:0.72rem; color:#64748b; margin-top:4px; line-height:1.4 }
+  .preview-card .pv-detail b { color:#0f172a; font-weight:700 }
+  .preview-card.accent { border-color:#fed7aa; background:#fff7ed }
+  .preview-card.accent .pv-val { color:#9a3412 }
+
+  .preview-summary { padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px }
+  .preview-summary .ps-line { font-size:0.78rem; color:#475569; display:flex; align-items:center; gap:8px; padding:3px 0 }
+  .preview-summary .ps-line .check { color:#16a34a; font-weight:800 }
+  .preview-summary .ps-line.warn .check { color:#d97706 }
+
+  .preview-meta { font-size:0.72rem; color:#64748b; margin-top:10px; padding:8px 10px; background:#fff; border:1px dashed #e2e8f0; border-radius:6px; display:flex; gap:6px; align-items:center }
+  .preview-meta b { color:#0f172a; font-family:'Consolas',monospace; font-weight:600 }
+
+</style>
+</head>
+<body>
+
+<h2>AR Dashboard — Build Today's Workbook flow</h2>
+<div class="subtitle">Three scenes: dashboard empty state → build modal (mixed input states) → preview before commit. Date: <b>2026-05-19</b>.</div>
+
+<div class="scenes">
+
+<!-- ============ Scene A: empty state ============ -->
+<div>
+  <div class="scene-label">A — Dashboard empty state (no workbook built yet)</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+        <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+        <div class="nav-item"><span class="ico">👥</span>Customers</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+        <div class="nav-section-label" style="margin-top:14px">Account</div>
+        <div class="nav-item"><span class="ico">⚙️</span>Settings</div>
+        <div class="nav-item"><span class="ico">📜</span>History</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span>QBO ✓</span>
+          <span>TMS ✓</span>
+          <span class="right">v2.73.0</span>
+        </div>
+        <div class="page-h">
+          <h3>AR Dashboard</h3>
+          <span class="date">· Tuesday, May 19, 2026</span>
+        </div>
+        <div class="ngl-tabs-row">
+          <button class="ngl-tab active">Summary</button>
+          <button class="ngl-tab">Collections</button>
+          <button class="ngl-tab">Overdue</button>
+          <button class="ngl-tab">Partial Pays</button>
+          <button class="ngl-tab">New Invoices</button>
+          <button class="ngl-tab">TMS</button>
+          <button class="ngl-tab">Adjustments</button>
+          <button class="ngl-tab">Suspense</button>
+          <button class="ngl-tab">Customers</button>
+        </div>
+        <div class="empty-card">
+          <div class="ico-big">📊</div>
+          <h4>Today's workbook isn't built yet</h4>
+          <p>Pull yesterday's collections, today's new invoices, TMS reconcile, and the TAB BANK remittance into a single morning view. Takes about 30 seconds.</p>
+          <button class="ngl-btn ngl-btn-primary">Build today's workbook →</button>
+          <div class="small-note">Last built: <b>Monday, May 18 · 9:14 AM</b> · <a href="#" style="color:#0369a1">Open yesterday's workbook</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Scene B: build modal — mixed input states ============ -->
+<div>
+  <div class="scene-label b">B — Build modal (mid-flow: some inputs done, some pending)</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+        <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+        <div class="nav-item"><span class="ico">👥</span>Customers</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+        <div class="nav-section-label" style="margin-top:14px">Account</div>
+        <div class="nav-item"><span class="ico">⚙️</span>Settings</div>
+        <div class="nav-item"><span class="ico">📜</span>History</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span class="right">v2.73.0</span>
+        </div>
+        <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+        <div class="ngl-tabs-row"><button class="ngl-tab active">Summary</button><button class="ngl-tab">Collections</button><button class="ngl-tab">Overdue</button></div>
+
+        <div class="modal-overlay">
+          <div class="modal">
+            <div class="modal-header">
+              <h4>Build today's workbook</h4>
+              <span class="date-sub">· Tuesday, May 19, 2026</span>
+              <span class="close-x">×</span>
+            </div>
+            <div class="modal-body">
+              <div class="input-list">
+
+                <div class="input-row done">
+                  <div class="step-num">✓</div>
+                  <div class="step-body">
+                    <div class="step-title">Yesterday's workbook</div>
+                    <div class="step-sub done-sub"><span class="filename">AR_AGING_05_18_2026.xlsx</span> · auto-located</div>
+                  </div>
+                  <div class="step-action">
+                    <span class="change">Use different file</span>
+                  </div>
+                </div>
+
+                <div class="input-row done">
+                  <div class="step-num">✓</div>
+                  <div class="step-body">
+                    <div class="step-title">QBO Daily Collection</div>
+                    <div class="step-sub done-sub">Fetched · <b>232 invoice lines</b> · $172,895 collected</div>
+                  </div>
+                  <div class="step-action"><span class="change">Re-fetch</span></div>
+                </div>
+
+                <div class="input-row pending">
+                  <div class="step-num">3</div>
+                  <div class="step-body">
+                    <div class="step-title">QBO Daily Schedule</div>
+                    <div class="step-sub">Not yet fetched</div>
+                  </div>
+                  <div class="step-action">
+                    <button class="ngl-btn ngl-btn-secondary small">Fetch</button>
+                  </div>
+                </div>
+
+                <div class="input-row pending">
+                  <div class="step-num">4</div>
+                  <div class="step-body">
+                    <div class="step-title">TAB BANK Remittance</div>
+                    <div class="step-sub">Drop the Collection_Payment.xlsx export here</div>
+                  </div>
+                  <div class="step-action">
+                    <div class="drop-mini">📂 Drop or browse</div>
+                  </div>
+                </div>
+
+                <div class="input-row pending">
+                  <div class="step-num">5</div>
+                  <div class="step-body">
+                    <div class="step-title">TMS Reconcile</div>
+                    <div class="step-sub">Drop the TMS Reconcile (TYPE=AR) export</div>
+                  </div>
+                  <div class="step-action">
+                    <div class="drop-mini">📂 Drop or browse</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            <div class="modal-footer">
+              <span class="footer-note">2 of 5 ready · 3 to go</span>
+              <button class="ngl-btn ngl-btn-secondary">Cancel</button>
+              <button class="ngl-btn ngl-btn-primary disabled">Run build</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Scene C: preview before commit ============ -->
+<div>
+  <div class="scene-label c">C — Preview before commit (after Run build)</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+        <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+        <div class="nav-item"><span class="ico">👥</span>Customers</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+        <div class="nav-section-label" style="margin-top:14px">Account</div>
+        <div class="nav-item"><span class="ico">⚙️</span>Settings</div>
+        <div class="nav-item"><span class="ico">📜</span>History</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span class="right">v2.73.0</span>
+        </div>
+        <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+        <div class="ngl-tabs-row"><button class="ngl-tab active">Summary</button><button class="ngl-tab">Collections</button><button class="ngl-tab">Overdue</button></div>
+
+        <div class="modal-overlay">
+          <div class="modal">
+            <div class="modal-header">
+              <h4>Today's workbook ready — review before saving</h4>
+              <span class="date-sub">· Tuesday, May 19, 2026</span>
+              <span class="close-x">×</span>
+            </div>
+            <div class="modal-body">
+
+              <div class="preview-summary">
+                <div class="ps-line"><span class="check">✓</span> All 5 inputs loaded</div>
+                <div class="ps-line"><span class="check">✓</span> AR register reconciled · <b style="color:#0f172a">800 invoices</b> after applying today's activity</div>
+                <div class="ps-line warn"><span class="check">!</span> 3 suspense items need attention (real errors only; 12 non-factored auto-resolved)</div>
+              </div>
+
+              <div class="preview-grid">
+                <div class="preview-card">
+                  <div class="pv-label">New invoices</div>
+                  <div class="pv-val">+134</div>
+                  <div class="pv-detail">From <b>QBO Schedule</b> · $211,440 added to AR</div>
+                </div>
+                <div class="preview-card">
+                  <div class="pv-label">Paid off</div>
+                  <div class="pv-val">−201</div>
+                  <div class="pv-detail">From <b>QBO Collection</b> · $172,895 cleared</div>
+                </div>
+                <div class="preview-card">
+                  <div class="pv-label">Amount adjustments</div>
+                  <div class="pv-val">13</div>
+                  <div class="pv-detail">From <b>TMS</b> · 13 invoices had amount deltas</div>
+                </div>
+                <div class="preview-card accent">
+                  <div class="pv-label">Suspense (need action)</div>
+                  <div class="pv-val">3</div>
+                  <div class="pv-detail"><b>Name mismatches</b> from TAB BANK · $8,420 unapplied</div>
+                </div>
+              </div>
+
+              <div class="preview-meta">
+                Will save to <b>C:\Users\Joseph\Documents\NGL\AR Outputs\AR_AGING_05_19_2026.xlsx</b>
+              </div>
+
+            </div>
+            <div class="modal-footer">
+              <span class="footer-note">Build took 0.6 seconds</span>
+              <button class="ngl-btn ngl-btn-secondary">Cancel &amp; adjust inputs</button>
+              <button class="ngl-btn ngl-btn-primary">Save &amp; open dashboard →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>
