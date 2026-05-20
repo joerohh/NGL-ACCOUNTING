@@ -1306,6 +1306,24 @@ function buildInitialDocList(row) {
       });
     }
   }
+  // Tripwire — a row the agent marked successful must always produce at least
+  // one doc. If we land here with zero, the SSE → fetchResult plumbing has
+  // dropped a field (the exact bug fixed in v2.74). Fail loud now instead of
+  // silently producing a zero-page merge at the user's last click.
+  const fetchedOk = fr.invPill === 'ok' && (fr.podPill === 'ok' || fr.podPill === 'fallback');
+  if (fetchedOk && docs.length === 0) {
+    console.error('[merge] buildInitialDocList: row marked successful but produced 0 docs', {
+      rowNum: row.rowNum,
+      containerNumber: row.containerNumber,
+      invoiceNumber: row.invoiceNumber,
+      routingType: row.routingType,
+      fetchResult: fr,
+    });
+    throw new Error(
+      `The merge tool fetched "${row.invoiceNumber || row.containerNumber}" but lost track of where the files are. This is a bug — please tell Joseph the merge tool needs an update.`
+    );
+  }
+
   row._originalDocs = JSON.parse(JSON.stringify(docs));  // snapshot for Reset
   return docs;
 }
@@ -2202,10 +2220,15 @@ function handleSseEvent(evt) {
       break;
 
     case 'container_complete':
+      // Authoritative event — folds the agent's full result payload into the row.
+      // For import/export, this is the "second update" that adds filenames + warehouse
+      // fields on top of whatever pod_found/pod_missing already set. For warehouse rows
+      // (which never emit pod_found), this is the ONLY event that populates fetchResult.
+      // Without this, row.documents stays empty and every merge produces zero files.
+      if (evt.result) patchRowFromResult(evt.containerNumber, evt.result);
       bumpProgress(evt.containerNumber);
       v2State.lastFetchedContainer = evt.containerNumber || v2State.lastFetchedContainer;
       updateLiveCounters();
-      // The actual row update came in via prior pod_found / pod_missing events
       break;
 
     case 'pod_found': {
@@ -2218,10 +2241,18 @@ function handleSseEvent(evt) {
         statusText: fromTms ? `Fetched (${tmsType})` : 'Fetched',
         chainAttempted: evt.chain_attempted || [],
         message: '',
+        podFile: evt.file || null,   // capture the on-disk filename the agent just wrote
       });
       updateLiveCounters();
       break;
     }
+
+    // Warehouse intermediate events — UI feedback only. The authoritative
+    // fetchResult lands in container_complete.
+    case 'warehouse_fetched':
+    case 'warehouse_empty':
+      updateLiveCounters();
+      break;
 
     case 'pod_missing':
       patchRow(evt.containerNumber, {
@@ -2271,6 +2302,81 @@ function handleSseEvent(evt) {
     case 'job_paused':
       finalizeFetch({ cancelled: true });
       break;
+  }
+}
+
+// Fold the agent's final container_complete.result payload into the matching
+// row(s) fetchResult. This is what gives the merge engine the actual filenames
+// to load — invoiceFile / podFile for import-export, warehouseAttachments for
+// warehouse. Without this, buildInitialDocList() finds nothing and merges
+// produce zero files (the bug fixed in v2.74).
+//
+// For warehouse rows the agent never emits pod_found/pod_missing, so this
+// function is also responsible for setting invPill/podPill/statusText/podLabel
+// from scratch. For import/export rows those pills are already set by the
+// prior pod_found or pod_missing event; we preserve them and just add the
+// filename fields.
+function patchRowFromResult(container, result) {
+  if (!result) return;
+  const containerLower = (container || '').toLowerCase();
+  for (let i = 0; i < v2State.rows.length; i++) {
+    const row = v2State.rows[i];
+    // Import/export rows match by container. Warehouse rows have no container,
+    // so we match by invoice number against the agent's invoiceNumber field if
+    // the agent included it (it does — search_invoice was the row key).
+    const matchByContainer = row.containerNumber && row.containerNumber.toLowerCase() === containerLower;
+    const matchByInvoice = !row.containerNumber && row.routingType === 'warehouse'
+      && row.invoiceNumber && result.invoiceNumber
+      && row.invoiceNumber.toLowerCase() === String(result.invoiceNumber).toLowerCase();
+    if (!matchByContainer && !matchByInvoice) continue;
+
+    const existing = row.fetchResult || {};
+    const isWarehouse = result.routingType === 'warehouse' || row.routingType === 'warehouse';
+
+    let invPill = existing.invPill;
+    let podPill = existing.podPill;
+    let statusText = existing.statusText;
+    let podLabel = existing.podLabel || result.podLabel;
+
+    if (isWarehouse) {
+      // Warehouse path emits no pod_found/pod_missing — derive pills from the result.
+      invPill = result.invoiceFile ? 'ok' : 'miss';
+      const attCount = Array.isArray(result.warehouseAttachments) ? result.warehouseAttachments.length : 0;
+      const failCount = Array.isArray(result.warehouseFailures) ? result.warehouseFailures.length : 0;
+      podPill = attCount > 0 ? 'ok' : 'miss';
+      podLabel = 'Warehouse';
+      if (attCount > 0) {
+        statusText = failCount > 0
+          ? `Fetched (${attCount} doc${attCount === 1 ? '' : 's'}, ${failCount} failed)`
+          : `Fetched (${attCount} doc${attCount === 1 ? '' : 's'})`;
+      } else {
+        statusText = 'No attachments on QBO';
+      }
+    }
+
+    row.fetchResult = {
+      ...existing,
+      invPill,
+      podPill,
+      podLabel,
+      statusText,
+      invoiceFile: result.invoiceFile || existing.invoiceFile || null,
+      podFile: result.podFile || existing.podFile || null,
+      podMissing: !!result.podMissing,
+      routingType: result.routingType || existing.routingType,
+      warehouseAttachments: result.warehouseAttachments || [],
+      warehouseFailures: result.warehouseFailures || [],
+    };
+    // Re-derive the doc list now that fetchResult has filenames.
+    row.documents = undefined;
+    row._originalDocs = undefined;
+    // Warehouse rows never set jobIds via pod_found — do it here.
+    if (isWarehouse) {
+      row.invoiceJobId = row.invoiceJobId || v2State.jobId || null;
+      row.docJobId = row.docJobId || v2State.jobId || null;
+      row.fetchJobId = row.fetchJobId || v2State.jobId || null;
+    }
+    rerenderFetchRow(i);
   }
 }
 

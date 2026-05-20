@@ -187,6 +187,9 @@ export const agentBridge = {
         'checking_pod', 'pod_found', 'pod_missing', 'container_complete',
         'container_error', 'not_found', 'review_needed', 'download_failed',
         'job_started',
+        // Warehouse fetch intermediate events (the authoritative state lands
+        // in container_complete; these are UI-feedback only).
+        'warehouse_fetched', 'warehouse_empty',
         // Send job events
         'send_job_started', 'invoice_start', 'searching_invoice', 'invoice_not_found',
         'verifying_invoice', 'invoice_mismatch', 'checking_attachments',
