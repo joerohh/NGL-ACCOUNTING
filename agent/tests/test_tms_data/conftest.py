@@ -1,9 +1,7 @@
 """Shared pytest config for tms_data tests."""
 
-import pytest_asyncio
-
-# pytest-asyncio mode: auto runs all `async def` tests as async automatically.
-pytest_plugins = ("pytest_asyncio",)
+# pytest_plugins moved to top-level agent/tests/conftest.py (newer pytest
+# requires this declaration in the topmost conftest only).
 
 
 def pytest_collection_modifyitems(config, items):
