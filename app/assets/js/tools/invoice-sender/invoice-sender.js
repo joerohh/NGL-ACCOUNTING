@@ -1896,6 +1896,13 @@ async function invFailedRetryAll(source) {
   }
 }
 
+function invOpenInQuickbooks(invoiceNumber) {
+  // QBO doesn't expose a stable deep-link by invoice number alone — open
+  // the company's invoices list and let the user click through.
+  window.open('https://app.qbo.intuit.com/app/invoices', '_blank');
+  invAddLog('info', 'Opened QuickBooks invoices list — find ' + invoiceNumber + ', add the missing attachment, then resend.');
+}
+
 // ── Window assignments for inline HTML handlers ──
 window.invHandleCsvDrop = invHandleCsvDrop;
 window.invHandleCsvInput = invHandleCsvInput;
@@ -1918,3 +1925,4 @@ window.invToggleTestLimitVisibility = invToggleTestLimitVisibility;
 window.invResendAll = invResendAll;
 window.invFailedRetryRow = invFailedRetryRow;
 window.invFailedRetryAll = invFailedRetryAll;
+window.invOpenInQuickbooks = invOpenInQuickbooks;

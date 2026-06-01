@@ -173,6 +173,11 @@ function renderTable() {
   wrap.querySelectorAll('.v62-action-btn').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
+      if (btn.dataset.action === 'open-qbo') {
+        const fn = window.invOpenInQuickbooks;
+        if (typeof fn === 'function') fn(btn.dataset.invoice);
+        return;
+      }
       const fn = window.invOpenPanelForInvoice;
       if (typeof fn === 'function') fn(btn.dataset.invoice);
     };
@@ -184,7 +189,9 @@ function renderRow(r) {
   const failed = isFailed(r);
   let action = '';
   if (failed) {
-    if (isErrored(r) && !isMissingDocs(r)) {
+    if (r.routingType === 'warehouse' && isMissingDocs(r)) {
+      action = `<button class="v62-action-btn qbo" data-action="open-qbo" data-invoice="${escHtml(r.invoiceNumber)}">Open in QuickBooks</button>`;
+    } else if (isErrored(r) && !isMissingDocs(r)) {
       action = `<button class="v62-action-btn retry" data-invoice="${escHtml(r.invoiceNumber)}">↻ Retry</button>`;
     } else {
       action = `<button class="v62-action-btn attach" data-invoice="${escHtml(r.invoiceNumber)}">📎 Attach &amp; Retry</button>`;
@@ -209,6 +216,23 @@ window.invRenderResults = renderResults;
 
 function buildDiagnostic(row) {
   if (isMissingDocs(row)) {
+    // Warehouse-empty case: backend already provides a plain-English
+    // explanation in row.errorMessage. Surface it directly and route the
+    // user to QuickBooks instead of the local Fix-It drop zones.
+    if (row.routingType === 'warehouse') {
+      const msg = row.errorMessage || row.error || "No documents attached in QuickBooks. Add at least one Excel or PDF backup to the QBO invoice, then resend.";
+      return {
+        cls: 'v62-error-box',
+        title: 'No attachments in QuickBooks',
+        explanation: msg,
+        checks: [
+          { status: 'ok', text: 'Found invoice in QuickBooks' },
+          { status: 'fail', text: 'No Excel or PDF backup attached to the QBO invoice' },
+        ],
+        nextStep: `<strong>What to do:</strong> Open this invoice in QuickBooks, attach at least one Excel or PDF backup, then click Open in QuickBooks above and resend.`,
+        missingSlots: [],
+      };
+    }
     const missing = (row.missingDocs || []).map(d => SLOT_LABELS[String(d).toLowerCase()] || String(d).toUpperCase());
     if (missing.length === 0) {
       return {
