@@ -8,6 +8,7 @@
 import { arState } from '../../shared/state.js';
 import './ar-dashboard-model.js';
 import './ar-dashboard-loader.js';
+import { arRenderLoaded } from './ar-dashboard-views.js';
 
 export function initArDashboard() {
   const view = document.getElementById('arDashboardView');
@@ -56,8 +57,7 @@ function renderEmptyState(view) {
 }
 
 function renderLoaded(view) {
-  // Implemented in Phase D when views.js is wired in.
-  view.innerHTML = `<div style="padding:20px;">Loaded: ${arState.filename} (${arState.model?.ar_register?.length ?? 0} rows)</div>`;
+  arRenderLoaded(view);
 }
 
 function handleFileSelected(e) {
