@@ -14,7 +14,7 @@ from services.email_sender import EmailSender
 from services.portal_uploader import PortalUploader
 
 from services.job_manager.util import JobManagerUtilMixin
-from services.job_manager.fetch_job import FetchJobMixin
+from services.job_manager.fetch_job import FetchJobMixin, _is_warehouse_row  # re-export
 from services.job_manager.send_job import SendJobMixin
 from services.job_manager.send_qbo_api import SendQBOApiMixin
 from services.job_manager.send_oec import SendOECFlowMixin
