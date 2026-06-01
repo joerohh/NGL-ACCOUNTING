@@ -157,3 +157,29 @@ async def test_warehouse_send_partial_download_failure_blocks(tmp_path) -> None:
     assert len(result.warehouse_failures) == 1
     assert result.warehouse_failures[0]["fileName"] == "Receiving_Report.pdf"
     email_sender.send_invoice_email.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_warehouse_send_invoice_pdf_download_returns_none() -> None:
+    """If QBO's invoice-PDF download returns None (token expiry, 500, etc.),
+    block the send and surface a clear error instead of crashing."""
+    job, invoice = _make_job_and_invoice()
+    customer = _make_customer()
+    result = SendResult(invoice.invoice_number, "", invoice.customer_code)
+
+    api = MagicMock()
+    api.search_invoice = AsyncMock(return_value={"Id": "42", "DocNumber": "LW260515P01"})
+    api.download_invoice_pdf = AsyncMock(return_value=None)  # the failure
+    api.list_attachments = AsyncMock(return_value=[
+        {"id": "1", "fileName": "Storage_Detail.xlsx", "docType": "other"},
+    ])
+    api.download_attachment = AsyncMock()
+
+    jm, email_sender = _make_jm(api)
+
+    await jm._send_warehouse_invoice(job, invoice, customer, result, 0)
+
+    assert result.status == "error"
+    assert "invoice PDF" in result.error or "couldn't download" in result.error.lower()
+    email_sender.send_invoice_email.assert_not_awaited()
+    api.download_attachment.assert_not_awaited()

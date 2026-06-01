@@ -53,6 +53,15 @@ class SendWarehouseMixin:
         temp_dir = Path(tempfile.mkdtemp(prefix="ngl_wh_send_"))
         try:
             invoice_pdf_bytes = await api.download_invoice_pdf(invoice_id)
+            if not invoice_pdf_bytes:
+                result.status = "error"
+                result.error = ("QuickBooks couldn't download the invoice PDF. "
+                                "Try again in a minute.")
+                await self._emit_send(job, "invoice_error", {
+                    "invoiceNumber": invoice.invoice_number,
+                    "error": result.error,
+                })
+                return
             invoice_pdf_path = temp_dir / f"invoice_{invoice.invoice_number}.pdf"
             invoice_pdf_path.write_bytes(invoice_pdf_bytes)
 
