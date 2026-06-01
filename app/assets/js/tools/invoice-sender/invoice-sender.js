@@ -163,6 +163,17 @@ function invHandleCsvFile(file) {
         invAddLog('info', 'Detected ' + whCount + ' warehouse invoice' + (whCount === 1 ? '' : 's') + ' (INV# has "W" in position 2)');
       }
 
+      const block = document.getElementById('invWhSubjectBlock');
+      const badge = document.getElementById('invWhSubjectBadge');
+      if (whCount > 0) {
+        block.style.display = 'block';
+        badge.textContent = whCount + ' detected';
+      } else {
+        block.style.display = 'none';
+      }
+      invRefreshSubjectPreview();
+      invRefreshWhSubjectPreview();
+
       invoiceState.csvLoaded = true;
       invAddLog('success', 'Loaded ' + invoiceState.invoices.length + ' invoices from ' + file.name);
 
@@ -198,6 +209,9 @@ function invRemoveCsv() {
   document.getElementById('invCsvDropContent').style.display = '';
   document.getElementById('invCsvLoadedState').style.display = 'none';
   document.getElementById('invCsvDropZone').classList.remove('has-file');
+
+  const whBlock = document.getElementById('invWhSubjectBlock');
+  if (whBlock) whBlock.style.display = 'none';
 
   invRenderTable();
   invUpdateSummary();
@@ -324,9 +338,49 @@ function invRenderSubject(template, inv) {
     .trim();
 }
 
+function _renderSubjectPreview(template, inv) {
+  return template
+    .replace(/\{invoice_number\}/g, inv.invoiceNumber || '')
+    .replace(/\{customer_name\}/g, inv.customerName || '')
+    .replace(/\{invoice_date\}/g, inv.invoiceDate || '')
+    .replace(/\{po_number\}/g, inv.poNumber || '')
+    .replace(/\{container_number\}/g, inv.containerNumber || '')
+    .replace(/\{bol_number\}/g, inv.bolNumber || '')
+    .trim();
+}
+
 function invUpdateSubjectTemplate(val) {
   invoiceState.subjectTemplate = val;
+  invRefreshSubjectPreview();
   invRenderTable();
+}
+
+function invUpdateWhSubjectTemplate(val) {
+  invoiceState.warehouseSubjectTemplate = val;
+  invRefreshWhSubjectPreview();
+  invRenderTable();
+}
+
+function invRefreshSubjectPreview() {
+  const el = document.getElementById('invSubjectPreview');
+  if (!el) return;
+  const tpl = document.getElementById('invSubjectTemplate').value;
+  const sample = invoiceState.invoices.find(function(r) { return r.routingType !== 'warehouse'; }) || {
+    invoiceNumber: 'LM26050100F', customerName: 'CMA CGM (America) LLC', containerNumber: 'MRKU8294420',
+  };
+  const out = _renderSubjectPreview(tpl, sample);
+  el.innerHTML = 'Preview: <em>' + escHtml(out) + '</em>';
+}
+
+function invRefreshWhSubjectPreview() {
+  const el = document.getElementById('invWhSubjectPreview');
+  if (!el) return;
+  const tpl = document.getElementById('invWhSubjectTemplate').value;
+  const sample = invoiceState.invoices.find(function(r) { return r.routingType === 'warehouse'; }) || {
+    invoiceNumber: 'LW260515P01', customerName: 'Pacific Cold Storage Inc.', containerNumber: '',
+  };
+  const out = _renderSubjectPreview(tpl, sample);
+  el.innerHTML = 'Preview: <em>' + escHtml(out) + '</em>';
 }
 
 // ── Summary Bar ──
@@ -1848,6 +1902,7 @@ window.invHandleCsvDrop = invHandleCsvDrop;
 window.invHandleCsvInput = invHandleCsvInput;
 window.invRemoveCsv = invRemoveCsv;
 window.invUpdateSubjectTemplate = invUpdateSubjectTemplate;
+window.invUpdateWhSubjectTemplate = invUpdateWhSubjectTemplate;
 window.invToggleRow = invToggleRow;
 window.invToggleAll = invToggleAll;
 window.invOpenReview = invOpenReview;

@@ -1003,10 +1003,22 @@
              style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:7px; font-size:0.85rem; color:#1e293b; outline:none; transition:border-color 0.15s;"
              onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'"
              oninput="invUpdateSubjectTemplate(this.value)" />
-      <div style="font-size:0.72rem; color:#94a3b8; margin-top:4px; line-height:1.45;">
-        Email subject line for each invoice. Use <code style="font-size:0.7rem; color:#64748b;">{invoice_number}</code>,
-        <code style="font-size:0.7rem; color:#64748b;">{customer_name}</code>, or
-        <code style="font-size:0.7rem; color:#64748b;">{container_number}</code> as placeholders — they're filled in per row.
+      <div class="subject-preview" id="invSubjectPreview">
+        Preview: <em>Invoice LM26050100F - CMA CGM (America) LLC</em>
+      </div>
+
+      <div class="wh-subject-block" id="invWhSubjectBlock" style="display:none;">
+        <label style="display:block; font-size:0.74rem; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; margin-top:12px;">
+          Subject — Warehouse Invoices
+          <span class="wh-badge-detected" id="invWhSubjectBadge">0 detected</span>
+        </label>
+        <input id="invWhSubjectTemplate" type="text" value="Warehouse Invoice {invoice_number} - {customer_name}"
+               style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:7px; font-size:0.85rem; color:#1e293b; outline:none; transition:border-color 0.15s;"
+               onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'"
+               oninput="invUpdateWhSubjectTemplate(this.value)" />
+        <div class="subject-preview" id="invWhSubjectPreview">
+          Preview: <em>Warehouse Invoice LW260515P01 - Pacific Cold Storage Inc.</em>
+        </div>
       </div>
 
       <div style="display:flex; align-items:center; gap:10px; margin:12px 0 10px; flex-wrap:wrap;">
