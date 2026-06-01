@@ -3317,3 +3317,31 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .ar-table .status-D { color:#b91c1c; font-weight:600; }
 .ar-table .status-E { color:#7c2d12; font-weight:600; }
 
+.ar-two-pane { display:grid; grid-template-columns: 1fr 340px; gap:12px; }
+.ar-two-pane .pane-left { min-width:0; }
+.ar-two-pane .pane-right { background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+  padding:14px 16px; max-height:calc(100vh - 240px); overflow-y:auto; }
+
+.ar-table tr.group-row { background:#fff7ed; cursor:pointer; }
+.ar-table tr.group-row td { background:#fff7ed; font-weight:700; color:#9a3412;
+  font-size:0.78rem; padding:8px 10px; border-top:1px solid #fed7aa;
+  border-bottom:1px solid #fed7aa; }
+.ar-table tr.group-row:hover td { background:#ffedd5; }
+.ar-table tr.group-row .chevron { display:inline-block; width:12px; color:#c2410c;
+  font-size:0.7rem; margin-right:6px; }
+
+.ar-status-chip { display:inline-flex; align-items:center; gap:4px; padding:1px 7px;
+  border-radius:999px; font-size:0.68rem; font-weight:700; }
+.ar-status-chip.ok { background:#dcfce7; color:#166534; }
+.ar-status-chip.warn { background:#fef3c7; color:#92400e; }
+.ar-status-chip.danger { background:#fee2e2; color:#b91c1c; }
+
+.ar-detail-empty { color:#94a3b8; font-size:0.82rem; text-align:center; padding:24px 12px; }
+.ar-detail-empty .ico { font-size:1.6rem; margin-bottom:8px; }
+
+.ar-pane-section { margin-bottom:14px; }
+.ar-pane-section h4 { font-size:0.76rem; color:#64748b; text-transform:uppercase;
+  letter-spacing:0.04em; font-weight:700; margin-bottom:6px; }
+.ar-pane-section .row { font-size:0.82rem; color:#0f172a; padding:3px 0; }
+.ar-pane-section .row .key { color:#64748b; }
+

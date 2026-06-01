@@ -221,3 +221,501 @@ window.arRenderRegister = arRenderRegister;
 window.arFormatMoney = formatMoney;
 window.arFormatDate = formatDate;
 window.arFormatStatus = formatStatus;
+
+// ── Shared helper for empty pane-right state ──
+
+function detailEmptyState(text, icon) {
+  return `<div class="ar-detail-empty"><div class="ico">${icon}</div>${escapeHtml(text)}</div>`;
+}
+window.arDetailEmptyState = detailEmptyState;
+
+// ── Collections tab ──
+
+export function arRenderCollections(body) {
+  const checks = groupCollectionsByCheck(arState.model.collections);
+  const totalCollected = checks.reduce((s, c) => s + (c.payment_amount || 0), 0);
+  const totalInvoices = checks.reduce((s, c) => s + c.invoices.length, 0);
+
+  body.innerHTML = `
+    <h3 class="ar-section-h">Collections — yesterday's payments
+      <span class="sub">${checks.length} checks · ${totalInvoices} invoices · $${formatMoney(totalCollected)} collected</span>
+    </h3>
+    <div class="ar-two-pane">
+      <div class="pane-left">
+        <div class="ar-toolbar">
+          <input type="text" class="search" id="arColSearch" placeholder="Search check#, customer, invoice..." />
+          <button class="ngl-btn ngl-btn-secondary" id="arColExpandAll" style="font-size:0.72rem; padding:4px 9px;">Expand all</button>
+          <span class="meta" id="arColMeta"></span>
+        </div>
+        <div class="ar-table-wrap">
+          <table class="ar-table">
+            <thead><tr>
+              <th>Check#</th><th>Customer</th>
+              <th class="num">Invoices</th><th class="num">Amount</th><th>Status</th>
+            </tr></thead>
+            <tbody id="arColBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pane-right" id="arColDetail">
+        ${detailEmptyState('Select a check to see its applied invoices', '📋')}
+      </div>
+    </div>
+  `;
+
+  const expandedChecks = new Set();
+  const searchState = { q: '' };
+  body.querySelector('#arColSearch').addEventListener('input', e => {
+    searchState.q = e.target.value.toLowerCase();
+    paint();
+  });
+  body.querySelector('#arColExpandAll').addEventListener('click', () => {
+    if (expandedChecks.size === checks.length) {
+      expandedChecks.clear();
+    } else {
+      checks.forEach(c => expandedChecks.add(c.check_no));
+    }
+    paint();
+  });
+
+  function paint() {
+    const filtered = filterChecks(checks, searchState.q);
+    const tbody = body.querySelector('#arColBody');
+    tbody.innerHTML = filtered.flatMap(c => renderCheckGroup(c, expandedChecks.has(c.check_no))).join('');
+    body.querySelector('#arColMeta').textContent = `${filtered.length} of ${checks.length} checks`;
+
+    tbody.querySelectorAll('tr.group-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const ck = tr.dataset.check;
+        const check = checks.find(c => c.check_no === ck);
+        if (expandedChecks.has(ck)) {
+          expandedChecks.delete(ck);
+        } else {
+          expandedChecks.add(ck);
+        }
+        renderDetail(check);
+        paint();
+      });
+    });
+  }
+
+  function renderDetail(check) {
+    const detailEl = body.querySelector('#arColDetail');
+    detailEl.innerHTML = `
+      <div class="ar-pane-section">
+        <h4>Check ${escapeHtml(check.check_no)}</h4>
+        <div class="row"><span class="key">Customer:</span> ${escapeHtml(check.customer_name)}</div>
+        <div class="row"><span class="key">Customer ID:</span> ${escapeHtml(check.customer_id)}</div>
+        <div class="row"><span class="key">Total:</span> $${formatMoney(check.payment_amount)}</div>
+        <div class="row"><span class="key">Account:</span> ${escapeHtml(check.account)}</div>
+        <div class="row"><span class="key">Posted:</span> ${formatDate(check.payment_date)}</div>
+      </div>
+      <div class="ar-pane-section">
+        <h4>Applied invoices (${check.invoices.length})</h4>
+        ${check.invoices.map(inv => `
+          <div class="row">
+            <code class="id" style="font-family:Consolas,monospace; font-size:0.76rem;">${escapeHtml(inv.invoice_or_ref)}</code>
+            <span class="num" style="float:right;">$${formatMoney(inv.amount)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  paint();
+}
+
+function groupCollectionsByCheck(rows) {
+  const byCheck = new Map();
+  for (const r of rows) {
+    if (!r.check_no) continue;
+    if (!byCheck.has(r.check_no)) {
+      byCheck.set(r.check_no, {
+        check_no: r.check_no,
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        account: r.account,
+        payment_date: r.payment_date,
+        payment_amount: 0,
+        invoices: [],
+      });
+    }
+    const group = byCheck.get(r.check_no);
+    if (r.txn_type === 'Payment') {
+      group.payment_amount = r.amount ?? 0;
+    } else if (r.txn_type === 'Invoice') {
+      group.invoices.push(r);
+    }
+  }
+  return [...byCheck.values()];
+}
+
+function filterChecks(checks, q) {
+  if (!q) return checks;
+  return checks.filter(c =>
+    (c.check_no && String(c.check_no).toLowerCase().includes(q)) ||
+    (c.customer_name && c.customer_name.toLowerCase().includes(q)) ||
+    c.invoices.some(i => i.invoice_or_ref && String(i.invoice_or_ref).toLowerCase().includes(q))
+  );
+}
+
+function renderCheckGroup(c, expanded) {
+  const reconciled = checkReconciledStatus(c);
+  const chevron = expanded ? '▼' : '▶';
+  const groupClass = expanded ? 'group-row expanded' : 'group-row';
+  const lines = [
+    `<tr class="${groupClass}" data-check="${escapeHtml(c.check_no)}">
+       <td><span class="chevron">${chevron}</span>${escapeHtml(c.check_no)}</td>
+       <td class="customer">${escapeHtml(c.customer_name)}</td>
+       <td class="num">${c.invoices.length}</td>
+       <td class="num">${formatMoney(c.payment_amount)}</td>
+       <td>${renderReconciledChip(reconciled)}</td>
+     </tr>`
+  ];
+  if (expanded) {
+    for (const inv of c.invoices) {
+      lines.push(`<tr>
+        <td></td>
+        <td class="id">${escapeHtml(inv.invoice_or_ref)}</td>
+        <td></td>
+        <td class="num">${formatMoney(inv.amount)}</td>
+        <td>${inv.open_balance != null && Math.abs(inv.open_balance) >= 0.01
+              ? `<span class="ar-status-chip warn">Bal $${formatMoney(inv.open_balance)}</span>`
+              : `<span class="ar-status-chip ok">Cleared</span>`}</td>
+      </tr>`);
+    }
+  }
+  return lines;
+}
+
+function checkReconciledStatus(check) {
+  const applied = check.invoices.reduce((s, i) => s + (i.amount || 0), 0);
+  const total = check.payment_amount || 0;
+  if (Math.abs(applied - total) < 0.01) return 'reconciled';
+  if (applied < total) return 'partial';
+  return 'unposted';
+}
+
+function renderReconciledChip(status) {
+  if (status === 'reconciled') return '<span class="ar-status-chip ok">✓ Reconciled</span>';
+  if (status === 'partial')    return '<span class="ar-status-chip warn">⚠ Partial</span>';
+  return '<span class="ar-status-chip danger">✗ Unposted</span>';
+}
+
+window.arRenderCollections = arRenderCollections;
+
+// ── Overdue tab ──
+
+export function arRenderOverdue(body) {
+  const rows = arState.model.ar_register
+    .filter(r => (r.aging ?? 0) >= 30 && (r.balance ?? 0) > 0)
+    .sort((a, b) => (b.aging ?? 0) - (a.aging ?? 0));
+  const total = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
+
+  body.innerHTML = `
+    <h3 class="ar-section-h">Overdue — today's call list
+      <span class="sub">${rows.length} invoices · $${formatMoney(total)} outstanding</span>
+    </h3>
+    <div class="ar-two-pane">
+      <div class="pane-left">
+        <div class="ar-toolbar">
+          <input type="text" class="search" id="arOdSearch" placeholder="Search customer, invoice, ref..." />
+          <span class="meta">${rows.length} overdue</span>
+        </div>
+        <div class="ar-table-wrap">
+          <table class="ar-table">
+            <thead><tr>
+              <th>Customer</th><th>Invoice</th><th class="num">Aging</th>
+              <th class="num">Balance</th><th>Status</th>
+            </tr></thead>
+            <tbody id="arOdBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pane-right" id="arOdDetail">
+        ${detailEmptyState('Select a row to see customer + invoice details + actions', '📞')}
+      </div>
+    </div>
+  `;
+
+  const search = { q: '' };
+  body.querySelector('#arOdSearch').addEventListener('input', e => {
+    search.q = e.target.value.toLowerCase();
+    paint();
+  });
+
+  function paint() {
+    const filtered = search.q
+      ? rows.filter(r =>
+          (r.company && String(r.company).toLowerCase().includes(search.q)) ||
+          (r.inv && String(r.inv).toLowerCase().includes(search.q)) ||
+          (r.ref_no && String(r.ref_no).toLowerCase().includes(search.q)))
+      : rows;
+    const tbody = body.querySelector('#arOdBody');
+    tbody.innerHTML = filtered.slice(0, 500).map(r => `
+      <tr data-inv="${escapeHtml(r.inv)}">
+        <td class="customer">${escapeHtml(r.company)}</td>
+        <td class="id">${escapeHtml(r.inv)}</td>
+        <td class="num">${r.aging ?? ''} d</td>
+        <td class="num">${formatMoney(r.balance)}</td>
+        <td>${formatStatus(r.ar_status)}</td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const r = rows.find(x => x.inv === tr.dataset.inv);
+        renderDetail(r);
+      });
+    });
+  }
+
+  function renderDetail(r) {
+    const detailEl = body.querySelector('#arOdDetail');
+    detailEl.innerHTML = `
+      <div class="ar-pane-section">
+        <h4>${escapeHtml(r.company)}</h4>
+        <div class="row"><span class="key">Customer ID:</span> ${escapeHtml(r.new_id)}</div>
+        <div class="row"><span class="key">Invoice:</span> <code>${escapeHtml(r.inv)}</code></div>
+        <div class="row"><span class="key">WO:</span> ${escapeHtml(r.wo)}</div>
+        <div class="row"><span class="key">Issued:</span> ${formatDate(r.date)}</div>
+        <div class="row"><span class="key">Aging:</span> ${r.aging} days</div>
+        <div class="row"><span class="key">Amount:</span> $${formatMoney(r.amount)}</div>
+        <div class="row"><span class="key">Paid:</span> $${formatMoney(r.paid)}</div>
+        <div class="row"><span class="key">Balance:</span> <strong>$${formatMoney(r.balance)}</strong></div>
+        ${r.memo ? `<div class="row"><span class="key">Memo:</span> ${escapeHtml(r.memo)}</div>` : ''}
+      </div>
+      <div class="ar-pane-section">
+        <h4>Actions</h4>
+        <button class="ngl-btn ngl-btn-primary" style="margin-bottom:6px; width:100%;" onclick="window.arEmailCustomer && arEmailCustomer('${escapeHtml(r.new_id)}', '${escapeHtml(r.inv)}')">✉ Email customer</button>
+        <button class="ngl-btn ngl-btn-secondary" style="margin-bottom:6px; width:100%;" onclick="window.arOpenInQbo && arOpenInQbo('${escapeHtml(r.inv)}')">🔗 Open in QBO</button>
+      </div>
+    `;
+  }
+
+  paint();
+}
+window.arRenderOverdue = arRenderOverdue;
+
+// ── Partial Pays tab ──
+
+export function arRenderPartial(body) {
+  const rows = arState.model.ar_register
+    .filter(r => (r.paid ?? 0) > 0 && (r.balance ?? 0) > 0)
+    .sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
+  const total = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
+
+  body.innerHTML = `
+    <h3 class="ar-section-h">Partial Pays — invoices with partial payment received
+      <span class="sub">${rows.length} invoices · $${formatMoney(total)} still open</span>
+    </h3>
+    <div class="ar-table-wrap">
+      <table class="ar-table">
+        <thead><tr>
+          <th>Customer</th><th>Invoice</th><th class="num">Amount</th>
+          <th class="num">Paid</th><th class="num">Balance</th><th>Memo</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="customer">${escapeHtml(r.company)}</td>
+              <td class="id">${escapeHtml(r.inv)}</td>
+              <td class="num">${formatMoney(r.amount)}</td>
+              <td class="num">${formatMoney(r.paid)}</td>
+              <td class="num"><strong>${formatMoney(r.balance)}</strong></td>
+              <td>${escapeHtml(r.memo)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+window.arRenderPartial = arRenderPartial;
+
+// ── New Invoices tab ──
+
+export function arRenderNew(body) {
+  const rows = arState.model.schedule;
+  const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0);
+
+  body.innerHTML = `
+    <h3 class="ar-section-h">New Invoices — added to AR
+      <span class="sub">${rows.length} new · $${formatMoney(total)} invoiced</span>
+    </h3>
+    <div class="ar-table-wrap">
+      <table class="ar-table">
+        <thead><tr>
+          <th>Date</th><th>Customer</th><th>Invoice</th>
+          <th>Ref / WO</th><th>Container</th><th>B/L</th><th class="num">Amount</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${formatDate(r.date)}</td>
+              <td class="customer">${escapeHtml(r.customer_name)}</td>
+              <td class="id">${escapeHtml(r.inv)}</td>
+              <td class="id">${escapeHtml(r.ref)}</td>
+              <td class="id">${escapeHtml(r.cntr_chassis)}</td>
+              <td class="id">${escapeHtml(r.bl)}</td>
+              <td class="num">${formatMoney(r.amount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+window.arRenderNew = arRenderNew;
+
+// ── TMS tab ──
+
+export function arRenderTms(body) {
+  const rows = arState.model.tms_rows;
+  body.innerHTML = `
+    <h3 class="ar-section-h">TMS — matched invoices
+      <span class="sub">${rows.length} rows · TMS source = billing-side truth</span>
+    </h3>
+    <div class="ar-table-wrap">
+      <table class="ar-table">
+        <thead><tr>
+          <th>Div</th><th>Customer</th><th>WO #</th><th>Equipment</th>
+          <th>NGL Inv #</th><th class="num">Inv Amount</th><th class="num">Paid/Received</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escapeHtml(r.wo_div)}</td>
+              <td class="customer">${escapeHtml(r.name)}</td>
+              <td class="id">${escapeHtml(r.wo_no)}</td>
+              <td class="id">${escapeHtml(r.equipment)}</td>
+              <td class="id">${escapeHtml(r.inv_no)}</td>
+              <td class="num">${formatMoney(r.inv_amt)}</td>
+              <td class="num">${formatMoney(r.paid_received)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+window.arRenderTms = arRenderTms;
+
+// ── Adjustments tab ──
+
+export function arRenderAdjustments(body) {
+  const rows = arState.model.adjustments;
+  const total = rows.reduce((s, r) => s + (r.amount_difference ?? 0), 0);
+  body.innerHTML = `
+    <h3 class="ar-section-h">Adjustments — TMS revised these invoice amounts
+      <span class="sub">${rows.length} adjustments · net change ${total < 0 ? '−' : ''}$${formatMoney(Math.abs(total))}</span>
+    </h3>
+    <div class="ar-table-wrap">
+      <table class="ar-table">
+        <thead><tr>
+          <th>Div</th><th>Customer</th><th>WO #</th><th>NGL Inv #</th>
+          <th class="num">Amount Δ</th><th class="num">Revised Amount</th><th class="num">Paid</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escapeHtml(r.div)}</td>
+              <td class="customer">${escapeHtml(r.name)}</td>
+              <td class="id">${escapeHtml(r.wo_no)}</td>
+              <td class="id">${escapeHtml(r.inv_no)}</td>
+              <td class="num ${(r.amount_difference ?? 0) < 0 ? 'neg' : ''}">${formatMoney(r.amount_difference)}</td>
+              <td class="num">${formatMoney(r.revised_invoice_amount)}</td>
+              <td class="num">${formatMoney(r.paid_received)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+window.arRenderAdjustments = arRenderAdjustments;
+
+// ── Customers tab ──
+
+export function arRenderCustomers(body) {
+  const rollup = buildCustomerRollup(arState.model.ar_register);
+
+  body.innerHTML = `
+    <h3 class="ar-section-h">Customers — rollup
+      <span class="sub">${rollup.length} customers · $${formatMoney(rollup.reduce((s,r) => s + r.balance, 0))} total balance</span>
+    </h3>
+    <div class="ar-toolbar">
+      <input type="text" class="search" id="arCustSearch" placeholder="Search customer..." />
+      <span class="meta">Sorted by balance desc</span>
+    </div>
+    <div class="ar-table-wrap">
+      <table class="ar-table">
+        <thead><tr>
+          <th>ID</th><th>Customer</th><th class="num">Invoices</th>
+          <th class="num">Balance</th><th class="num">Oldest Aging</th>
+          <th>Bucket spread</th>
+        </tr></thead>
+        <tbody id="arCustBody"></tbody>
+      </table>
+    </div>
+  `;
+
+  const search = { q: '' };
+  body.querySelector('#arCustSearch').addEventListener('input', e => {
+    search.q = e.target.value.toLowerCase();
+    paint();
+  });
+
+  function paint() {
+    const filtered = search.q
+      ? rollup.filter(c =>
+          (c.name && String(c.name).toLowerCase().includes(search.q)) ||
+          (c.id && String(c.id).toLowerCase().includes(search.q)))
+      : rollup;
+    const tbody = body.querySelector('#arCustBody');
+    tbody.innerHTML = filtered.map(c => `
+      <tr>
+        <td class="id">${escapeHtml(c.id)}</td>
+        <td class="customer">${escapeHtml(c.name)}</td>
+        <td class="num">${c.invoice_count}</td>
+        <td class="num"><strong>${formatMoney(c.balance)}</strong></td>
+        <td class="num">${c.oldest_aging} d</td>
+        <td>${renderBucketChips(c.buckets)}</td>
+      </tr>
+    `).join('');
+  }
+
+  paint();
+}
+window.arRenderCustomers = arRenderCustomers;
+
+function buildCustomerRollup(register) {
+  const byCust = new Map();
+  for (const r of register) {
+    const id = r.new_id || '(no id)';
+    if (!byCust.has(id)) {
+      byCust.set(id, {
+        id: r.new_id,
+        name: r.company,
+        invoice_count: 0,
+        balance: 0,
+        oldest_aging: 0,
+        buckets: { A: 0, B: 0, C: 0, D: 0, E: 0 },
+      });
+    }
+    const c = byCust.get(id);
+    c.invoice_count++;
+    c.balance += r.balance ?? 0;
+    c.oldest_aging = Math.max(c.oldest_aging, r.aging ?? 0);
+    const letter = r.ar_status ? String(r.ar_status)[0] : null;
+    if (letter && c.buckets[letter] != null) c.buckets[letter]++;
+  }
+  return [...byCust.values()].sort((a, b) => b.balance - a.balance);
+}
+
+function renderBucketChips(b) {
+  const colors = { A: '#16a34a', B: '#facc15', C: '#f97316', D: '#dc2626', E: '#7c2d12' };
+  return Object.entries(b)
+    .filter(([, n]) => n > 0)
+    .map(([letter, n]) => `<span style="display:inline-block; background:${colors[letter]}; color:#fff; padding:1px 6px; border-radius:3px; font-size:0.66rem; font-weight:700; margin-right:3px;">${letter} ${n}</span>`)
+    .join('');
+}
