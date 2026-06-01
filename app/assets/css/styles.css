@@ -3255,3 +3255,33 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   box-shadow:0 1px 2px rgba(0,0,0,0.03); }
 .ar-section-h .sub { font-size:0.74rem; color:#64748b; font-weight:500; margin-left:auto; }
 
+.ar-toolbar { display:flex; align-items:center; gap:8px; padding:6px 10px; background:#fff;
+  border:1px solid #e2e8f0; border-bottom:none; border-radius:8px 8px 0 0;
+  font-size:0.78rem; color:#64748b; flex-wrap:wrap; }
+.ar-toolbar input.search { flex:1; min-width:120px; padding:5px 10px; border:1px solid #cbd5e1;
+  border-radius:5px; font-size:0.8rem; color:#334155; }
+.ar-toolbar .meta { color:#94a3b8; margin-left:auto; font-size:0.72rem; font-weight:600; }
+
+.ar-table-wrap { background:#fff; border:1px solid #e2e8f0; border-top:none;
+  border-radius:0 0 8px 8px; overflow:hidden; max-height:calc(100vh - 280px); overflow-y:auto; }
+.ar-table { border-collapse:collapse; font-size:0.82rem; width:100%; }
+.ar-table th { text-align:left; font-size:0.66rem; font-weight:700; color:#94a3b8;
+  letter-spacing:0.03em; text-transform:uppercase; padding:7px 10px;
+  border-bottom:1px solid #e2e8f0; background:#fafafa; white-space:nowrap;
+  position:sticky; top:0; cursor:pointer; }
+.ar-table th .sort-arrow { color:#cbd5e1; margin-left:4px; }
+.ar-table th.sorted-asc .sort-arrow,
+.ar-table th.sorted-desc .sort-arrow { color:#ea580c; }
+.ar-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; color:#1e293b;
+  vertical-align:middle; white-space:nowrap; }
+.ar-table tr:hover td { background:#fff7ed; }
+.ar-table .num { font-variant-numeric:tabular-nums; text-align:right; }
+.ar-table .id { font-family:'Consolas',monospace; font-size:0.74rem; color:#64748b; }
+.ar-table .customer { font-weight:700; color:#0f172a; }
+.ar-table .neg { color:#b91c1c; }
+.ar-table .status-A { color:#15803d; font-weight:600; }
+.ar-table .status-B { color:#a16207; font-weight:600; }
+.ar-table .status-C { color:#c2410c; font-weight:600; }
+.ar-table .status-D { color:#b91c1c; font-weight:600; }
+.ar-table .status-E { color:#7c2d12; font-weight:600; }
+

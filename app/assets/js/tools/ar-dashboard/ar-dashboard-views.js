@@ -102,3 +102,122 @@ function escapeHtml(s) {
 
 window.arRenderLoaded = arRenderLoaded;
 window.arEscapeHtml = escapeHtml;
+
+// ── AR Register tab ──
+
+const REGISTER_COLUMNS = [
+  { key: 'new_id',    label: 'ID',       cell: r => `<td class="id">${escapeHtml(r.new_id)}</td>` },
+  { key: 'company',   label: 'Customer', cell: r => `<td class="customer">${escapeHtml(r.company)}</td>` },
+  { key: 'inv',       label: 'NGL Inv#', cell: r => `<td class="id">${escapeHtml(r.inv)}</td>` },
+  { key: 'date',      label: 'Date',     cell: r => `<td>${formatDate(r.date)}</td>` },
+  { key: 'aging',     label: 'Aging',    cell: r => `<td class="num">${r.aging ?? ''}</td>` },
+  { key: 'amount',    label: 'Amount',   cell: r => `<td class="num">${formatMoney(r.amount)}</td>` },
+  { key: 'paid',      label: 'Paid',     cell: r => `<td class="num">${formatMoney(r.paid)}</td>` },
+  { key: 'balance',   label: 'Balance',  cell: r => `<td class="num ${(r.balance ?? 0) < 0 ? 'neg' : ''}">${formatMoney(r.balance)}</td>` },
+  { key: 'ar_status', label: 'Status',   cell: r => `<td>${formatStatus(r.ar_status)}</td>` },
+  { key: 'memo',      label: 'Memo',     cell: r => `<td>${escapeHtml(r.memo)}</td>` },
+];
+
+let registerSort = { key: 'aging', dir: 'desc' };
+let registerSearch = '';
+
+export function arRenderRegister(body) {
+  const rows = arState.model.ar_register;
+  body.innerHTML = `
+    <h3 class="ar-section-h">AR Register
+      <span class="sub">${rows.length} invoices · ${uniqueCustomers(rows).length} customers</span>
+    </h3>
+    <div class="ar-toolbar">
+      <input type="text" class="search" id="arRegSearch" placeholder="Search invoice #, customer, ref, MBL, container..." value="${escapeHtml(registerSearch)}" />
+      <span class="meta" id="arRegMeta"></span>
+    </div>
+    <div class="ar-table-wrap">
+      <table class="ar-table">
+        <thead><tr id="arRegHead"></tr></thead>
+        <tbody id="arRegBody"></tbody>
+      </table>
+    </div>
+  `;
+  body.querySelector('#arRegSearch').addEventListener('input', e => {
+    registerSearch = e.target.value.toLowerCase();
+    paintRegister();
+  });
+  paintRegister();
+}
+
+function paintRegister() {
+  const headRow = document.getElementById('arRegHead');
+  const bodyEl = document.getElementById('arRegBody');
+  const meta = document.getElementById('arRegMeta');
+  if (!headRow || !bodyEl) return;
+
+  headRow.innerHTML = REGISTER_COLUMNS.map(c => {
+    const cls = registerSort.key === c.key ? (registerSort.dir === 'asc' ? 'sorted-asc' : 'sorted-desc') : '';
+    const arrow = cls === 'sorted-asc' ? '↑' : (cls === 'sorted-desc' ? '↓' : '↕');
+    return `<th data-key="${c.key}" class="${cls}">${c.label} <span class="sort-arrow">${arrow}</span></th>`;
+  }).join('');
+  headRow.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      const k = th.dataset.key;
+      if (registerSort.key === k) {
+        registerSort.dir = registerSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        registerSort = { key: k, dir: 'desc' };
+      }
+      paintRegister();
+    });
+  });
+
+  let rows = arState.model.ar_register;
+  if (registerSearch) {
+    const q = registerSearch;
+    rows = rows.filter(r =>
+      (r.inv && String(r.inv).toLowerCase().includes(q)) ||
+      (r.company && String(r.company).toLowerCase().includes(q)) ||
+      (r.new_id && String(r.new_id).toLowerCase().includes(q)) ||
+      (r.ref_no && String(r.ref_no).toLowerCase().includes(q)) ||
+      (r.mbl_no && String(r.mbl_no).toLowerCase().includes(q)) ||
+      (r.equipment && String(r.equipment).toLowerCase().includes(q))
+    );
+  }
+  rows = [...rows].sort((a, b) => {
+    const av = a[registerSort.key], bv = b[registerSort.key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = (typeof av === 'number' && typeof bv === 'number') ? (av - bv) : String(av).localeCompare(String(bv));
+    return registerSort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  // Cap render to first 500 for perf; show note if truncated.
+  const truncated = rows.length > 500;
+  const renderRows = truncated ? rows.slice(0, 500) : rows;
+  bodyEl.innerHTML = renderRows.map(r => `<tr>${REGISTER_COLUMNS.map(c => c.cell(r)).join('')}</tr>`).join('');
+  meta.textContent = truncated
+    ? `Showing first 500 of ${rows.length} matched rows`
+    : `${rows.length} rows`;
+}
+
+function formatMoney(v) {
+  if (v == null || v === '') return '';
+  return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(v) {
+  if (!v) return '';
+  if (v instanceof Date) {
+    return `${(v.getMonth()+1).toString().padStart(2,'0')}/${v.getDate().toString().padStart(2,'0')}/${v.getFullYear()}`;
+  }
+  return escapeHtml(v);
+}
+
+function formatStatus(s) {
+  if (!s) return '';
+  const letter = String(s)[0] || '';
+  return `<span class="status-${letter}">${escapeHtml(s)}</span>`;
+}
+
+window.arRenderRegister = arRenderRegister;
+window.arFormatMoney = formatMoney;
+window.arFormatDate = formatDate;
+window.arFormatStatus = formatStatus;
