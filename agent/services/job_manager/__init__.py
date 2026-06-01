@@ -19,6 +19,7 @@ from services.job_manager.send_job import SendJobMixin
 from services.job_manager.send_qbo_api import SendQBOApiMixin
 from services.job_manager.send_oec import SendOECFlowMixin
 from services.job_manager.send_portal import SendPortalUploadMixin
+from services.job_manager.send_warehouse import SendWarehouseMixin
 from services.job_manager.chassis_job import ChassisJobMixin
 from services.job_manager.retry_invoice import RetryInvoiceMixin
 
@@ -307,6 +308,7 @@ class JobManager(
     SendQBOApiMixin,
     SendOECFlowMixin,
     SendPortalUploadMixin,
+    SendWarehouseMixin,
     ChassisJobMixin,
     RetryInvoiceMixin,
 ):
