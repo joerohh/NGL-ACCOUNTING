@@ -3226,6 +3226,38 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .pref-desc { font-size: 0.72rem; color: #94a3b8; margin-top: 2px; }
 
 /* ── AR Dashboard ── */
+#arDashboardView { padding: 24px 32px; }
+
+#arDashboardView .centered-stage {
+  display: flex; flex-direction: column; align-items: center;
+  max-width: 620px; margin: 0 auto;
+}
+#arDashboardView .centered-stage h1 {
+  font-size: 1.4rem; font-weight: 700; color: #0f172a;
+  margin-bottom: 6px; text-align: center;
+}
+#arDashboardView .centered-stage .subtitle {
+  color: #64748b; font-size: 0.92rem;
+  margin-bottom: 22px; text-align: center;
+}
+#arDashboardView .big-drop {
+  width: 100%; padding: 48px 32px;
+  border: 2px dashed #cbd5e1; border-radius: 14px;
+  background: #fff; text-align: center; cursor: pointer;
+  transition: all 0.15s;
+}
+#arDashboardView .big-drop:hover { border-color: #f97316; background: #fff7ed; }
+#arDashboardView .big-drop.kind-excel:hover .drop-icon { color: #16a34a; }
+#arDashboardView .big-drop.drop-hover { border-color: #f97316; background: #fff7ed; }
+#arDashboardView .big-drop .drop-icon {
+  width: 56px; height: 56px; margin: 0 auto 16px;
+  color: #22c55e;
+  display: flex; align-items: center; justify-content: center;
+}
+#arDashboardView .big-drop .drop-title { font-size: 1.05rem; font-weight: 600; color: #1e293b; }
+#arDashboardView .big-drop .drop-help { font-size: 0.86rem; color: #64748b; margin-top: 6px; }
+#arDashboardView .big-drop .drop-types { font-size: 0.76rem; color: #94a3b8; margin-top: 14px; }
+
 .ar-shell { display:flex; flex-direction:column; height:100%; background:#f8fafc; }
 .ar-data-bar { display:flex; gap:8px; align-items:center; background:#fff;
   border-bottom:1px solid #e2e8f0; padding:8px 16px; font-size:0.78rem; color:#475569; }
