@@ -11,6 +11,7 @@ from config import (
     DEBUG_DIR, MAX_BATCH_SIZE, SEND_TIMEOUT_S,
 )
 from services.database import was_recently_sent
+from services.job_manager.fetch_job import _is_warehouse_row
 
 logger = logging.getLogger("ngl.job_manager")
 
@@ -300,17 +301,23 @@ class SendJobMixin:
                     job._save_state()
                     continue
 
-                # Step 2: Dispatch based on send method (with timeout)
+                # Step 2: Dispatch. Warehouse routing (INV# pos-2 == 'W')
+                # overrides the customer's sendMethod — warehouse invoices are
+                # always QBO-only, xlsx-as-is, regardless of how the customer
+                # is normally configured.
+                #
+                # Import from fetch_job (not the package __init__) to avoid the
+                # circular: __init__.py imports send_job, so send_job can't
+                # import from __init__ at module load.
+                is_warehouse = _is_warehouse_row(invoice.invoice_number)
                 method = customer.get("sendMethod", "email")
 
                 async def _dispatch_send():
-                    if method in ("portal_upload", "portal"):
+                    if is_warehouse:
+                        await self._send_warehouse_invoice(job, invoice, customer, result, i)
+                    elif method in ("portal_upload", "portal"):
                         await self._send_portal_upload(job, invoice, customer, result, i)
                     elif method == "qbo_invoice_only_then_pod_email":
-                        # OEC: D/O email FIRST (populates invoice.do_sender_email
-                        # for the invoice email CC), then QBO invoice email.
-                        # Invoice email runs regardless of POD outcome so the
-                        # customer always gets the invoice.
                         await self._send_oec_pod_email(job, invoice, customer, result, i)
                         await self._send_qbo_api(job, invoice, customer, result, i)
                     else:
