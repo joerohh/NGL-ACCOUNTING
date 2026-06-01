@@ -7,6 +7,7 @@
 
 import { arState } from '../../shared/state.js';
 import './ar-dashboard-model.js';
+import './ar-dashboard-exceptions.js';
 import './ar-dashboard-loader.js';
 import { arRenderLoaded } from './ar-dashboard-views.js';
 

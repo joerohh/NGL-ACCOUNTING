@@ -719,3 +719,236 @@ function renderBucketChips(b) {
     .map(([letter, n]) => `<span style="display:inline-block; background:${colors[letter]}; color:#fff; padding:1px 6px; border-radius:3px; font-size:0.66rem; font-weight:700; margin-right:3px;">${letter} ${n}</span>`)
     .join('');
 }
+
+// ── Summary tab ──
+
+const EXCEPTION_SECTIONS = [
+  { key: 'suspense',            label: 'Bank suspense (research needed)',        icon: '!', severity: 'urgent' },
+  { key: 'short',               label: 'Short pays',                             icon: '−', severity: 'warning' },
+  { key: 'over',                label: 'Over pays',                              icon: '+', severity: 'warning' },
+  { key: 'posting_gap',         label: 'Posting gaps (TAB BANK ↔ QBO)',          icon: '⚠', severity: 'urgent' },
+  { key: 'amount_disagreement', label: 'Amount disagreements (TMS adjustments)', icon: 'Δ', severity: 'info' },
+  { key: 'customer_mismatch',   label: 'Customer name mismatches',               icon: '?', severity: 'warning' },
+  { key: 'missing_tms',         label: 'Missing TMS records (warehouse?)',       icon: '⌘', severity: 'info' },
+  { key: 'non_factored',        label: 'NON-FACTORED informational',             icon: 'i', severity: 'info' },
+];
+
+export function arRenderSummary(body) {
+  const m = arState.model;
+  const exceptions = arState.exceptions || [];
+  const urgentCount = exceptions.filter(e => e.severity === 'urgent').length;
+
+  const totalAr = m.ar_register.reduce((s, r) => s + (r.balance ?? 0), 0);
+  const totalCollected = m.collections
+    .filter(c => c.txn_type === 'Payment')
+    .reduce((s, c) => s + (c.amount ?? 0), 0);
+  const totalNew = m.schedule.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const overdueCount = m.ar_register.filter(r => (r.aging ?? 0) >= 30 && (r.balance ?? 0) > 0).length;
+  const overdueAmt = m.ar_register
+    .filter(r => (r.aging ?? 0) >= 30 && (r.balance ?? 0) > 0)
+    .reduce((s, r) => s + (r.balance ?? 0), 0);
+
+  body.innerHTML = `
+    ${urgentCount > 0 ? renderSuspenseBanner(urgentCount, exceptions) : ''}
+
+    <h3 class="ar-section-h">Reconciliation worklist
+      <span class="sub">Work these to zero by end of day</span>
+    </h3>
+    <div class="ar-worklist" id="arWorklist">
+      <div class="wl-header">
+        Exceptions found <span class="count">${exceptions.length}</span>
+      </div>
+      <div class="wl-sections">
+        ${EXCEPTION_SECTIONS.map(s => renderExceptionSection(s, exceptions)).join('') || `
+          <div style="padding:18px 14px; color:#64748b; font-size:0.82rem; text-align:center;">
+            No exceptions detected. (TAB BANK source-file drop adds suspense / posting-gap detection — Phase I.)
+          </div>`}
+      </div>
+    </div>
+
+    <h3 class="ar-section-h">Today's summary
+      <span class="sub">As of ${m.today_date}</span>
+    </h3>
+    <div class="ar-kpi-grid">
+      <div class="ar-kpi" data-jump="collections">
+        <div class="label">Collected</div>
+        <div class="val">$${formatMoney(totalCollected)}</div>
+        <div class="sub">${m.collections.filter(c => c.txn_type === 'Invoice').length} invoices · ${uniqueChecks(m.collections).length} checks</div>
+        <div class="link">View collections →</div>
+      </div>
+      <div class="ar-kpi alert" data-jump="suspense">
+        <div class="label">Exceptions (urgent)</div>
+        <div class="val">${urgentCount}</div>
+        <div class="sub">Need research before close</div>
+        <div class="link">Open worklist →</div>
+      </div>
+      <div class="ar-kpi" data-jump="overdue">
+        <div class="label">Overdue (30+ days)</div>
+        <div class="val">${overdueCount}</div>
+        <div class="sub">$${formatMoney(overdueAmt)} outstanding</div>
+        <div class="link">View overdue →</div>
+      </div>
+      <div class="ar-kpi" data-jump="new">
+        <div class="label">New invoices</div>
+        <div class="val">${m.schedule.length}</div>
+        <div class="sub">$${formatMoney(totalNew)} added to AR</div>
+        <div class="link">View new →</div>
+      </div>
+    </div>
+
+    <h3 class="ar-section-h">Aging breakdown
+      <span class="sub">$${formatMoney(totalAr)} total open</span>
+    </h3>
+    <div class="ar-aging-block">
+      ${renderAgingBar(m.ar_register)}
+    </div>
+  `;
+
+  body.querySelectorAll('.ar-kpi[data-jump]').forEach(el => {
+    el.addEventListener('click', () => {
+      arState.activeTab = el.dataset.jump;
+      if (window.initArDashboard) window.initArDashboard();
+    });
+  });
+
+  body.querySelectorAll('.wl-section-header').forEach(h => {
+    h.addEventListener('click', () => {
+      h.parentElement.classList.toggle('open');
+    });
+  });
+
+  const sbCta = body.querySelector('.sb-cta');
+  if (sbCta) {
+    sbCta.addEventListener('click', () => {
+      arState.activeTab = 'suspense';
+      if (window.initArDashboard) window.initArDashboard();
+    });
+  }
+}
+window.arRenderSummary = arRenderSummary;
+
+function renderSuspenseBanner(urgentCount, exceptions) {
+  const totalAmt = exceptions
+    .filter(e => e.severity === 'urgent' && e.details && e.details.amount != null)
+    .reduce((s, e) => s + (e.details.amount || 0), 0);
+  return `
+    <div class="ar-suspense-banner">
+      <div class="sb-ico">!</div>
+      <div class="sb-body">
+        <div class="sb-title">${urgentCount} urgent exception${urgentCount > 1 ? 's' : ''} need your attention today${totalAmt ? ` · $${formatMoney(totalAmt)}` : ''}</div>
+        <div class="sb-sub">Click through the worklist below to resolve each one before close.</div>
+      </div>
+      <button class="sb-cta">Open worklist →</button>
+    </div>
+  `;
+}
+
+function renderExceptionSection(section, exceptions) {
+  const rows = exceptions.filter(e => e.category === section.key);
+  if (rows.length === 0) return '';
+  const totalAmt = rows
+    .map(e => e.details && (e.details.amount ?? e.details.balance ?? e.details.delta ?? 0))
+    .reduce((s, n) => s + (n || 0), 0);
+  return `
+    <div class="wl-section">
+      <div class="wl-section-header">
+        <span class="chevron">▶</span>
+        <span>${section.icon}</span>
+        <span>${section.label}</span>
+        <span class="right">${rows.length}${totalAmt ? ' · $' + formatMoney(Math.abs(totalAmt)) : ''}</span>
+      </div>
+      <div class="wl-section-body">
+        ${rows.slice(0, 50).map(e => `
+          <div class="wl-row">
+            <span>${escapeHtml(e.customer?.name || '')}</span>
+            <span class="id" style="font-family:Consolas,monospace;">${escapeHtml(e.invoice || e.details.check || '')}</span>
+            <span class="wl-amt">$${formatMoney(e.details.amount ?? e.details.balance ?? e.details.delta ?? 0)}</span>
+            <span class="wl-action" style="color:#94a3b8; font-size:0.72rem;">${escapeHtml(e.suggested_action)}</span>
+          </div>
+        `).join('')}
+        ${rows.length > 50 ? `<div style="font-size:0.72rem; color:#94a3b8; padding:4px 0;">+${rows.length - 50} more — open the tab to see all</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderAgingBar(register) {
+  const buckets = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+  for (const r of register) {
+    const letter = r.ar_status ? String(r.ar_status)[0] : null;
+    if (letter && buckets[letter] != null) buckets[letter] += Math.max(0, r.balance ?? 0);
+  }
+  const total = Object.values(buckets).reduce((a, b) => a + b, 0) || 1;
+  const segs = [
+    { letter: 'A', cls: 's-green',  label: 'Under 30 days' },
+    { letter: 'B', cls: 's-yellow', label: '30–59' },
+    { letter: 'C', cls: 's-orange', label: '60–89' },
+    { letter: 'D', cls: 's-red',    label: '90–119' },
+    { letter: 'E', cls: 's-brown',  label: 'Over 120' },
+  ];
+  return `
+    <div class="ar-aging-bar">
+      ${segs.map(s => {
+        const pct = (buckets[s.letter] / total) * 100;
+        if (pct < 1) return '';
+        return `<div class="seg ${s.cls}" style="width:${pct}%">${pct.toFixed(0)}%</div>`;
+      }).join('')}
+    </div>
+    <div class="ar-aging-legend">
+      ${segs.map(s => `<span class="lg"><span class="dot" style="background:${segDotColor(s.cls)}"></span>${s.label}<span class="amt">$${formatMoney(buckets[s.letter])}</span></span>`).join('')}
+    </div>
+  `;
+}
+
+function segDotColor(cls) {
+  return { 's-green':'#16a34a', 's-yellow':'#facc15', 's-orange':'#f97316', 's-red':'#dc2626', 's-brown':'#7c2d12' }[cls];
+}
+
+// ── Suspense tab ──
+
+export function arRenderSuspense(body) {
+  const suspenseRows = (arState.exceptions || []).filter(e => e.category === 'suspense');
+  const nonFactored = (arState.exceptions || []).filter(e => e.category === 'non_factored');
+
+  body.innerHTML = `
+    <h3 class="ar-section-h">Suspense — unapplied payments needing research
+      <span class="sub">${suspenseRows.length} real · ${nonFactored.length} non-factored auto-resolved</span>
+    </h3>
+    ${suspenseRows.length === 0 && nonFactored.length === 0 ? `
+      <div class="ar-summary-empty-card">
+        <div class="ico">✓</div>
+        <h3>No suspense items</h3>
+        <p>Either everything matched cleanly, or the loaded workbook doesn't include the raw TAB BANK file (Phase I: drop Collection_Payment.xlsx alongside the workbook to enable suspense detection).</p>
+      </div>` : `
+      <div class="ar-table-wrap">
+        <table class="ar-table">
+          <thead><tr>
+            <th>Check #</th><th>Debtor (per TAB BANK)</th>
+            <th class="num">Amount</th><th>Type</th><th>Suggested action</th>
+          </tr></thead>
+          <tbody>
+            ${suspenseRows.map(e => `
+              <tr>
+                <td class="id">${escapeHtml(e.details.check)}</td>
+                <td class="customer">${escapeHtml(e.customer.name)}</td>
+                <td class="num">${formatMoney(e.details.amount)}</td>
+                <td><span class="ar-status-chip danger">Needs research</span></td>
+                <td>${escapeHtml(e.suggested_action)}</td>
+              </tr>
+            `).join('')}
+            ${nonFactored.map(e => `
+              <tr>
+                <td class="id">${escapeHtml(e.details.check)}</td>
+                <td>—</td>
+                <td class="num">${formatMoney(e.details.amount)}</td>
+                <td><span class="ar-status-chip ok">Non-factored</span></td>
+                <td>${escapeHtml(e.suggested_action)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `}
+  `;
+}
+window.arRenderSuspense = arRenderSuspense;
