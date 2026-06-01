@@ -2,7 +2,7 @@
 //  INVOICE SENDING TOOL — CSV parsing, table, send flow, audit
 // ══════════════════════════════════════════════════════════════════
 import { state, invoiceState, sendState } from '../../shared/state.js';
-import { uid, escHtml, findColumnKey, CSV_ALIASES } from '../../shared/utils.js';
+import { uid, escHtml, findColumnKey, CSV_ALIASES, parseInvType } from '../../shared/utils.js';
 import { setupDrop } from '../../shared/dom-helpers.js';
 import { invAddLog, invClearLog, invSetProgress, invToggleLog } from '../../shared/log.js';
 import { agentBridge } from '../../shared/agent-client.js';
@@ -138,6 +138,7 @@ function invHandleCsvFile(file) {
           customerCode: custCode,
           subject: String(colMap.subject ? row[colMap.subject] : '').trim(),
           doSenderEmail: String(colMap.doSenderEmail ? row[colMap.doSenderEmail] : '').trim(),
+          routingType: parseInvType(invNum) || 'unknown',
           emailOverride: null,
           subjectOverride: null,
           // Customer profile enrichment (populated by invEnrichWithCustomerProfiles)
@@ -156,6 +157,11 @@ function invHandleCsvFile(file) {
       }
 
       if (skipped > 0) invAddLog('warning', 'Skipped ' + skipped + ' empty rows');
+
+      const whCount = invoiceState.invoices.filter(function(r) { return r.routingType === 'warehouse'; }).length;
+      if (whCount > 0) {
+        invAddLog('info', 'Detected ' + whCount + ' warehouse invoice' + (whCount === 1 ? '' : 's') + ' (INV# has "W" in position 2)');
+      }
 
       invoiceState.csvLoaded = true;
       invAddLog('success', 'Loaded ' + invoiceState.invoices.length + ' invoices from ' + file.name);
