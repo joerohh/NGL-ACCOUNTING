@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NGL Mockup — Customer Profile: Warehouse toggle + panel (Option B)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #475569; color: #0f172a; font-size: 14px;
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  .mockup-banner {
+    background: linear-gradient(90deg, #ea580c, #f97316);
+    color: white; padding: 9px 24px;
+    font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  }
+  .mockup-banner .pill {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .mockup-banner .hint { margin-left: auto; font-weight: 400; opacity: 0.9; font-size: 0.76rem; }
+
+  /* ── Modal styling lifted from styles.css:509+ ── */
+  .modal-stage { display: flex; justify-content: center; padding-top: 30px; }
+  .modal-box {
+    background: #fff; border-radius: 14px; width: 650px; max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+  .modal-header {
+    padding: 18px 24px; border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h2 { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0; }
+  .modal-header .close { background:none; border:none; cursor:pointer; color:#94a3b8; font-size:1.2rem; }
+  .modal-body { padding: 24px; }
+  .modal-footer {
+    padding: 14px 24px; border-top: 1px solid #e2e8f0;
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+
+  .modal-field-label {
+    font-size: 0.72rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    display: block; margin-bottom: 6px;
+  }
+  .modal-input {
+    width: 100%; padding: 9px 12px; border: 1px solid #e2e8f0;
+    border-radius: 8px; font-size: 0.9rem; color: #1e293b; outline: none;
+  }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .field-block { margin-bottom: 16px; }
+
+  .tag-input-wrap {
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;
+    min-height: 40px;
+  }
+  .tag-input-wrap input {
+    border: none; outline: none; font-size: 0.88rem; flex: 1; min-width: 100px;
+    color: #1e293b; padding: 2px 0; background: transparent;
+  }
+  .tag-input-wrap .tag-item {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; background: #f1f5f9; border: 1px solid #e2e8f0;
+    border-radius: 6px; font-size: 0.8rem; color: #334155;
+  }
+  .tag-input-wrap .tag-item .tag-remove { color: #94a3b8; cursor: pointer; }
+
+  .hint { font-size: 0.73rem; color: #94a3b8; margin-top: 4px; line-height: 1.4; }
+
+  /* ── NEW: warehouse toggle row ── */
+  .wh-toggle-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 14px;
+  }
+  .wh-toggle-row.active {
+    background: #fff7ed; border-color: #fed7aa;
+  }
+  .toggle-switch {
+    position: relative; width: 38px; height: 22px;
+    background: #cbd5e1; border-radius: 999px; flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .toggle-switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    transition: transform 0.15s;
+  }
+  .toggle-switch.on { background: #ea580c; }
+  .toggle-switch.on::after { transform: translateX(16px); }
+
+  .wh-toggle-text { flex: 1; }
+  .wh-toggle-text .title {
+    font-size: 0.88rem; font-weight: 600; color: #0f172a;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .wh-toggle-text .title .w-letter {
+    color: #ea580c; font-weight: 800;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .wh-toggle-text .sub { font-size: 0.76rem; color: #64748b; margin-top: 2px; }
+
+  /* ── NEW: warehouse panel (revealed when toggle on) ── */
+  .wh-panel {
+    background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 16px;
+  }
+  .wh-panel-head {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.82rem; font-weight: 700; color: #9a3412;
+    margin-bottom: 12px;
+  }
+  .wh-panel-head .w-letter {
+    color: #ea580c; font-weight: 800;
+    font-family: 'SF Mono', Consolas, monospace; font-size: 0.92rem;
+  }
+  .wh-panel-sub {
+    font-size: 0.74rem; color: #9a3412; opacity: 0.85;
+    margin-top: -8px; margin-bottom: 12px; line-height: 1.4;
+  }
+
+  .wh-field-label {
+    font-size: 0.7rem; font-weight: 700; color: #9a3412;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    display: block; margin-bottom: 5px;
+  }
+  .wh-field-block { margin-bottom: 12px; }
+  .wh-field-block:last-child { margin-bottom: 0; }
+  .wh-input {
+    width: 100%; padding: 8px 10px; border: 1px solid #fed7aa;
+    border-radius: 7px; font-size: 0.85rem; color: #1e293b;
+    background: #fff; outline: none;
+  }
+  .wh-input::placeholder { color: #c2410c; opacity: 0.5; }
+  textarea.wh-input { resize: vertical; min-height: 64px; font-family: inherit; }
+
+  .wh-checkbox-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; background: #fff; border: 1px solid #fed7aa;
+    border-radius: 7px;
+  }
+  .wh-checkbox-row input[type="checkbox"] {
+    accent-color: #ea580c; width: 15px; height: 15px;
+  }
+  .wh-checkbox-row label { font-size: 0.82rem; color: #1e293b; cursor: pointer; }
+  .wh-checkbox-row .sub { font-size: 0.72rem; color: #94a3b8; }
+
+  /* ── Inheritance hint ── */
+  .inherit-hint {
+    background: rgba(255,255,255,0.65); border: 1px dashed #fdba74;
+    padding: 7px 10px; border-radius: 7px;
+    font-size: 0.74rem; color: #9a3412; line-height: 1.45;
+    margin-top: 10px;
+  }
+  .inherit-hint code {
+    background: #fff; padding: 1px 5px; border-radius: 3px;
+    font-size: 0.72rem; color: #c2410c;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 8px 16px; border-radius: 7px; font-size: 0.85rem; font-weight: 600;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-primary { background: #ea580c; color: white; }
+  .btn-secondary { background: #fff; color: #475569; border-color: #e2e8f0; }
+
+  /* ── Comparison stage: two modals side by side ── */
+  .stage {
+    display: flex; gap: 30px; justify-content: center;
+    flex-wrap: wrap; margin-top: 30px;
+  }
+  .stage-col { display: flex; flex-direction: column; align-items: center; }
+  .stage-label {
+    color: #fff; font-size: 0.85rem; font-weight: 600;
+    background: rgba(0,0,0,0.25); padding: 5px 12px; border-radius: 999px;
+    margin-bottom: 12px;
+  }
+
+  select.modal-input { appearance: none; background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 12px center; padding-right: 30px; }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">
+  <span class="pill">Mockup</span>
+  <span>Customer Profile — Warehouse toggle + panel (Option B)</span>
+  <span class="hint">Two side-by-side states: toggle OFF (regular customer) · toggle ON (panel revealed)</span>
+</div>
+
+<div class="stage">
+
+  <!-- ─── State 1: toggle OFF (regular customer) ─── -->
+  <div class="stage-col">
+    <div class="stage-label">State 1 — Toggle OFF · normal customer view</div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Edit Customer</h2>
+        <button class="close">×</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="field-row">
+          <div>
+            <label class="modal-field-label">Customer Code *</label>
+            <input class="modal-input" value="CMACGM01" style="text-transform:uppercase;">
+          </div>
+          <div>
+            <label class="modal-field-label">Customer Name *</label>
+            <input class="modal-input" value="CMA CGM (America) LLC">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">Email Addresses</label>
+          <div class="tag-input-wrap">
+            <span class="tag-item">billing@cma-cgm.com <span class="tag-remove">×</span></span>
+            <span class="tag-item">ap.us@cma-cgm.com <span class="tag-remove">×</span></span>
+            <input placeholder="Type email and press Enter...">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">Additional CC Emails</label>
+          <div class="tag-input-wrap">
+            <input placeholder="Extra CC (ar@ngltrans.net is always included)...">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">BCC Emails</label>
+          <div class="tag-input-wrap">
+            <input placeholder="Optional BCC recipients...">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">Send Method</label>
+          <select class="modal-input">
+            <option>Standard QBO Email</option>
+            <option>QBO Invoice Only + POD Email</option>
+            <option>Custom</option>
+          </select>
+          <div class="hint">Send all attachments on the QBO invoice via QuickBooks email.</div>
+        </div>
+
+        <!-- NEW toggle row, OFF state -->
+        <div class="wh-toggle-row">
+          <div class="toggle-switch"></div>
+          <div class="wh-toggle-text">
+            <div class="title">Customer also receives <span class="w-letter">W</span>arehouse invoices</div>
+            <div class="sub">Off — warehouse rows for this customer use the standard recipients and email above.</div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── State 2: toggle ON (warehouse panel revealed) ─── -->
+  <div class="stage-col">
+    <div class="stage-label">State 2 — Toggle ON · warehouse panel revealed</div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Edit Customer</h2>
+        <button class="close">×</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="field-row">
+          <div>
+            <label class="modal-field-label">Customer Code *</label>
+            <input class="modal-input" value="PACCS01" style="text-transform:uppercase;">
+          </div>
+          <div>
+            <label class="modal-field-label">Customer Name *</label>
+            <input class="modal-input" value="Pacific Cold Storage Inc.">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">Email Addresses</label>
+          <div class="tag-input-wrap">
+            <span class="tag-item">billing@pacificcoldstorage.com <span class="tag-remove">×</span></span>
+            <input placeholder="Type email and press Enter...">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">Additional CC Emails</label>
+          <div class="tag-input-wrap">
+            <span class="tag-item">ar@pacificcoldstorage.com <span class="tag-remove">×</span></span>
+            <input placeholder="Extra CC (ar@ngltrans.net is always included)...">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">BCC Emails</label>
+          <div class="tag-input-wrap">
+            <input placeholder="Optional BCC recipients...">
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="modal-field-label">Send Method</label>
+          <select class="modal-input">
+            <option>Standard QBO Email</option>
+            <option>QBO Invoice Only + POD Email</option>
+            <option>Custom</option>
+          </select>
+          <div class="hint">Applies to regular (Import / Export) rows.</div>
+        </div>
+
+        <!-- NEW toggle row, ON state -->
+        <div class="wh-toggle-row active">
+          <div class="toggle-switch on"></div>
+          <div class="wh-toggle-text">
+            <div class="title">Customer also receives <span class="w-letter">W</span>arehouse invoices</div>
+            <div class="sub">On — warehouse rows for this customer use the settings below.</div>
+          </div>
+        </div>
+
+        <!-- NEW warehouse panel -->
+        <div class="wh-panel">
+          <div class="wh-panel-head">
+            <span class="w-letter">W</span> Warehouse Settings
+          </div>
+          <div class="wh-panel-sub">
+            Only applies to rows whose invoice number has <code style="background:#fff;padding:1px 5px;border-radius:3px;font-size:0.72rem;color:#c2410c;">W</code> in the second position. Leave any field blank to inherit from above.
+          </div>
+
+          <div class="wh-field-block">
+            <label class="wh-field-label">Warehouse Recipients — override (optional)</label>
+            <div class="tag-input-wrap" style="background:#fff; border-color:#fed7aa;">
+              <span class="tag-item" style="background:#fff7ed; border-color:#fed7aa; color:#9a3412;">warehouse@pacificcoldstorage.com <span class="tag-remove">×</span></span>
+              <input placeholder="Add a warehouse-specific contact (or leave blank to use the regular emails above)">
+            </div>
+          </div>
+
+          <div class="wh-field-block">
+            <label class="wh-field-label">Warehouse Email Subject</label>
+            <input class="wh-input" value="Warehouse Invoice {invoice_number} - {customer_name}">
+            <div class="hint" style="color:#9a3412;">
+              Tokens: <code style="background:#fff;padding:1px 4px;border-radius:3px;font-size:0.7rem;color:#c2410c;">{invoice_number}</code>,
+              <code style="background:#fff;padding:1px 4px;border-radius:3px;font-size:0.7rem;color:#c2410c;">{customer_name}</code>.
+              No <code style="background:#fff;padding:1px 4px;border-radius:3px;font-size:0.7rem;color:#c2410c;">{container_number}</code> — warehouse rows don't have one.
+            </div>
+          </div>
+
+          <div class="wh-field-block">
+            <label class="wh-field-label">Warehouse Email Body</label>
+            <textarea class="wh-input" rows="3">Please find attached the warehouse invoice {invoice_number} along with the supporting documentation.</textarea>
+          </div>
+
+          <div class="wh-field-block">
+            <label class="wh-field-label">Attachment Rule</label>
+            <div class="wh-checkbox-row">
+              <input type="checkbox" id="whReqExcel" checked>
+              <label for="whReqExcel">
+                Require at least one <strong>Excel attachment</strong> in QBO before sending
+                <div class="sub">Blocks the send if no .xlsx is attached. The invoice PDF and any other QBO attachments are always sent as-is.</div>
+              </label>
+            </div>
+          </div>
+
+          <div class="inherit-hint">
+            <strong>Inheritance:</strong> Any field left blank above falls back to the regular settings.
+            E.g., if you don't set warehouse recipients, the email goes to
+            <code>billing@pacificcoldstorage.com</code> just like a regular invoice.
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
