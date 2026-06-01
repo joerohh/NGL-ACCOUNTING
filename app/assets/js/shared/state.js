@@ -75,3 +75,15 @@ export const custState = {
   orGroups: [],        // e.g. [['bol','pol'], ['pl','do']]
   customers: [],       // cached list, refreshed by custLoadCustomers (v69: dup-code check)
 };
+
+// ── AR Dashboard state ──
+export const arState = {
+  loaded: false,                 // true once a workbook is parsed
+  filename: null,                // currently-loaded filename
+  model: null,                   // parsed in-memory model (see ar-dashboard-loader.js)
+  activeTab: 'summary',          // which sub-tab is visible
+  selectedRows: {},              // per-tab selection state, e.g. { collections: 'A0905186835' }
+  exceptions: [],                // flat list of detected exceptions
+  manualEntries: [],             // user-added rows (credit memos, warehouse, etc.)
+  resolvedExceptions: new Set(), // exception IDs marked resolved in this session
+};
