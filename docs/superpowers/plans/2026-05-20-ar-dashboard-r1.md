@@ -30,7 +30,7 @@
 - **Overpayment Workflow modal** — 4-step guided process (confirm → push to TMS/QBO → create credit → land in AR)
 - **TAB BANK error workflow** — paste-ready email body + "awaiting correction" status
 - **UC reclassification linkage** — link prior-day UC rows to later Payment rows by check#+customer+amount
-- Cross-tool actions: Copy TAB BANK report · Email customer (jump to Invoice Sender) · Email TAB BANK (new) · Open invoice in QBO · Add manual entry · Edit row · Edit memo · Overpayment workflow
+- Cross-tool actions: Email customer (jump to Invoice Sender) · Email TAB BANK (new) · Open invoice in QBO · Add manual entry · Edit row · Edit memo · Overpayment workflow
 - Today + Week views (Month/Quarter/Year defer to R3)
 
 **Scope explicitly NOT in R1:**
@@ -91,7 +91,7 @@
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-model.js` | Pure helpers: aging buckets, AR row constructor, exception classifiers | **Create** |
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-exceptions.js` | Detect all 10 exception categories from the model | **Create** |
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-views.js` | Render functions for each of the 10 tabs | **Create** |
-| `app/assets/js/tools/ar-dashboard/ar-dashboard-actions.js` | Cross-tool actions: Copy TAB BANK report, email jump, QBO deep link, add manual entry, email TAB BANK | **Create** |
+| `app/assets/js/tools/ar-dashboard/ar-dashboard-actions.js` | Cross-tool actions: email jump, QBO deep link, add manual entry, email TAB BANK | **Create** |
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-supabase.js` | Supabase R/W: overrides, memos, manual entries, resolved exceptions | **Create** (Phase L) |
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-overpayment.js` | Overpayment Workflow modal (4-step guided process) | **Create** (Phase M) |
 | `app/index.html` | Sidebar nav entry, `#arDashboardView` container, file-drop overlay markup | Modify |
@@ -2376,7 +2376,9 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ## Phase J — Cross-tool actions
 
-### Task 14: Copy TAB BANK report action
+### Task 14: Cross-tool actions (Email customer, Open in QBO, Add manual entry)
+
+> **DROPPED 2026-06-01:** The "Copy TAB BANK report" sub-step has been removed. There is no daily summary report Jihyun sends back to TAB BANK — the "TAB BANK report" she receives every morning IS the Collection_Payment.xlsx remittance, which we already ingest as a source input. The remaining cross-tool actions (Email customer, Open in QBO, Add manual entry) are still in scope. Skip the Copy TAB BANK report sub-steps below; implement the other actions per the existing detail.
 
 **Files:**
 - Create: `app/assets/js/tools/ar-dashboard/ar-dashboard-actions.js`
