@@ -306,9 +306,9 @@ class SendJobMixin:
                 # always QBO-only, xlsx-as-is, regardless of how the customer
                 # is normally configured.
                 #
-                # Import from fetch_job (not the package __init__) to avoid the
-                # circular: __init__.py imports send_job, so send_job can't
-                # import from __init__ at module load.
+                # Import the helper directly from the fetch_job submodule rather
+                # than the package __init__ to avoid pulling the full mixin/service
+                # import chain just to resolve one function.
                 is_warehouse = _is_warehouse_row(invoice.invoice_number)
                 method = customer.get("sendMethod", "email")
 
@@ -318,6 +318,10 @@ class SendJobMixin:
                     elif method in ("portal_upload", "portal"):
                         await self._send_portal_upload(job, invoice, customer, result, i)
                     elif method == "qbo_invoice_only_then_pod_email":
+                        # OEC: D/O email FIRST (populates invoice.do_sender_email
+                        # for the invoice email CC), then QBO invoice email.
+                        # Invoice email runs regardless of POD outcome so the
+                        # customer always gets the invoice.
                         await self._send_oec_pod_email(job, invoice, customer, result, i)
                         await self._send_qbo_api(job, invoice, customer, result, i)
                     else:
