@@ -2,39 +2,83 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship Release 1 of the AR Dashboard — Tool #4 in NGL Accounting. The dashboard loads a hand-built `AR_AGING_*.xlsx` workbook and presents it as a reconciliation cockpit with 9 tabs, an Exceptions worklist that surfaces mismatches across TAB BANK / QBO / TMS / AR data, and cross-tool actions (Email customer, Open in QBO, Copy TAB BANK report). The build engine that produces the workbook is **deferred to a follow-on plan** (R2). R1 is useful standalone — even with manual builds, the dashboard saves the associate ~30 min/morning of lookup + spotting exceptions.
+> **Status (2026-06-01):** Plan front matter + scope updated to reflect spec v2 (Jihyun's input folded in). New phases L (Supabase R/W) and M (Inline editing + Overpayment Workflow + TAB BANK error handling) are outlined at the end but **detailed steps are TBD pending Jihyun's answers to 6 open questions** (see spec §9). Existing Phases A–K are valid for scaffolding work that doesn't depend on those answers.
+
+**Goal:** Ship Release 1 of the AR Dashboard — Tool #4 in NGL Accounting. The dashboard loads a hand-built `AR_AGING_*.xlsx` workbook and presents it as a reconciliation cockpit with 10 tabs, an Exceptions worklist (10 categories) that surfaces mismatches across TAB BANK / QBO / TMS / AR data, write affordances (inline edit + per-row memos + overpayment workflow), and cross-tool actions (Email customer, Email TAB BANK on error, Open in QBO, Copy TAB BANK report). The build engine that produces the workbook is **deferred to a follow-on plan** (R2). R1 is useful standalone — replaces lookup + surfaces exceptions + lets her FIX them in place.
 
 **Architecture:**
-- Pure client-side JS. No agent endpoints in R1. Workbook is parsed in the browser with SheetJS (already loaded).
+- Mostly client-side JS for UI/workbook parsing. **Supabase R/W from day one** for: customer matching (read), inline edits + per-row memos + manual entries + resolved exceptions (write).
+- Workbook is parsed in the browser with SheetJS (already loaded).
 - New tool module `app/assets/js/tools/ar-dashboard/` with multiple sub-files (mirrors `tools/merge/` pattern).
 - Native ES modules, no build step. `app.js` statically imports the entry point and routes `switchTool('ar-dashboard')` to it.
 - State held in an `arState` object on `window`, consistent with how other tools (`state`, `invoiceState`) work.
 - UI uses existing visual tokens (`--ngl-orange #ea580c`, slate text `#1e293b`, `#e2e8f0` borders, two-pane split pattern from mockups).
 - Tab routing is internal to the tool (active-tab state on `arState`, render dispatched on switch).
 
-**Tech Stack:** Vanilla HTML / CSS / ES module JS (no framework, no build). SheetJS (already loaded via CDN). The dashboard reads workbooks; no agent or Supabase writes in R1 (those land in R2/R3).
+**Tech Stack:** Vanilla HTML / CSS / ES module JS (no framework, no build). SheetJS (already loaded via CDN). Supabase JS client (already used by Customer Manager). No agent endpoints in R1 (those land in R2 for QBO auto-fetch).
 
-**Spec:** `docs/superpowers/specs/2026-05-20-ar-dashboard-design.md`
+**Spec:** `docs/superpowers/specs/2026-05-20-ar-dashboard-design.md` (updated 2026-06-01)
 
 **Scope explicitly in R1:**
 - Load 1 workbook (drop or browse)
 - Parse all 7 sheets into the in-memory model
-- 9 tabs: Summary, AR Register, Collections, Overdue, Partial Pays, New Invoices, TMS, Adjustments, Suspense, Customers
-- Exception detection in 8 categories (derived from data in the loaded workbook + optional TAB BANK drop)
+- 10 tabs: Summary, AR Register, Collections, Overdue, Partial Pays, New Invoices, TMS, Adjustments, Suspense, Customers
+- Exception detection in **10 categories** (added cat 9 TAB BANK posting error, cat 10 UC awaiting reclassification)
 - Exceptions worklist on Summary tab (the centerpiece)
-- Cross-tool actions: Copy TAB BANK report · Email customer (jump to Invoice Sender) · Open invoice in QBO · Add manual entry
-- Single-day view only (period selector is a placeholder for now; Week/Month/Quarter/Year defer to R3)
+- **Inline editing of any AR Register row** (amount, paid, balance, memo, status) with day-over-day persistence in Supabase
+- **Per-row memo notes** — freeform, persisted across rebuilds via Supabase
+- **Overpayment Workflow modal** — 4-step guided process (confirm → push to TMS/QBO → create credit → land in AR)
+- **TAB BANK error workflow** — paste-ready email body + "awaiting correction" status
+- **UC reclassification linkage** — link prior-day UC rows to later Payment rows by check#+customer+amount
+- Cross-tool actions: Copy TAB BANK report · Email customer (jump to Invoice Sender) · Email TAB BANK (new) · Open invoice in QBO · Add manual entry · Edit row · Edit memo · Overpayment workflow
+- Today + Week views (Month/Quarter/Year defer to R3)
 
 **Scope explicitly NOT in R1:**
 - Build engine (R2)
 - QBO API auto-fetch (R2)
-- Supabase writes (R2)
-- Week / Month / Quarter / Year views (R3)
+- Daily snapshot writes to Supabase (R2)
+- Month / Quarter / Year views (R3)
 - Per-customer history pages (R3)
-- Older-invoices write-off workflow (R3)
+- Older-invoices write-off lifecycle (R3, may use R1's inline edit as workaround)
 - Management Q&A (R4)
 
 **Rollout:** Bundled into the next version. Standard ship pipeline applies: bump VERSION → `runbuild.bat` → commit + push → `gh release create` with installer + `latest.yml`.
+
+---
+
+## Plan Amendments (2026-06-01) — what changed since the original plan
+
+### Existing tasks needing extension during execution
+
+| Task | What needs to change |
+|---|---|
+| **Task 5 — AR Register tab** | Add inline edit affordance per row (amount, paid, balance, memo, status). On commit, write override to Supabase + show "edited" pip. See new Phase L for Supabase wiring. |
+| **Task 11 — Exception detection** | Add 2 new classifiers: (cat 9) TAB BANK posting error — same check# on multiple rows with conflicting status, OR check# applied where deposit ≠ AR balance; (cat 10) UC awaiting reclassification — prior-day UC row with no matching Payment yet. |
+| **Task 12 — Summary tab** | Exceptions worklist now shows 10 categories instead of 8. UI fits new cats. |
+| **Task 14 — Cross-tool actions** | Add 4 new actions: Email TAB BANK (cat 9 action), Edit row, Edit memo, Open Overpayment Workflow modal (cat 3 action). See new Phase M. |
+
+### New phases (outlined; detailed steps pending Jihyun answers)
+
+- **Phase L — Supabase R/W layer.** Wire `ar_row_overrides`, `ar_memos`, `ar_manual_entries`, `ar_exceptions` tables. Load overrides into the in-memory model after workbook parse. Write changes on edit commit. Optimistic UI with rollback on network failure.
+- **Phase M — Inline editing + Overpayment Workflow + TAB BANK error workflow.** The actual UI affordances that USE the Supabase layer from Phase L. Inline-edit cells in AR Register. Overpayment Workflow modal (4 steps). Email TAB BANK template + "awaiting correction" status banner.
+
+### New files to add (extends File Structure table below)
+
+- `app/assets/js/tools/ar-dashboard/ar-dashboard-supabase.js` — Supabase R/W (new)
+- `app/assets/js/tools/ar-dashboard/ar-dashboard-overpayment.js` — Overpayment Workflow modal (new)
+
+### Dependencies on Jihyun's open questions
+
+| Question (spec §9) | Affects |
+|---|---|
+| Q1 — TAB BANK report format | Task 14 (existing) — final shape of clipboard string |
+| Q2 — TMS data error decision rule | Task 11 cat 5 — confidence threshold |
+| Q3 — Auto-flag "unaccounted-for" rows | Task 11 — whether to add an implicit cat 11 |
+| Q4 — Write-off lifecycle | Possibly Phase M — whether `WRITE_OFF` is just a status or needs its own flow |
+| Q5 — Overpayment step-2 verification | Phase M Overpayment Workflow — auto re-fetch vs trust checkbox |
+| Q6 — UC auto-link confidence | Task 11 cat 10 + Phase L — automatic clear vs human confirm |
+
+**Recommendation:** start Phases A–C (scaffolding + loader + tab shell) now — those are independent of Jihyun's answers. Pause before Tasks 5 / 11 / 12 / 14 + Phases L / M until her answers land.
 
 ---
 
@@ -45,12 +89,14 @@
 | `app/assets/js/tools/ar-dashboard/ar-dashboard.js` | Entry point: state machine, tab routing, top-level render | **Create** |
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-loader.js` | Parse a workbook file into the in-memory model | **Create** |
 | `app/assets/js/tools/ar-dashboard/ar-dashboard-model.js` | Pure helpers: aging buckets, AR row constructor, exception classifiers | **Create** |
-| `app/assets/js/tools/ar-dashboard/ar-dashboard-exceptions.js` | Detect all 8 exception categories from the model | **Create** |
-| `app/assets/js/tools/ar-dashboard/ar-dashboard-views.js` | Render functions for each of the 9 tabs | **Create** |
-| `app/assets/js/tools/ar-dashboard/ar-dashboard-actions.js` | Cross-tool actions: Copy TAB BANK report, email jump, QBO deep link, add manual entry | **Create** |
+| `app/assets/js/tools/ar-dashboard/ar-dashboard-exceptions.js` | Detect all 10 exception categories from the model | **Create** |
+| `app/assets/js/tools/ar-dashboard/ar-dashboard-views.js` | Render functions for each of the 10 tabs | **Create** |
+| `app/assets/js/tools/ar-dashboard/ar-dashboard-actions.js` | Cross-tool actions: Copy TAB BANK report, email jump, QBO deep link, add manual entry, email TAB BANK | **Create** |
+| `app/assets/js/tools/ar-dashboard/ar-dashboard-supabase.js` | Supabase R/W: overrides, memos, manual entries, resolved exceptions | **Create** (Phase L) |
+| `app/assets/js/tools/ar-dashboard/ar-dashboard-overpayment.js` | Overpayment Workflow modal (4-step guided process) | **Create** (Phase M) |
 | `app/index.html` | Sidebar nav entry, `#arDashboardView` container, file-drop overlay markup | Modify |
 | `app/assets/js/app.js` | `switchTool('ar-dashboard')` case + `initArDashboard()` import + subtitle entry | Modify |
-| `app/assets/css/styles.css` | Add `.ar-*` utility classes (panels, tables, two-pane split, exceptions worklist styling) | Modify |
+| `app/assets/css/styles.css` | Add `.ar-*` utility classes (panels, tables, two-pane split, exceptions worklist styling, inline-edit cell, overpayment modal) | Modify |
 | `app/assets/js/shared/state.js` | Add `window.arState` declaration | Modify |
 
 ---
@@ -2504,6 +2550,60 @@ git commit -m "feat(ar-dashboard): cross-tool actions — Copy TAB BANK, Email, 
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
+
+---
+
+## Phase L — Supabase R/W layer (NEW — outlined, detailed steps pending Jihyun)
+
+**Goal:** Wire the Supabase tables that back R1's write affordances. This phase is the foundation Phase M sits on top of.
+
+**New Supabase tables to add (migrations live in `agent/services/database.py` Supabase init alongside customers + users):**
+
+```sql
+ar_row_overrides   (invoice_id, column_name, new_value, original_value, edited_by, edited_at)
+ar_memos           (invoice_id, memo_text, edited_by, edited_at)
+ar_manual_entries  (id, invoice_id, customer_id, amount, date, memo, source, created_by, created_at)
+ar_exceptions      (id, category, invoice_id, customer_id, details_json, resolved, resolved_by, resolved_at)
+```
+
+**Tasks (to be detailed once Jihyun answers Q6 — auto-link confidence):**
+
+- [ ] **Task L1:** Add Supabase table migrations in `agent/services/database.py` (already the project pattern).
+- [ ] **Task L2:** Create `ar-dashboard-supabase.js` with REST helpers (read overrides, read memos, write override, write memo, write manual entry, write resolved exception).
+- [ ] **Task L3:** Hook into workbook load — after parsing the workbook into the in-memory model, fetch all `ar_row_overrides` and `ar_memos` for the workbook's date range and apply them on top.
+- [ ] **Task L4:** Optimistic UI pattern — on edit commit, update the in-memory model immediately, fire-and-forget Supabase write, surface failure as a toast + rollback if the write fails.
+- [ ] **Task L5:** Smoke test: load the workbook, edit a memo, refresh the app, verify the memo persists.
+
+**Open dependency:** Q6 (UC auto-link confidence) — affects whether `ar_exceptions` writes happen automatically (auto-link match found) or require human confirm.
+
+---
+
+## Phase M — Inline editing + Overpayment Workflow + TAB BANK error (NEW — outlined, detailed steps pending Jihyun)
+
+**Goal:** The user-visible affordances that USE Phase L's Supabase layer.
+
+**Tasks:**
+
+- [ ] **Task M1: Inline edit cells in AR Register table.** Click-to-edit on amount, paid, balance, memo, status. Commit on Enter or blur. Show "edited" pip (orange dot) on rows with overrides. Hover/click pip to see audit history. Writes to `ar_row_overrides` via Phase L. (No open question dependency — implement after L is in place.)
+
+- [ ] **Task M2: Per-row memo input affordance.** Dedicated memo column with inline text input. Same persistence flow as M1 but writes to `ar_memos` table instead. (No open question dependency.)
+
+- [ ] **Task M3: Overpayment Workflow modal.** Create `ar-dashboard-overpayment.js` exporting `openOverpaymentModal({ row, exceptionId })`. 4-step wizard:
+  1. Confirm overpayment (computed amount, source check, original invoice).
+  2. Push to TMS/QBO (deep-link button + "done" checkbox). **Pending Q5** — verify with re-fetch or trust checkbox?
+  3. Create credit memo (auto-populated memo, editable).
+  4. Persist — writes to `ar_manual_entries` + closes exception row.
+
+- [ ] **Task M4: Email TAB BANK template (cat 9 action).** Generate paste-ready email body with check#, invoice#, deposit amount, and the corrective request. Open user's default mail client OR copy to clipboard with a toast. Mark the row "awaiting TAB BANK correction" and exclude from posting until cleared.
+
+- [ ] **Task M5: UC reclassification linkage (cat 10 logic).** During exception detection (extends Task 11), find UC rows from yesterday whose check# + customer + amount matches a Payment row today. **Pending Q6** — auto-clear the UC row, or surface as a confirm-to-link action?
+
+- [ ] **Task M6: TAB BANK posting error detection (cat 9 logic).** During exception detection (extends Task 11), find: (a) same check# appearing on 2+ TAB BANK rows for the same customer with conflicting Pmt Type, OR (b) a check# whose deposit amount doesn't match the AR balance for the invoice it was applied to.
+
+**Open dependencies:**
+- Q4 (write-off lifecycle) — may add a Task M7 if she needs a dedicated flow vs just using inline status edit.
+- Q5 (overpayment verification) — affects Task M3 step 2.
+- Q6 (UC auto-link) — affects Tasks M5.
 
 ---
 
