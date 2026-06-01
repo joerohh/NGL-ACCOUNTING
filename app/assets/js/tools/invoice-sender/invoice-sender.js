@@ -338,6 +338,16 @@ function invRenderSubject(template, inv) {
     .trim();
 }
 
+// Picks the right subject template for an invoice based on its routingType,
+// then renders the per-row substituted string. Warehouse rows use
+// warehouseSubjectTemplate; everything else uses subjectTemplate.
+function invRenderSubjectForRow(inv) {
+  const tpl = (inv && inv.routingType === 'warehouse')
+    ? invoiceState.warehouseSubjectTemplate
+    : invoiceState.subjectTemplate;
+  return invRenderSubject(tpl, inv);
+}
+
 function invUpdateSubjectTemplate(val) {
   invoiceState.subjectTemplate = val;
   invRefreshSubjectPreview();
@@ -431,7 +441,7 @@ function invRenderTable() {
 
   let html = '';
   for (const inv of displayInvoices) {
-    const subject = inv.resendSubject || inv.subject || inv.subjectOverride || invRenderSubject(invoiceState.subjectTemplate, inv);
+    const subject = inv.resendSubject || inv.subject || inv.subjectOverride || invRenderSubjectForRow(inv);
     const isSelected = invoiceState.selectedIds.has(inv.id);
 
     // Customer column — show code + name from profile
@@ -641,7 +651,7 @@ function invOpenReview(id) {
   if (!inv) return;
   invoiceState.reviewingId = id;
 
-  const subject = inv.resendSubject || inv.subjectOverride || invRenderSubject(invoiceState.subjectTemplate, inv);
+  const subject = inv.resendSubject || inv.subjectOverride || invRenderSubjectForRow(inv);
   const email = inv.emailOverride || inv.email;
 
   document.getElementById('reviewModalTitle').textContent = 'Review — Invoice #' + inv.invoiceNumber;
@@ -700,7 +710,7 @@ function invSaveReview() {
 
   const emailVal = document.getElementById('reviewEmail').value.trim();
   const subjectVal = document.getElementById('reviewSubject').value.trim();
-  const defaultSubject = invRenderSubject(invoiceState.subjectTemplate, inv);
+  const defaultSubject = invRenderSubjectForRow(inv);
 
   inv.emailOverride = (emailVal !== inv.email) ? emailVal : null;
   inv.subjectOverride = (subjectVal !== defaultSubject) ? subjectVal : null;
@@ -957,7 +967,7 @@ async function invSendViaQBO() {
     containerNumber: inv.containerNumber,
     customerCode: inv.customerCode,
     amount: inv.amount || '',
-    subject: inv.resendSubject || inv.subject || invRenderSubject(invoiceState.subjectTemplate, inv),
+    subject: inv.resendSubject || inv.subject || invRenderSubjectForRow(inv),
     doSenderEmail: inv.doSenderEmail || '',
     isResend: inv.isResend || false,
   }));
