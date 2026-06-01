@@ -165,3 +165,33 @@ export function routingDecisionFor(row) {
   }
   return { type: 'unknown', expectedDoc: '?' };
 }
+
+// ── Invoice cell render helpers ────────────────────────────────────────────
+
+/**
+ * Wraps the position-2 routing letter (M/E/X/W) in <span class="inv-letter">
+ * for the orange highlight. Returns escaped HTML-safe string.
+ * @param {string} inv - invoice number (e.g. "LW260515P01")
+ * @returns {string} HTML string
+ */
+export function renderInvoiceNumberHtml(inv) {
+  if (!inv || inv.length < 2) return escHtml(inv || '');
+  const c = inv[1].toUpperCase();
+  if (c === 'M' || c === 'E' || c === 'X' || c === 'W') {
+    return escHtml(inv[0]) + '<span class="inv-letter">' + escHtml(inv[1]) + '</span>' + escHtml(inv.slice(2));
+  }
+  return escHtml(inv);
+}
+
+/**
+ * Renders the container column for an invoice row. Warehouse rows show
+ * 'Warehouse' (orange) instead of the empty container value.
+ * @param {{routingType?: string, containerNumber?: string}} row
+ * @returns {string} HTML string
+ */
+export function renderContainerCellHtml(row) {
+  if (row && row.routingType === 'warehouse') {
+    return '<span class="container-cell warehouse">Warehouse</span>';
+  }
+  return escHtml((row && row.containerNumber) || '—');
+}

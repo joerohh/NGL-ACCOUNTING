@@ -3,7 +3,7 @@
 // with a tabbed results table.
 
 import { sendState, invoiceState } from '../../shared/state.js';
-import { escHtml } from '../../shared/utils.js';
+import { escHtml, renderInvoiceNumberHtml, renderContainerCellHtml } from '../../shared/utils.js';
 
 const SLOT_LABELS = { pod: 'POD', bol: 'BOL', pol: 'POL', do: 'DO', pl: 'PL' };
 
@@ -192,8 +192,8 @@ function renderRow(r) {
   }
   const rowStyle = failed ? 'cursor:pointer;' : '';
   return `<tr data-invoice="${escHtml(r.invoiceNumber)}" style="${rowStyle}">
-    <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-family:'SF Mono', Consolas, monospace; font-size:0.84rem;">${escHtml(r.invoiceNumber)}</td>
-    <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-family:'SF Mono', Consolas, monospace; font-size:0.82rem; color:#475569;">${escHtml(r.containerNumber || '—')}</td>
+    <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-family:'SF Mono', Consolas, monospace; font-size:0.84rem;">${renderInvoiceNumberHtml(r.invoiceNumber)}</td>
+    <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-family:'SF Mono', Consolas, monospace; font-size:0.82rem; color:#475569;">${renderContainerCellHtml(r)}</td>
     <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-size:0.82rem;">${escHtml(r.customerCode || '')} ${escHtml(r.customerName || '')}</td>
     <td style="padding:8px; border-bottom:1px solid #f1f5f9;"><span class="v62-badge ${b.cls}">${b.text}</span></td>
     <td style="padding:8px; border-bottom:1px solid #f1f5f9; text-align:right;">${action}</td>

@@ -2,7 +2,7 @@
 //  INVOICE SENDING TOOL — CSV parsing, table, send flow, audit
 // ══════════════════════════════════════════════════════════════════
 import { state, invoiceState, sendState } from '../../shared/state.js';
-import { uid, escHtml, findColumnKey, CSV_ALIASES, parseInvType } from '../../shared/utils.js';
+import { uid, escHtml, findColumnKey, CSV_ALIASES, parseInvType, renderInvoiceNumberHtml, renderContainerCellHtml } from '../../shared/utils.js';
 import { setupDrop } from '../../shared/dom-helpers.js';
 import { invAddLog, invClearLog, invSetProgress, invToggleLog } from '../../shared/log.js';
 import { agentBridge } from '../../shared/agent-client.js';
@@ -528,8 +528,8 @@ function invRenderTable() {
     html += '<tr class="' + rowClass + '" style="' + rowStyle + '">' +
       '<td style="padding-left:14px;"><input type="checkbox" ' + (isSelected ? 'checked' : '') +
         ' onchange="invToggleRow(\'' + inv.id + '\', this.checked)" /></td>' +
-      '<td style="font-family:monospace; font-weight:600; color:#0f172a;">' + escHtml(inv.invoiceNumber) + '</td>' +
-      '<td style="font-family:monospace; font-size:0.82rem; color:#334155;">' + escHtml(inv.containerNumber || '—') + '</td>' +
+      '<td style="font-family:monospace; font-weight:600; color:#0f172a;">' + renderInvoiceNumberHtml(inv.invoiceNumber) + '</td>' +
+      '<td style="font-family:monospace; font-size:0.82rem; color:#334155;">' + renderContainerCellHtml(inv) + '</td>' +
       '<td>' + customerHtml + '</td>' +
       '<td style="text-align:right; font-family:monospace; color:#0f172a;">' + escHtml(inv.amount || '—') + '</td>' +
       '<td>' + methodHtml + '</td>' +
