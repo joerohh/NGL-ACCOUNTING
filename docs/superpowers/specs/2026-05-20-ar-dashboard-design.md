@@ -1,6 +1,7 @@
 # AR Dashboard — Design
 
 **Date:** 2026-05-20
+**Updated:** 2026-06-01 — folded in AR associate (Jihyun) workflow input
 **Author:** Joseph (with Claude)
 **Status:** Design — ready for implementation planning
 **Scope:** Tool #4 in NGL Accounting (alongside Merge Tool, Invoice Sender, Customers)
@@ -21,13 +22,16 @@ A daily reconciliation cockpit for the AR associate. Replaces a ~3-4 hour/mornin
 
 ## 2. Scope
 
-### Release 1 — Dashboard (ships first)
+### Release 1 — Dashboard + write capability (ships first)
 
 - Loads a pre-built workbook (created by hand or by the build engine)
-- Reconciliation cockpit (Summary tab + Exceptions worklist)
+- Reconciliation cockpit (Summary tab + Exceptions worklist with 10 categories)
 - All view tabs (AR Register, Collections, Overdue, Partial Pays, New Invoices, TMS, Adjustments, Suspense, Customers)
 - Multi-period views: Today + Week (Month/Quarter/Year deferred to R3)
-- Cross-tool actions: Email customer (jumps to Invoice Sender), Copy TAB BANK report
+- **Inline editing of any AR row** (amount, paid, balance, memo, status) with day-over-day persistence in Supabase
+- **Per-row memo notes** — freeform, persisted across rebuilds
+- **Overpayment workflow modal** — guided 4-step process (push to TMS/QBO → create credit → land in AR → memo)
+- Cross-tool actions: Email customer · Copy TAB BANK report · Email TAB BANK on posting error · Open in QBO
 
 ### Release 2 — Build Engine (ships next)
 
@@ -35,6 +39,7 @@ A daily reconciliation cockpit for the AR associate. Replaces a ~3-4 hour/mornin
 - Manual drops for TAB BANK Remittance + TMS Reconcile
 - Auto-locate yesterday's workbook
 - Build engine with preview + save
+- **Build respects R1's inline edits as overrides** — won't clobber manual corrections on next morning's rebuild
 - Writes daily snapshots to Supabase (unified data layer foundation)
 
 ### Release 3 — Insights & Management Q&A (later)
@@ -42,7 +47,7 @@ A daily reconciliation cockpit for the AR associate. Replaces a ~3-4 hour/mornin
 - Week/Month/Quarter/Year views
 - Per-customer history pages
 - "Ask AI" tab for management Q&A
-- Older-invoices write-off workflow
+- Older-invoices write-off workflow polish
 
 ### Out of scope
 
@@ -66,8 +71,8 @@ app/assets/js/tools/ar-dashboard/
   ar-dashboard-loader.js   parse workbook -> in-memory model
   ar-dashboard-build.js    build engine (R2)
   ar-dashboard-views.js    render Summary, Collections, Overdue, etc.
-  ar-dashboard-actions.js  copy-to-clipboard, email-jumps, mark-resolved
-  ar-dashboard-supabase.js Supabase sync (R2)
+  ar-dashboard-actions.js  copy-to-clipboard, email-jumps, mark-resolved, edit-row, overpayment-modal
+  ar-dashboard-supabase.js Supabase sync (R/W from R1)
 ```
 
 Pipeline is **fully client-side** for Release 1 + 2 (SheetJS already loaded). Agent endpoints only handle the two QBO API fetches.
@@ -86,6 +91,8 @@ ar_payments         every payment / check# received
 ar_daily_snapshots  one row per build day, JSON blob of full AR register
 ar_exceptions       every flagged exception + resolution + resolved_by + resolved_at
 ar_manual_entries   credit memos, warehouse, custom rows added by associate
+ar_row_overrides    R1 inline edits — preserved across rebuilds (column-level override on ar_invoices)
+ar_memos            per-row freeform memo notes — preserved across rebuilds
 ```
 
 ### Shared data model (in-memory)
@@ -95,12 +102,12 @@ ar_manual_entries   credit memos, warehouse, custom rows added by associate
   today_date, yesterday_date,
   ar_register: [{ inv, customer, customer_id, amount, paid, balance, aging,
                   aging_bucket, date, ref, mbl, equipment, wo, memo, status,
-                  prev_balance, prev_paid, manual_flag }, ...],
+                  prev_balance, prev_paid, manual_flag, edited, edit_audit }, ...],
   collections: [{ payment_date, check_no, customer_id, customer, invoices: [...] }],
   schedule: [...],
   tms_rows: [...],
   adjustments: [...],
-  suspense: [{ check_no, debtor_name, amount, candidate_customers: [...] }],
+  suspense: [{ check_no, debtor_name, amount, candidate_customers: [...], uc_origin_date, posted_date }],
   exceptions: [{ category, severity, invoice, customer, details, suggested_action }],
   customer_rollup: [...],
   diff: { paid_off: [...], new_today: [...], partial_pays: [...], amount_changes: [...] }
@@ -129,7 +136,7 @@ Mockup: `app/mockups/ar-dashboard-build-flow.html`.
 
 ### 4.3 The pipeline — 6 phases (empirically verified at 99%+ across 7 builds)
 
-**Phase 1 — Carry forward.** Clone yesterday's AR register as starting state.
+**Phase 1 — Carry forward.** Clone yesterday's AR register as starting state. Apply any `ar_row_overrides` from Supabase so manual edits survive.
 
 **Phase 2 — Apply yesterday's collections.** For each QBO Daily Collection invoice line:
 
@@ -137,13 +144,13 @@ Mockup: `app/mockups/ar-dashboard-build-flow.html`.
 paid     = QBO Amount - QBO Open Balance
 balance  = invoice_amount - new_paid
 if balance ~= 0   -> drop row (full pay)
-if balance < 0    -> drop row (overpay, handled separately)
+if balance < 0    -> drop row (overpay — handled in §6.1 Overpayment Workflow)
 if balance > 0    -> keep, update PAID + BALANCE + MEMO "Short paid MM/DD/YYYY #check#"
 ```
 
-**Critical rule:** payment classification uses **QBO arithmetic only**. TAB BANK `Pmt Type` column is **IGNORED** because TAB BANK only knows pre-revision invoice amounts — its Shortpay/Overpay flags are wrong whenever an invoice has been revised.
+**Critical rule (confirmed by Jihyun 2026-06-01):** payment classification uses **QBO arithmetic only**. TAB BANK's `Pmt Type` column **AND** TAB BANK's `Short Pay` / `Over Pay` amount columns are **IGNORED** because TAB BANK only knows pre-revision invoice amounts — both its classification flags and its amount columns are wrong whenever an invoice has been revised. **Source of truth = the AR balance + the actual deposit amount in TAB BANK.**
 
-**Phase 3 — Add new invoices from Schedule.** For each row in QBO Daily Schedule, add to AR with `PAID = 0`, `AGING = 0`, `AR_STATUS = "A.0~29"`.
+**Phase 3 — Add new invoices from Schedule.** For each row in QBO Daily Schedule, add to AR with `PAID = 0`, `AGING = 0`, `AR_STATUS = "A.0~29"`. Re-apply `ar_memos` (freeform notes) on top so per-row memos survive the rebuild.
 
 **Phase 4 — Age all rows.** Aging delta = calendar days between consecutive **build days** (not workbook dates):
 
@@ -152,11 +159,12 @@ def build_day(workbook_date):
     if workbook_date.weekday() == 4:  # Friday workbook
         return workbook_date + timedelta(days=3)   # built following Monday
     return workbook_date + timedelta(days=1)        # built next day
+# Post-holiday workbook: bump by N = number of skipped calendar days
 
 aging_delta = (build_day(today) - build_day(yesterday)).days
 ```
 
-**Friday workbooks bump aging by 3 (built Monday); all others by 1.**
+**Friday workbooks bump aging by 3 (built Monday); post-holiday workbooks bump by N; all others by 1.**
 
 **Phase 5 — TMS reconciliation.** Two semantic rules based on TMS column semantics (empirically reverse-engineered):
 
@@ -177,10 +185,12 @@ aging_delta = (build_day(today) - build_day(yesterday)).days
 
 ### 4.4 Edge cases
 
-- **Multi-day Monday pull.** On Monday she pulls a 4-day QBO Daily Collection range (Fri-Sat-Sun-Mon). Algorithm processes the entire range without filtering. Mon's portion gets re-fetched on Tuesday for the Mon workbook (single-day "in case of late updates").
+- **Multi-day Monday / post-holiday pull (confirmed by Jihyun 2026-06-01).** On Monday she pulls a 4-day QBO Daily Collection range (Fri-Sat-Sun-Mon). **Same pattern after any public holiday** — the post-holiday workbook covers the full holiday range as a single multi-day pull. Algorithm processes the entire range without filtering. Mon's portion gets re-fetched on Tuesday for the Mon workbook (single-day "in case of late updates").
 - **Warehouse invoices.** Not in TMS Reconcile. They appear in QBO Schedule and get added to AR via Phase 3; no ADJUSTMENT comparison. Manual entry path also exists for invoices that never get into QBO Schedule.
 - **TMS data errors.** Detected in Phase 5 by comparing TMS `TOTAL_AMT` vs QBO Schedule amount. Any discrepancy flagged in Exceptions worklist — no auto-threshold, defer to human judgment.
 - **NON-FACTORED customers.** TAB BANK shows their checks as `SUSPENSE / NON-FACTORED`. We don't use TAB BANK's customer matching for these; QBO Collection's customer field is authoritative. Detected by `DESC = "NON-FACTORED"` tag.
+- **TAB BANK posting errors (NEW — Jihyun 2026-06-01).** TAB BANK occasionally (a) assigns the wrong check# to an invoice, or (b) lists the same check# across multiple Pmt Type rows for one customer with conflicting status (Payment + Unapplied Cash + Overpay simultaneously). Detected by: a check# whose deposit amount doesn't match the AR balance for that invoice, OR the same check# appearing on multiple TAB BANK rows for the same customer with conflicting Pmt Type. Workflow: dashboard flags the row as "awaiting TAB BANK correction," provides a paste-ready email body, and excludes the bad row from posting until cleared. **Real-world example:** CHK# 65252 was applied to LM26030418F when it should have been applied to LM26030418F using CHK# 65282 — Jihyun emailed TAB BANK to correct (2026-05-21).
+- **Unapplied Cash (UC) reclassification (NEW — Jihyun 2026-06-01).** TAB BANK initially classifies a payment as Unapplied Cash when no remittance is on file. When Jihyun submits the remittance later (sometimes days later, depending on customer confirmation speed), TAB BANK lists the same check# again on the later date — with Payment status. The earlier UC row and the later Payment row are the **same money posting later**, not a duplicate. Dashboard should link them by check# + amount + customer and clear the original UC when its matching Payment row lands. Authoritative post date = the date TAB BANK reflects the Payment classification (i.e. the later date), not the original deposit date. **Real-world example:** check A0904306208 for SUSPENSE/UC001 — deposited 4/30 as UC, reposted 5/4 as Payment when remittance arrived.
 
 ### 4.5 Verification evidence
 
@@ -196,7 +206,7 @@ The build engine was empirically verified against 7 hand-built target workbooks 
 | 2026-05-18 | Mon (built Tue) | 98.97% | NON-FACTORED manual carry-forward |
 | 2026-05-19 | Tue | 99.93% | |
 
-Remaining ~0.05–7% delta is consistently **manual touches** (TMS data error sanity-checks, manual memo entries, customer-requested adjustments). The dashboard's role is to surface these for review, not to reproduce them deterministically.
+Remaining ~0.05–7% delta is consistently **manual touches** (TMS data error sanity-checks, manual memo entries, customer-requested adjustments, TAB BANK error corrections). The dashboard's role is to surface these for review AND give her the tools to fix them in place, not to reproduce them deterministically.
 
 Verification script: `tools/verify_ar_build.py`. Read-only, runs against all build folders.
 
@@ -213,14 +223,14 @@ The associate's job is **balancing the books on the receiving side**. The UI's p
 | Tab | Purpose |
 |---|---|
 | **Summary** | Reconciliation cockpit. Exceptions worklist top, KPIs strip, aging bar, period selector |
-| **AR Register** | Full register lookup (sortable, filterable, searchable) |
+| **AR Register** | Full register lookup (sortable, filterable, searchable, **inline-editable**) |
 | **Collections** | What left the AR yesterday (grouped by check#, with per-check reconciliation check) |
 | **Overdue** | Call list — AR rows with balance > 0 and aging > 30, sorted oldest first |
 | **Partial Pays** | Open invoices with PAID > 0 (the short-pay survivors) |
 | **New Invoices** | Today's Schedule additions |
 | **TMS** | TMS Reconcile rows that matched (no adjustment) |
 | **Adjustments** | TMS-driven amount changes |
-| **Suspense** | TAB BANK Unapplied Cash worklist |
+| **Suspense** | TAB BANK Unapplied Cash worklist (with UC reclassification linkage) |
 | **Customers** | Per-customer rollup with drill-in |
 
 ### 5.3 Multi-period views
@@ -236,13 +246,15 @@ Release 1 ships with Today + Week only. Month/Quarter/Year defer to Release 3 on
 | # | Category | Trigger | Action affordances |
 |---|---|---|---|
 | 1 | Bank suspense | TAB BANK Unapplied Cash row, debtor name not in customer DB | Match to customer + paste-ready snippet for TAB BANK portal |
-| 2 | Short pays | Open Balance > 0 after posting | Call/email customer · write-off · keep open |
-| 3 | Over pays | Open Balance < 0 after posting | Apply to another invoice · create credit memo |
+| 2 | Short pays | Open Balance > 0 after posting | Call/email customer · write-off · keep open · edit memo |
+| 3 | Over pays | Open Balance < 0 after posting | **Open Overpayment Workflow modal** (4-step guided process — see §6.1) |
 | 4 | Posting gaps | TAB BANK has check# but QBO has nothing posted for it (or vice versa) | Post in QBO · un-apply · hold |
 | 5 | Amount disagreements | TMS amount ≠ QBO Schedule amount (new); OR TMS amount ≠ yesterday's AR (old) | Show both, default to TMS, confirm or override |
 | 6 | Customer name mismatches | TAB BANK debtor name ≠ QBO customer for same check# | Confirm correct customer |
 | 7 | Missing TMS records | Invoice in QBO Schedule but not in TMS (warehouse?) | Add manually with custom amount · confirm warehouse |
 | 8 | NON-FACTORED informational | TAB BANK SUSPENSE/NON-FACTORED tag | Collapsed by default; no action needed |
+| **9** | **TAB BANK posting error** (NEW) | Same check# on multiple TAB BANK rows with conflicting status, OR check# applied to wrong invoice (deposit amount ≠ AR balance) | **Email TAB BANK to correct** (paste-ready) · mark "awaiting TAB BANK correction" · exclude from posting until cleared |
+| **10** | **UC awaiting reclassification** (NEW) | Prior-day UC row that hasn't been reposted yet — Jihyun is awaiting customer remittance confirmation | Informational; collapsed by default; auto-clears when matching Payment row appears (link by check# + customer + amount) |
 
 ### 5.5 Two-pane split (list tabs)
 
@@ -263,7 +275,31 @@ Every list tab uses a 2-pane layout: table left + detail panel right (`grid-temp
 - `app/mockups/ar-dashboard-collections-v3-compare.html` — Collections tab pattern
 - `app/mockups/ar-dashboard-overdue-v3.html` — Overdue tab two-pane split
 
-Mockups will need a refresh after this spec to lead with the Exceptions worklist (currently they emphasize KPI strip — the spec inverts that priority).
+**Mockup refresh needed (post 2026-06-01 spec update):**
+
+1. Lead with the Exceptions worklist (currently they emphasize KPI strip — the spec inverts that priority).
+2. Show inline-edit affordance on AR Register table rows.
+3. Show per-row memo input affordance.
+4. Mock up the Overpayment Workflow modal (§6.1).
+5. Add the TAB BANK posting error exception category (#9) with the paste-ready email body affordance.
+6. Show how UC rows link to their later Payment rows (lineage indicator).
+
+### 5.8 Inline editing & memos (NEW — Jihyun 2026-06-01)
+
+The associate needs to make manual corrections to AR rows — TAB BANK errors, custom memo notes for customer-specific situations, hand-applied adjustments. The dashboard must support edit-in-place on **every AR Register row**.
+
+**Editable fields:** `amount`, `paid`, `balance`, `memo`, `ar_status`.
+
+**Persistence:** edits write to Supabase (`ar_row_overrides` for column-level overrides; `ar_memos` for freeform memo text). Build engine respects these as overrides — won't clobber manual corrections on next morning's rebuild.
+
+**Audit trail:** every edit records `edited_by`, `edited_at`, `original_value`, `new_value` in Supabase. Edited rows show a small "edited" indicator (orange pip) in the table; hover or click reveals the audit history row.
+
+**Per-row memo specifically:** freeform text per AR row. Persists day-over-day automatically — does not require re-entry after rebuild. Used for things like:
+
+- **Customer-supplied invoice numbers** (e.g., MSC's `001260514`) as proof of approval. MSC used to print these on the remittance; recently switched to NGL's invoice numbers, so Jihyun now enters them manually for record-keeping.
+- Manual notes about partial-pay arrangements
+- Cross-references to credit memos (overpayment source)
+- Reminders for the next morning (*"call AP @ XYZ for memo number"*)
 
 ---
 
@@ -273,10 +309,39 @@ Mockups will need a refresh after this spec to lead with the Exceptions worklist
 |---|---|---|
 | Copy TAB BANK report | Summary quick actions + Collections header | Generates daily summary she pastes back to TAB BANK portal (format TBD with co-worker) |
 | Email customer | Overdue tab row action | Jumps to Invoice Sender pre-filled with customer + overdue invoices |
+| **Email TAB BANK** (NEW) | Exception category 9 row action | Generates paste-ready email body asking TAB BANK to correct the wrong check# / duplicate posting; flags row as "awaiting correction" |
 | Open invoice in QBO | Per-invoice row action | Deep link to QBO via existing QBO REST API integration |
+| **Edit AR row** (NEW) | Any AR Register row | Inline edit-in-place — fields, memo, status. Writes override to Supabase. Survives rebuild. |
+| **Edit memo** (NEW) | Any AR Register row | Per-row freeform memo input; persists day-over-day. |
 | Add manual entry | AR Register + Exceptions | Add credit memo / warehouse / custom row; persists day-over-day |
+| **Overpayment workflow** (NEW) | Exception category 3 row action | Opens guided 4-step modal — see §6.1 |
 | Mark suspense resolved | Suspense tab row action | Flag in Supabase so it doesn't reappear tomorrow |
-| Rebuild today | Settings + data bar | Re-fetch sources, rebuild workbook (same-day overwrite) |
+| Rebuild today | Settings + data bar | Re-fetch sources, rebuild workbook (same-day overwrite, preserves overrides) |
+
+### 6.1 Overpayment Workflow (NEW — Jihyun 2026-06-01)
+
+Overpayments are the most complex daily case. Per Jihyun: *"short payment processing is simple, but overpayment processing is very complex."*
+
+The dashboard provides a guided modal that walks the associate through her actual process.
+
+**Trigger:** Exception category 3 (Over pays) row clicked, OR a manually-detected overpayment from any AR row.
+
+**The 4 steps:**
+
+1. **Confirm overpayment.** Modal shows: TAB BANK deposit amount, AR balance, computed overpayment (= deposit − balance), source check#/ACH#, customer, and the original invoice. User confirms amount or adjusts.
+
+2. **Push to source invoice in TMS (or QBO).**
+   - For TMS-tracked invoices (import / export / van / brokerage): deep-link to TMS detail page (`/bc-detail/billing-info/{type}/{woNo}`); user adds the overpayment as a positive amount on the invoice.
+   - For **warehouse invoices**: deep-link to QBO invoice instead; same adjustment in QBO. (Jihyun explicitly called out warehouse cases use QBO, not TMS.)
+   - Dashboard tracks the push as a checkbox; user marks complete when done.
+
+3. **Create credit memo row.** Modal generates a new credit memo: amount = overpayment, customer = same, date = payment date. **Memo populated automatically** with: `Overpayment from [original invoice] · CHK# or ACH# [number] · [payment date]`. User can edit before confirm.
+
+4. **Persist to AR.** On confirm, the credit memo lands in `ar_manual_entries` (Supabase). Appears in tomorrow's AR Register as a negative-balance row, ready to be applied to a future invoice.
+
+**Real-world example referenced by Jihyun:** container MRKU8294420 / invoice PM25080065F (2026-08 cycle).
+
+**Cross-tool integration:** Step 2 uses existing TMS deep-link infrastructure (same as Invoice Sender → TMS Document tab). Step 4 writes to Supabase. No QBO API call required from the dashboard — the QBO update in step 2 happens via the deep-link (user does it in QBO directly).
 
 ---
 
@@ -315,7 +380,7 @@ The AR Dashboard becomes the **first tool to write into a unified Supabase schem
 
 | Phase | When | What |
 |---|---|---|
-| **Phase 1** — Schema design | During AR Dashboard R2 | Define canonical `ar_invoices`, `ar_payments`, `ar_exceptions`, `ar_daily_snapshots`, `ar_manual_entries` |
+| **Phase 1** — Schema design | During AR Dashboard R1 (R/W from day 1) | Define canonical `ar_invoices`, `ar_payments`, `ar_exceptions`, `ar_daily_snapshots`, `ar_manual_entries`, `ar_row_overrides`, `ar_memos` |
 | **Phase 2** — Wire other tools | Incremental (Merge Tool, Invoice Sender) | Each tool writes events to Supabase (`send_log`, `merge_log`) |
 | **Phase 3** — Q&A UI | After 2+ tools writing | Admin-only "Ask AI" tab + Claude API + schema-aware prompt |
 | **Phase 4** — BI dashboards | Optional | Pre-canned reports for common questions |
@@ -341,24 +406,36 @@ The AR Dashboard becomes the **first tool to write into a unified Supabase schem
 |---|---|---|---|
 | Mon | Mon morning | `AR_AGING_Fri_DD` (Friday's workbook) | Fri-Mon multi-day range |
 | Tue | Tue morning | `AR_AGING_Mon_DD` (Monday's workbook) | Mon single day (refreshed view) |
-| Wed-Fri | next morning | `AR_AGING_yesterday` | Yesterday single day |
+| Wed-Fri | Next morning | `AR_AGING_yesterday` | Yesterday single day |
+| Day after public holiday | Next business day morning | Workbook for the last business day before the holiday | Multi-day range covering the holiday |
 
-Sat/Sun: no build (rolls into Monday's pull).
+Sat/Sun **and public holidays**: no build (rolls into next business day's pull). Confirmed by Jihyun 2026-06-01.
 
-**Aging cadence:** delta = calendar days between consecutive build days. Friday workbook → 3-day bump (built Monday). All others → 1-day bump.
+**Aging cadence:** delta = calendar days between consecutive build days. Friday workbook → 3-day bump (built Monday). **Post-holiday workbook → bump by N days = number of skipped calendar days.** All other days → 1-day bump.
 
 ---
 
 ## 9. Open Questions
 
-Items pending co-worker / management confirmation, not blocking implementation start:
+### Resolved 2026-06-01 (via Jihyun)
 
-1. **TAB BANK report format** — exact columns + grouping for the "Copy TAB BANK report" action. Pending co-worker (off today).
-2. **Memo source** — on 5/18, 7 invoices got memo `"001260514"` that isn't in any source file. Suspected manual entry from a 6th source (TMS portal? customer email?). Pending co-worker.
-3. **TMS data error workflow** — when TMS `TOTAL_AMT` differs from QBO Schedule, what determines the "real" amount? Customer's usual rate? Manual gut-check? Pending co-worker.
-4. **"Unaccounted for" rows** — should the dashboard flag AR rows that don't appear in any source file (e.g., the `PM26050241F` credit memo from manual entry several days back)? Pending co-worker.
-5. **Manual write-offs** — does she ever write off uncollectible invoices, and where? Pending co-worker.
-6. **Management Q&A use cases** — what specific questions does management actually want to ask? Pending management input before Phase 3 of forward architecture.
+- ✅ **Memo source (e.g. `001260514`).** Customer (MSC in observed case) sends back their own invoice number for approved invoices; Jihyun records it in the memo field as proof of approval. They previously printed it on the remittance but recently switched back to NGL's invoice numbers. **Not a 6th data source — just per-customer correspondence captured manually via per-row memo input (§5.8).**
+- ✅ **Multi-day pull cadence.** Confirmed Mon Fri-to-Mon pull pattern; extended to all public holidays.
+- ✅ **TAB BANK Pmt Type / amount columns ignored.** Reconfirmed: source of truth = AR balance + actual deposit amount. TAB BANK's classification flags and amount columns are unreliable.
+- ✅ **TAB BANK posting errors happen.** Real-world examples documented (CHK 65252 → 65282 reassignment, multi-row check duplications). Workflow added (§5.4 cat 9 + §6 Email TAB BANK action).
+- ✅ **UC reclassification timing.** Same check# appears on later date as Payment; dashboard links by check#+customer+amount (§4.4 + §5.4 cat 10).
+- ✅ **Overpayment workflow.** Documented as 4-step guided modal (§6.1).
+- ✅ **Manual edits requirement.** Inline editing on every AR row with day-over-day persistence (§5.8).
+
+### Still open
+
+1. **TAB BANK report format** — exact columns + grouping for the "Copy TAB BANK report" action. Pending separate co-worker session.
+2. **TMS data error workflow specifics** — when TMS `TOTAL_AMT` differs from QBO Schedule, what determines the "real" amount? Customer's usual rate? Manual gut-check? Pending co-worker.
+3. **"Unaccounted for" rows.** Partially answered. Confirmed she wants flag + edit. The specific `PM26050241F` case is per-customer memo (resolved by §5.8). But should the dashboard *automatically* flag rows that don't appear in any source file (vs leaving them silent under "manual entry")? Pending co-worker preference.
+4. **Manual write-off workflow.** Implied possible via §5.8 inline editing — change `ar_status` to `WRITE_OFF`. But explicit lifecycle (when does she decide, how does it leave the AR, audit trail expectations) not yet confirmed. Pending co-worker.
+5. **Management Q&A use cases** — what specific questions does management actually want to ask? Pending management input before R4.
+6. **Overpayment step 2 verification (NEW).** Should the dashboard track the TMS/QBO push with a verifying re-fetch, or trust the user's "I've done it" checkbox? Tradeoff between automation rigor and modal complexity.
+7. **UC reclassification confidence (NEW).** Auto-link UC row to matching Payment by exact match on check# + customer + amount? Or require human confirm before clearing the original UC?
 
 ---
 
@@ -366,12 +443,12 @@ Items pending co-worker / management confirmation, not blocking implementation s
 
 | Release | Scope | Estimated effort |
 |---|---|---|
-| **R1** | Dashboard reads existing workbook · Reconciliation cockpit · Exceptions worklist · Today + Week views · Cross-tool actions (email, copy TAB BANK report) · Supabase reads for customer matching | Largest piece — most of the UI |
-| **R2** | Build engine · QBO API auto-fetch · Manual drops · Preview/save flow · Daily snapshot writes to Supabase | Smaller — pipeline already verified |
-| **R3** | Month/Quarter/Year views · Per-customer history pages · Older-invoices write-off workflow · Manual entries UI polish | Medium |
+| **R1** | Dashboard reads existing workbook · Reconciliation cockpit · Exceptions worklist (10 categories incl. TAB BANK errors + UC reclassification) · Today + Week views · Cross-tool actions (email customer, copy TAB BANK report, email TAB BANK on error) · **Inline editing + per-row memo persistence + Overpayment Workflow modal** · Supabase R/W (customers + edits + memos + manual entries + resolved exceptions) | Largest piece — full UI + Supabase R/W layer |
+| **R2** | Build engine · QBO API auto-fetch · Manual drops · Preview/save flow · Daily snapshot writes to Supabase · Build respects R1 inline edits + memos as overrides | Medium — pipeline already verified |
+| **R3** | Month/Quarter/Year views · Per-customer history pages · Older-invoices write-off workflow polish · Manual entries UI polish | Medium |
 | **R4** | Management "Ask AI" tab · Multi-tool Supabase event writes (Merge, Invoice Sender) · Schema-aware Claude prompt | Larger — strategic initiative |
 
-Each release ships independently. R1 standalone is already useful (saves time on lookup + surfacing exceptions). R2 unlocks the workflow automation win. R3 + R4 unlock the management-intelligence layer.
+Each release ships independently. R1 standalone is already useful (replaces lookup + surfaces exceptions + lets her FIX them in place). R2 unlocks the one-click morning build. R3 + R4 unlock the management-intelligence layer.
 
 ---
 
@@ -382,6 +459,7 @@ Each release ships independently. R1 standalone is already useful (saves time on
 - **Schema drift** — as tools evolve, the canonical schema needs disciplined migrations.
 - **Tool adoption** — Supabase writes must be a hard part of each tool, not optional, or the Q&A layer is useless.
 - **Workbook compatibility** — schema for the auxiliary sheets (COL, COL (INV), TMS, ADJUSTMENT) is reverse-engineered from observed workbooks; needs confirmation that future variations don't break the parser.
+- **Override drift** — R1's inline-edit overrides + memos must survive R2's build engine without producing stale ghosts. Need a clear lifecycle for when an override expires (e.g., once the underlying invoice is paid off / removed).
 
 ---
 
@@ -390,11 +468,16 @@ Each release ships independently. R1 standalone is already useful (saves time on
 **Release 1:**
 
 - [ ] Dashboard loads any well-formed `AR_AGING_*.xlsx` workbook
-- [ ] All 9 tabs render with real data
-- [ ] Exceptions worklist correctly classifies rows into the 8 categories
+- [ ] All 10 tabs render with real data
+- [ ] Exceptions worklist correctly classifies rows into the 10 categories
 - [ ] "Copy TAB BANK report" produces a valid clipboard string
 - [ ] Period selector switches Today / Week and updates all KPIs
 - [ ] Two-pane split works on every list tab with sensible empty states
+- [ ] **Inline edits on AR rows persist day-over-day** (survive a same-workbook re-load AND the R2 rebuild)
+- [ ] **Per-row memos persist** across sessions (load from Supabase on workbook load)
+- [ ] **Overpayment Workflow modal** completes all 4 steps and writes credit to `ar_manual_entries`
+- [ ] **TAB BANK posting error category** surfaces wrong-check# / duplicated rows with a paste-ready email body
+- [ ] **UC reclassification linkage** clears prior-day UC rows when matching Payment row appears (or marks for manual confirm — depending on Q7)
 
 **Release 2:**
 
@@ -402,6 +485,7 @@ Each release ships independently. R1 standalone is already useful (saves time on
 - [ ] Build modal flow works (drops, fetches, preview, save)
 - [ ] Daily snapshots persist to Supabase
 - [ ] Auto-locate finds yesterday's workbook with override path
+- [ ] R1 inline edits + memos survive rebuild (override layer respected)
 
 **Release 3+:**
 
