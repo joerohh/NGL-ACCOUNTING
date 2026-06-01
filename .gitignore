@@ -87,6 +87,14 @@ desktop/.empty-stdin
 
 # Customer / billing data (never commit — keep outside repo)
 docs/*.xlsx
+app/AR_AGING_assets/
+app/merge_audit/
+app/assets/images/AR_AGING_*.xlsx
+app/assets/images/APRIL CHARGE *.xlsx
+app/assets/images/merge-errors-*.xlsx
+
+# Pytest cache
+.pytest_cache/
 
 # Debug screenshots and HTML captures
 agent/debug/

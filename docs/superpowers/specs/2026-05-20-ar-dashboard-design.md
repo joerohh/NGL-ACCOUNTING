@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-A daily reconciliation cockpit for the AR associate. Replaces a ~1 hour/morning manual workbook-building routine with a single-click build + an exceptions worklist that surfaces every discrepancy between TAB BANK, QBO, TMS, and the AR register.
+A daily reconciliation cockpit for the AR associate. Replaces a ~3-4 hour/morning manual workbook-building routine with a single-click build + an exceptions worklist that surfaces every discrepancy between TAB BANK, QBO, TMS, and the AR register.
 
 **Primary user:** the AR associate. Comes in every morning, builds today's AR aging workbook, works through exceptions, sends collection emails, copies a daily TAB BANK summary report, posts payments.
 
@@ -39,7 +39,7 @@ A daily reconciliation cockpit for the AR associate. Replaces a ~1 hour/morning 
 
 ### Release 3 — Insights & Management Q&A (later)
 
-- Month/Quarter/Year views
+- Week/Month/Quarter/Year views
 - Per-customer history pages
 - "Ask AI" tab for management Q&A
 - Older-invoices write-off workflow
