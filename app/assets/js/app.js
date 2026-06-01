@@ -63,6 +63,10 @@ function showApp(user) {
   if (navUsers) {
     navUsers.style.display = (user && user.role === 'admin') ? '' : 'none';
   }
+  const navArDashboard = document.getElementById('navArDashboard');
+  if (navArDashboard) {
+    navArDashboard.style.display = (user && user.role === 'admin') ? '' : 'none';
+  }
 }
 
 async function doLogin() {
