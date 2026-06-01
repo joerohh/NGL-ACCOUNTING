@@ -6,6 +6,8 @@
 // Spec:  docs/superpowers/specs/2026-05-20-ar-dashboard-design.md
 
 import { arState } from '../../shared/state.js';
+import './ar-dashboard-model.js';
+import './ar-dashboard-loader.js';
 
 export function initArDashboard() {
   const view = document.getElementById('arDashboardView');
