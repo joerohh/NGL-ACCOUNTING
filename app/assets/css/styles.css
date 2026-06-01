@@ -1772,7 +1772,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .filter-tabs .tab.active .count { background: #fed7aa; color: #9a3412; }
 
 /* INV# letter highlight (shows the routing letter at pos 2) */
-#mergeToolViewV2 .inv-letter {
+.inv-letter {
   color: #ea580c; font-weight: 800;
 }
 
@@ -3413,4 +3413,26 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 .ar-summary-empty-card .ico { font-size:2rem; color:#16a34a; margin-bottom:10px; }
 .ar-summary-empty-card h3 { font-size:0.95rem; font-weight:800; color:#0f172a; margin-bottom:6px; }
 .ar-summary-empty-card p { font-size:0.82rem; color:#64748b; margin:0; }
+
+/* ── Warehouse invoice routing (Invoice Sender) ── */
+.container-cell.warehouse {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.wh-subject-block {
+  margin-top: 12px;
+}
+.wh-subject-block .wh-badge-detected {
+  background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; margin-left: 8px;
+}
+
+/* Preview lines under the Subject fields — show rendered output, no token jargon. */
+.subject-preview {
+  font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;
+}
+.subject-preview em { color: #475569; font-style: italic; }
 
