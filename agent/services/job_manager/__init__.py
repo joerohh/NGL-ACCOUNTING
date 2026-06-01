@@ -111,6 +111,11 @@ class SendResult:
         # pod_status tracks the D/O email leg: "sent", "failed", or "skipped".
         # status is the final outcome after both legs run.
         self.pod_status: str = ""
+        # Warehouse routing (set by send_warehouse flow).
+        # routing_type: 'warehouse' when the invoice's INV# pos-2 is 'W'.
+        self.routing_type: str = ""
+        self.warehouse_attachments: list = []
+        self.warehouse_failures: list = []
 
     def to_dict(self) -> dict:
         return {
@@ -129,6 +134,9 @@ class SendResult:
             "doSenderEmail": self.do_sender_email,
             "doSenderSource": self.do_sender_source,
             "podStatus": self.pod_status,
+            "routingType": self.routing_type,
+            "warehouseAttachments": self.warehouse_attachments,
+            "warehouseFailures": self.warehouse_failures,
         }
 
 
