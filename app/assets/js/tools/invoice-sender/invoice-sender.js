@@ -338,17 +338,6 @@ function invRenderSubject(template, inv) {
     .trim();
 }
 
-function _renderSubjectPreview(template, inv) {
-  return template
-    .replace(/\{invoice_number\}/g, inv.invoiceNumber || '')
-    .replace(/\{customer_name\}/g, inv.customerName || '')
-    .replace(/\{invoice_date\}/g, inv.invoiceDate || '')
-    .replace(/\{po_number\}/g, inv.poNumber || '')
-    .replace(/\{container_number\}/g, inv.containerNumber || '')
-    .replace(/\{bol_number\}/g, inv.bolNumber || '')
-    .trim();
-}
-
 function invUpdateSubjectTemplate(val) {
   invoiceState.subjectTemplate = val;
   invRefreshSubjectPreview();
@@ -368,7 +357,7 @@ function invRefreshSubjectPreview() {
   const sample = invoiceState.invoices.find(function(r) { return r.routingType !== 'warehouse'; }) || {
     invoiceNumber: 'LM26050100F', customerName: 'CMA CGM (America) LLC', containerNumber: 'MRKU8294420',
   };
-  const out = _renderSubjectPreview(tpl, sample);
+  const out = invRenderSubject(tpl, sample);
   el.innerHTML = 'Preview: <em>' + escHtml(out) + '</em>';
 }
 
@@ -379,7 +368,7 @@ function invRefreshWhSubjectPreview() {
   const sample = invoiceState.invoices.find(function(r) { return r.routingType === 'warehouse'; }) || {
     invoiceNumber: 'LW260515P01', customerName: 'Pacific Cold Storage Inc.', containerNumber: '',
   };
-  const out = _renderSubjectPreview(tpl, sample);
+  const out = invRenderSubject(tpl, sample);
   el.innerHTML = 'Preview: <em>' + escHtml(out) + '</em>';
 }
 
