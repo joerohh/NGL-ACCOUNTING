@@ -1276,6 +1276,17 @@ function renderFetching() {
     visibleRows = visibleRows.filter(r => r.routingType === v2State.routingTypeFilter);
   }
 
+  // Apply search filter
+  if (v2State.searchQuery) {
+    const q = v2State.searchQuery.toLowerCase();
+    visibleRows = visibleRows.filter(r =>
+      (r.containerNumber || '').toLowerCase().includes(q)
+      || (r.invoiceNumber || '').toLowerCase().includes(q)
+      || (r.workOrderNumber || '').toLowerCase().includes(q)
+      || (r.customer || '').toLowerCase().includes(q)
+    );
+  }
+
   const bodyRows = visibleRows.map(row => {
     const i = v2State.rows.indexOf(row);
     return fetchRowMarkup(i, row, {
@@ -1301,7 +1312,9 @@ function renderFetching() {
       ${renderFetchingProgressStrip()}
     </div>
     <div class="toolbar">
-      <input type="text" class="search" placeholder="Search containers…" />
+      <input type="text" class="search" placeholder="Search containers, invoices, WO#, customer…"
+             value="${escHtml(v2State.searchQuery)}"
+             oninput="window.v2HandleFetchSearch(this.value)" />
       <span class="filter-meta" id="v2FetchToolbarMeta">${escHtml(cur)}</span>
     </div>
     <div class="table-wrap">
@@ -2446,6 +2459,27 @@ function v2HandleReadyTab(tab) {
 function v2HandleReadySearch(value) {
   v2State.searchQuery = value;
   setStateV2('ready');
+  restoreSearchFocus();
+}
+
+function v2HandleFetchSearch(value) {
+  v2State.searchQuery = value;
+  setStateV2('fetching');
+  restoreSearchFocus();
+}
+window.v2HandleFetchSearch = v2HandleFetchSearch;
+
+// After a re-render that destroys the search input, put the cursor back where
+// it was. setStateV2 rebuilds the whole DOM, so every keystroke would otherwise
+// drop focus and the user couldn't type a second character.
+function restoreSearchFocus() {
+  requestAnimationFrame(() => {
+    const input = document.querySelector('.merge-tool .search, #mergeToolViewV2 .search');
+    if (!input) return;
+    input.focus();
+    const len = input.value.length;
+    input.setSelectionRange(len, len);
+  });
 }
 function v2ToggleAllReady(checked) {
   // M4: errored rows now toggle with the master too (they can be opted-in for invoice-only).
@@ -2810,7 +2844,11 @@ function rerenderFetchRow(rowIdx) {
     // Row isn't in the current view (e.g. user filtered to Fetched/Failed tab and this row
     // just changed state). Trigger a full re-render so the row appears in the right tab.
     if (v2State.subMode === 'fetching' && (v2State.activeTab === 'fetched' || v2State.activeTab === 'failed')) {
+      // Preserve search input focus across the re-render — SSE events fire continuously
+      // and would otherwise yank the cursor out every time a row settles.
+      const searchWasFocused = document.activeElement?.classList?.contains('search');
       setStateV2('fetching');
+      if (searchWasFocused) restoreSearchFocus();
     }
     return;
   }
