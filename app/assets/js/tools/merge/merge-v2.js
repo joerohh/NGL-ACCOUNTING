@@ -29,6 +29,7 @@ const v2State = {
   sortMode: 'excel',
   activeTab: 'all',
   routingTypeFilter: 'all', // 'all' | 'import' | 'export' | 'warehouse' | 'unknown'
+  customerFilter: 'all',    // 'all' | <exact customer name from row.customer>
   showAllInSuccess: false,
   // M3: fetch + sidebar
   jobId: null,
@@ -122,6 +123,7 @@ export function setStateV2(name) {
     v2State.sortMode = 'excel';
     v2State.activeTab = 'all';
     v2State.routingTypeFilter = 'all';
+    v2State.customerFilter = 'all';
     v2State.showAllInSuccess = false;
     v2State.fetchProgress = 0;
     v2State.fetchTotal = 0;
@@ -193,6 +195,7 @@ async function handleExcelChange(e) {
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   v2State.activeTab = hasIssues ? 'issues' : 'all';
   v2State.routingTypeFilter = 'all';
+  v2State.customerFilter = 'all';
   v2State.searchQuery = '';
   v2State.sortMode = 'excel';
   v2State.showAllInSuccess = false;
@@ -441,6 +444,9 @@ function getVisibleRows() {
   if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
     rows = rows.filter(r => r.routingType === v2State.routingTypeFilter);
   }
+  if (v2State.customerFilter && v2State.customerFilter !== 'all') {
+    rows = rows.filter(r => r.customer === v2State.customerFilter);
+  }
   if (v2State.searchQuery) {
     const q = v2State.searchQuery.toLowerCase();
     rows = rows.filter(r => r.containerNumber.toLowerCase().includes(q));
@@ -486,6 +492,33 @@ function v2SetRoutingTypeFilter(key) {
   setStateV2('review');
 }
 window.v2SetRoutingTypeFilter = v2SetRoutingTypeFilter;
+
+// ── Customer dropdown filter ──
+// Populated dynamically from manifest's unique customers, sorted A-Z, with
+// per-customer row counts. Composes with the routing-type filter + search.
+function renderCustomerDropdown() {
+  const counts = new Map();
+  for (const r of v2State.rows) {
+    if (!r.customer) continue;
+    counts.set(r.customer, (counts.get(r.customer) || 0) + 1);
+  }
+  const customers = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const selected = v2State.customerFilter || 'all';
+  const totalRows = v2State.rows.length;
+  return `<select class="customer-select" onchange="window.v2SetCustomerFilter(this.value)" title="Filter by customer">
+    <option value="all" ${selected === 'all' ? 'selected' : ''}>All customers (${totalRows})</option>
+    ${customers.map(([name, n]) => `
+      <option value="${escHtml(name)}" ${selected === name ? 'selected' : ''}>${escHtml(name)} (${n})</option>
+    `).join('')}
+  </select>`;
+}
+
+window.v2SetCustomerFilter = function (value) {
+  v2State.customerFilter = value;
+  // Match the pattern used by v2SetRoutingTypeFilter — re-render via setStateV2
+  // using whatever sub-state we're currently in (review or ready).
+  setStateV2(v2State.subMode || 'review');
+};
 
 function sortRows(rows, mode) {
   const out = rows.slice();
@@ -898,6 +931,7 @@ function renderReviewSuccess() {
     expanded = `
       <div style="margin-top:24px;">
         <div class="toolbar">
+          ${renderCustomerDropdown()}
           <input type="text" class="search" placeholder="Search containers…"
                  value="${escHtml(v2State.searchQuery)}"
                  oninput="window.v2HandleSearch(this.value)" />
@@ -995,6 +1029,7 @@ function renderReviewWithIssues() {
     </div>
 
     <div class="toolbar">
+      ${renderCustomerDropdown()}
       <input type="text" class="search" placeholder="Search containers…"
              value="${escHtml(v2State.searchQuery)}"
              oninput="window.v2HandleSearch(this.value)" />
@@ -1128,6 +1163,11 @@ function renderReady() {
   else if (v2State.activeTab === 'queued') visibleRows = queued;
   else visibleRows = all;
 
+  // Apply customer filter (composes with the active tab)
+  if (v2State.customerFilter && v2State.customerFilter !== 'all') {
+    visibleRows = visibleRows.filter(r => r.customer === v2State.customerFilter);
+  }
+
   // Apply search
   if (v2State.searchQuery) {
     const q = v2State.searchQuery.toLowerCase();
@@ -1209,6 +1249,7 @@ function renderReady() {
 
   const toolbarHtml = `
     <div class="toolbar">
+      ${renderCustomerDropdown()}
       <input type="text" class="search" placeholder="Search containers…"
              value="${escHtml(v2State.searchQuery)}"
              oninput="window.v2HandleReadySearch(this.value)" />
