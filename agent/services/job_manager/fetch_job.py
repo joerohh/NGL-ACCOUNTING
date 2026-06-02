@@ -26,6 +26,13 @@ def _is_warehouse_row(invoice_number: str) -> bool:
     return invoice_number[1].upper() == "W"
 
 
+def _is_van_row(invoice_number: str) -> bool:
+    """Mirror of routingDecisionFor() — van = INV# position-2 is 'V'."""
+    if not invoice_number or len(invoice_number) < 2:
+        return False
+    return invoice_number[1].upper() == "V"
+
+
 class FetchJobMixin:
     """Handles fetch job lifecycle: create, start, process containers via QBO API."""
 
@@ -103,7 +110,10 @@ class FetchJobMixin:
 
         # INV# pos-2 primary
         inv_letter = inv_no[1] if len(inv_no) >= 2 else ""
-        if inv_letter == "M":
+        if inv_letter == "V":
+            doc_types = ("POD", "POL", "BL", "IT", "ITE")
+            wo_kind = "van (by INV#)"
+        elif inv_letter == "M":
             doc_types = ("POD", "BL", "POL", "IT")
             wo_kind = "import (by INV#)"
         elif inv_letter == "E":
@@ -328,6 +338,13 @@ class FetchJobMixin:
                     "containerNumber": container.container_number,
                     "type": "invoice",
                 })
+
+        # Step 2.4: Van rows get tagged here but do NOT short-circuit — they
+        # continue through the normal QBO POD + TMS fallback path below. The
+        # TMS chain selection happens in _tms_pod_fallback via the
+        # inv_letter == "V" branch (POD → POL → BL → IT → ITE).
+        if _is_van_row(container.invoice_number):
+            result.routing_type = "van"
 
         # Step 2.5: Warehouse rows short-circuit here — after the invoice PDF
         # is on disk, but before any POD/BL/POL/TMS-fallback logic.
