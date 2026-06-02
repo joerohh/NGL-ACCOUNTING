@@ -102,6 +102,36 @@ class SendWarehouseMixin:
                 })
                 return
 
+            # Build the recipient lists up front so the test-mode preview shows
+            # exactly who the email would go to.
+            to = normalize_email_list(customer.get("emails", []))
+            cc = normalize_email_list(customer.get("ccEmails", []))
+            bcc = normalize_email_list(customer.get("bccEmails", []))
+
+            # Populate the result so the approval prompt + audit log have the
+            # recipient list and attachment manifest even if the user skips.
+            result.to_emails = to
+            result.cc_emails = cc
+            result.bcc_emails = bcc
+            result.subject = invoice.subject
+            attachments_display = (
+                [f"invoice_{invoice.invoice_number}.pdf"]
+                + [a["fileName"] for a in successes]
+            )
+            result.attachments_found = attachments_display
+
+            # Test mode: pause for user approval before sending. Re-uses the
+            # exact same hook used by send_qbo_api / send_oec so the existing
+            # approval UI works without changes.
+            if job.test_mode:
+                approved = await self._wait_for_approval(
+                    job, invoice, result, index,
+                    to, cc, bcc, invoice.subject,
+                    attachments_display=attachments_display,
+                )
+                if not approved:
+                    return
+
             # Step 4 — send via Gmail SMTP with original filenames + MIME from extension.
             email_attachments = [
                 {"filename": invoice_pdf_path.name, "data": invoice_pdf_path.read_bytes()},
@@ -113,10 +143,6 @@ class SendWarehouseMixin:
                         "filename": att["fileName"], "data": local.read_bytes(),
                     })
 
-            to = normalize_email_list(customer.get("emails", []))
-            cc = normalize_email_list(customer.get("ccEmails", []))
-            bcc = normalize_email_list(customer.get("bccEmails", []))
-
             send_outcome = await self._email_sender.send_invoice_email(
                 to=to, cc=cc, bcc=bcc,
                 subject=invoice.subject,
@@ -126,10 +152,6 @@ class SendWarehouseMixin:
 
             if send_outcome.get("sent"):
                 result.status = "sent"
-                result.to_emails = to
-                result.cc_emails = cc
-                result.bcc_emails = bcc
-                result.subject = invoice.subject
                 result.timestamp = datetime.now(timezone.utc).isoformat()
                 await self._emit_send(job, "invoice_sent", {
                     "invoiceNumber": invoice.invoice_number,

@@ -1098,6 +1098,10 @@
     <div class="v64-ps-head">
       <strong id="invPsTitle">Sending invoices<span class="v64-dots"></span></strong>
       <span class="v64-ps-pct"><span id="invPsFraction">0 / 0</span> · <span class="v64-ps-pct-num" id="invPsPct">0% complete</span></span>
+      <span class="v64-ps-actions" style="margin-left:12px; display:inline-flex; gap:6px;">
+        <button type="button" class="v64-ps-btn" id="invPsPauseBtn" onclick="invPauseSendJob()" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:4px 10px; font-size:0.76rem; font-weight:600; color:#475569; cursor:pointer;">Pause</button>
+        <button type="button" class="v64-ps-btn" id="invPsCancelBtn" onclick="invCancelSendJob()" style="background:#fff; border:1px solid #fecaca; border-radius:6px; padding:4px 10px; font-size:0.76rem; font-weight:600; color:#991b1b; cursor:pointer;">Cancel</button>
+      </span>
     </div>
     <div class="v64-ps-bar-bg"><div class="v64-ps-bar-fg" id="invPsBar" style="width:0%"></div></div>
     <div class="v64-ps-meta">
