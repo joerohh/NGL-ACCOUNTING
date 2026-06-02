@@ -1,0 +1,9 @@
+{
+  "name": "ngl-accounting-tools",
+  "private": true,
+  "type": "module",
+  "description": "Local Node tooling for AR build engine verification (not bundled with the app).",
+  "dependencies": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}
