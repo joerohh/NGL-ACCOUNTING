@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Merge Tool — Filter Mockup</title>
+<style>
+  :root {
+    --ngl-orange: #ea580c;
+    --ngl-orange-soft: #fff7ed;
+    --ngl-orange-border: #fed7aa;
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --ink-3: #64748b;
+    --ink-4: #94a3b8;
+    --line: #e2e8f0;
+    --line-2: #cbd5e1;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --err: #dc2626;
+    --queue: #94a3b8;
+    --blue: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 14px; }
+  .page { max-width: 1400px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  /* Header */
+  .header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  .header .crumb { color: var(--ink-4); font-size: 13px; }
+  .subhead { color: var(--ink-3); font-size: 13px; margin-bottom: 22px; }
+
+  /* View toggle */
+  .view-toggle { display: inline-flex; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 3px; margin-bottom: 18px; }
+  .view-toggle button { background: transparent; border: 0; padding: 6px 14px; font-size: 13px; color: var(--ink-3); border-radius: 6px; cursor: pointer; font-weight: 500; }
+  .view-toggle button.active { background: var(--ngl-orange); color: #fff; }
+
+  /* Type chips row — each chip leads with the identifying name, then the WILL FETCH pill */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #fff; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--ink-2); cursor: pointer; transition: background-color 120ms, border-color 120ms, color 120ms, box-shadow 120ms; user-select: none; }
+  .chip:hover { background: #f1f5f9; border-color: var(--line-2); }
+  .chip .chip-name { font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; }
+  .chip .count { color: var(--ink-4); font-weight: 500; font-size: 12.5px; }
+  .chip.active { background: var(--ngl-orange); border-color: var(--ngl-orange); color: #fff; box-shadow: 0 1px 2px rgba(234, 88, 12, 0.25); }
+  .chip.active .chip-name { color: #fff; }
+  .chip.active .count { color: rgba(255,255,255,0.85); }
+  .chip.active .will-chip { background: rgba(255,255,255,0.22); color: #fff; }
+
+  /* Action buttons (used in status-tabs-row .actions-wrap) */
+  .secondary-btn { background: #fff; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: background-color 120ms, border-color 120ms; font-family: inherit; }
+  .resume-btn { color: var(--blue); border: 1px solid #bfdbfe; }
+  .resume-btn:hover { background: #eff6ff; border-color: #93c5fd; }
+  .retry-btn  { color: var(--err); border: 1px solid #fecaca; }
+  .retry-btn:hover { background: #fef2f2; border-color: #fca5a5; }
+  .primary-btn { background: var(--ngl-orange); color: #fff; border: 0; padding: 9px 18px; font-size: 13.5px; font-weight: 600; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 1px 2px rgba(234,88,12,0.25); transition: background-color 120ms; font-family: inherit; }
+  .primary-btn:hover { background: #c2410c; }
+  .primary-btn:disabled { background: var(--line-2); color: var(--ink-3); cursor: not-allowed; box-shadow: none; }
+  .primary-btn .count-badge { background: rgba(255,255,255,0.22); padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+  .primary-btn:disabled .count-badge { background: rgba(0,0,0,0.08); }
+
+  /* Pause + Cancel buttons for the fetching state */
+  .pause-btn { background: #fff; color: var(--ink-2); border: 1px solid var(--line-2); padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; transition: background-color 120ms, border-color 120ms; }
+  .pause-btn:hover { background: #f1f5f9; border-color: var(--ink-4); }
+  .cancel-btn { background: #fff; color: var(--err); border: 1px solid #fca5a5; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; transition: background-color 120ms, border-color 120ms; }
+  .cancel-btn:hover { background: #fef2f2; border-color: var(--err); }
+
+  /* Filter bar */
+  .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .filter-bar .search-wrap { flex: 1 1 220px; position: relative; min-width: 180px; }
+  .filter-bar .search { width: 100%; padding: 8px 12px 8px 32px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; color: var(--ink); background: #fff; }
+  .filter-bar .search:focus { outline: none; border-color: var(--ngl-orange); box-shadow: 0 0 0 3px rgba(234,88,12,0.12); }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-4); pointer-events: none; }
+  .filter-bar select { padding: 8px 28px 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: #fff; color: var(--ink); cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'><path d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat: no-repeat; background-position: right 10px center; }
+  .filter-bar select:focus { outline: none; border-color: var(--ngl-orange); }
+  .filter-bar .label { color: var(--ink-3); font-size: 12px; font-weight: 500; margin-right: 2px; }
+  .filter-bar .meta { color: var(--ink-3); font-size: 12px; margin-left: auto; }
+  .filter-bar .reset { background: transparent; border: 0; color: var(--ink-3); font-size: 12px; cursor: pointer; padding: 6px 10px; border-radius: 6px; }
+  .filter-bar .reset:hover { background: #f1f5f9; color: var(--ink); }
+
+  /* Status tabs — sized so the container height matches the action buttons (~34px) */
+  .status-tabs { display: flex; gap: 4px; padding: 2px; background: #f1f5f9; border-radius: 8px; margin-bottom: 14px; width: fit-content; }
+  .status-tabs button { background: transparent; border: 0; padding: 7px 14px; font-size: 13px; color: var(--ink-3); border-radius: 6px; cursor: pointer; font-weight: 500; transition: background-color 120ms, color 120ms; display: inline-flex; align-items: center; gap: 6px; }
+  .status-tabs button:hover { color: var(--ink); }
+  .status-tabs button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .status-tabs .badge { background: #e2e8f0; color: var(--ink-2); font-size: 11px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .status-tabs button.active.errors .badge { background: #fee2e2; color: var(--err); }
+  .status-tabs button.active.queued .badge { background: #e2e8f0; color: var(--ink-3); }
+
+  /* Table */
+  .table-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 14px; background: #f8fafc; border-bottom: 1px solid var(--line); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--ink); }
+  .inv-letter { color: var(--ngl-orange); font-weight: 700; }
+  .check-col { width: 28px; padding-left: 16px; }
+  .check-col input { accent-color: var(--ngl-orange); cursor: pointer; }
+  th.check-col input { transform: translateY(1px); }
+
+  /* Sortable column headers */
+  th.sortable { cursor: pointer; user-select: none; transition: color 120ms, background-color 120ms; }
+  th.sortable:hover { color: var(--ink); background: #f1f5f9; }
+  th.sortable .arrow { display: inline-block; margin-left: 4px; font-size: 10px; color: var(--ink-4); transition: color 120ms, transform 120ms; }
+  th.sortable.sort-active { color: var(--ngl-orange); background: var(--ngl-orange-soft); }
+  th.sortable.sort-active .arrow { color: var(--ngl-orange); }
+  tbody#rows { transition: opacity 140ms ease; }
+  tbody#rows.fade { opacity: 0; }
+  tr.row-err { background: #fef2f2; }
+  tr.row-queue { background: #f8fafc; }
+  tr.row-skipped { opacity: 0.55; background: #f1f5f9; }
+
+  /* Pills */
+  .will-chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+  .will-chip.import   { background: #ffedd5; color: #c2410c; }
+  .will-chip.export   { background: #dbeafe; color: #1d4ed8; }
+  .will-chip.warehouse{ background: #e5e7eb; color: #475569; }
+  .will-chip.van      { background: #fef3c7; color: #92400e; }
+  .will-chip.unknown  { background: #f3f4f6; color: #6b7280; }
+
+  .doc-pill { display: inline-block; padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; margin-right: 4px; letter-spacing: 0.02em; }
+  .doc-pill.ok    { background: #dcfce7; color: #15803d; }
+  .doc-pill.miss  { background: #fee2e2; color: var(--err); }
+  .doc-pill.fb    { background: #fef3c7; color: #92400e; }
+  .doc-pill.queue { background: #e2e8f0; color: var(--ink-3); }
+
+  .status-text { font-size: 12px; }
+  .status-text.ok    { color: var(--ok); }
+  .status-text.err   { color: var(--err); }
+  .status-text.queue { color: var(--queue); }
+  .status-text.fb    { color: var(--warn); }
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .status-dot.ok    { background: var(--ok); }
+  .status-dot.err   { background: var(--err); }
+  .status-dot.queue { background: var(--queue); }
+  .status-dot.fb    { background: var(--warn); }
+
+  /* Empty state */
+  .empty { padding: 60px 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
+  .empty strong { color: var(--ink); }
+
+  /* Read-only sidebar — CSS copied from app/assets/css/styles.css (v2DetailSidebar) */
+  .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 180ms ease; z-index: 200; }
+  .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+  .detail-sidebar { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 90vw; background: #fff; border-left: 1px solid #e2e8f0; box-shadow: -8px 0 24px rgba(0,0,0,0.08); z-index: 201; display: none; flex-direction: column; }
+  .detail-sidebar.open { display: flex; }
+  .ds-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0; }
+  .ds-icon { width: 36px; height: 36px; border-radius: 8px; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; }
+  .ds-icon.fetching { background: #fff7ed; color: var(--ngl-orange); }
+  .ds-header .text { flex: 1; min-width: 0; }
+  .ds-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
+  .ds-subtitle { font-size: 0.8rem; color: #64748b; margin-top: 2px; font-family: 'SF Mono', Consolas, monospace; }
+  .ds-close { margin-left: auto; background: none; border: none; cursor: pointer; color: #94a3b8; padding: 6px; border-radius: 6px; font-size: 1.4rem; line-height: 1; font-family: inherit; }
+  .ds-close:hover { color: #1e293b; background: #fff; }
+
+  .panel-empty-banner { display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px; background: #fef9c3; border-bottom: 1px solid #fde047; color: #854d0e; font-size: 0.82rem; line-height: 1.4; }
+  .panel-empty-banner svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+  .panel-empty-banner.fetching { background: #fff7ed; border-bottom-color: #fed7aa; color: #9a3412; }
+
+  .ds-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .ds-section { margin-bottom: 22px; }
+  .ds-section:last-child { margin-bottom: 0; }
+  .ds-section-label { font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+
+  .happened-block { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 12px 14px; }
+  .happened-block .title { font-size: 0.86rem; font-weight: 600; color: #b91c1c; margin-bottom: 4px; }
+  .happened-block .body { font-size: 0.8rem; color: #7f1d1d; line-height: 1.5; }
+  .happened-block.fetching { background: #fff7ed; border-color: #fed7aa; }
+  .happened-block.fetching .title { color: #9a3412; }
+  .happened-block.fetching .body  { color: #7c2d12; }
+
+  .routing-trace { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; font-size: 0.82rem; }
+  .routing-trace .step { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+  .routing-trace .step:last-child { margin-bottom: 0; }
+  .routing-trace .step .marker { flex-shrink: 0; font-weight: 700; }
+  .routing-trace .step.success  .marker { color: #16a34a; }
+  .routing-trace .step.fallback .marker { color: #d97706; }
+  .routing-trace .step.fail     .marker { color: #dc2626; }
+  .routing-trace .step.note     .marker { color: #94a3b8; }
+  .routing-trace .step.active   .marker { color: var(--ngl-orange); }
+  .routing-trace .step .text { color: #475569; }
+  .routing-trace .step.active .text { color: #9a3412; font-weight: 600; }
+  .routing-trace code { font-family: 'SF Mono', Consolas, monospace; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 0.78rem; color: #1e293b; }
+
+  .retry-api-btn { width: 100%; padding: 10px 16px; background: #ea580c; color: white; border: none; border-radius: 8px; font-size: 0.88rem; font-weight: 700; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .retry-api-btn:hover { background: #c2410c; }
+  .retry-api-btn:disabled { background: #fed7aa; cursor: not-allowed; }
+
+  .resolve-divider { text-align: center; margin: 14px 0; font-size: 0.74rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; position: relative; }
+  .resolve-divider::before, .resolve-divider::after { content: ''; position: absolute; top: 50%; width: calc(50% - 70px); height: 1px; background: #e2e8f0; }
+  .resolve-divider::before { left: 0; }
+  .resolve-divider::after  { right: 0; }
+  .resolve-divider span { background: #fff; padding: 0 8px; position: relative; }
+
+  .ds-upload { display: block; border: 2px dashed #fca5a5; border-radius: 10px; background: #fef2f2; padding: 22px 18px; text-align: center; cursor: pointer; }
+  .ds-upload:hover { border-color: #dc2626; background: #fee2e2; }
+  .ds-upload .icon { font-size: 2rem; color: #dc2626; }
+  .ds-upload .title { font-size: 0.9rem; font-weight: 600; color: #b91c1c; margin-top: 4px; }
+  .ds-upload .help  { font-size: 0.78rem; color: #b91c1c; margin-top: 4px; opacity: 0.85; }
+  .ds-upload.disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none; }
+
+  .ds-footer { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0; }
+  .skip-link { font-size: 0.82rem; color: #64748b; background: none; border: none; cursor: pointer; text-decoration: underline; font-family: inherit; }
+  .skip-link:hover { color: #dc2626; }
+  .skip-link:disabled { opacity: 0.45; cursor: not-allowed; text-decoration: none; }
+  .nav-btn { background: white; border: 1px solid #e2e8f0; border-radius: 7px; padding: 7px 12px; font-size: 0.82rem; cursor: pointer; color: #475569; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; }
+  .nav-btn:hover { border-color: #ea580c; color: #ea580c; }
+  .nav-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .next-issue-btn { margin-left: auto; background: #ea580c; color: white; border: none; padding: 11px 22px; border-radius: 8px; font-size: 0.92rem; font-weight: 700; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(234,88,12,0.25); }
+  .next-issue-btn:hover { background: #c2410c; }
+  .next-issue-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+  .next-issue-btn .count-badge { background: rgba(255,255,255,0.22); padding: 1px 8px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid #e2e8f0; border-top-color: var(--ngl-orange); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Fetching view — interactive rows + spinner on in-flight row */
+  tr.row-fetching { background: #fff7ed; }
+  tr.row-fetching .mono { color: var(--ngl-orange); font-weight: 600; }
+  tr.row-clickable { cursor: pointer; }
+  tr.row-clickable:hover { background: #f8fafc; }
+  tr.row-clickable.row-fetching:hover { background: #ffedd5; }
+  tr.row-clickable.row-err:hover { background: #fee2e2; }
+  tr.row-clickable.row-queue:hover { background: #f1f5f9; }
+
+  /* Progress strip — when fetching, fills the available width with a big visible bar */
+  .progress-strip { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--ngl-orange-soft); border: 1px solid var(--ngl-orange-border); border-radius: 10px; font-size: 13px; color: #9a3412; width: 100%; }
+  .progress-strip .progress-main { font-weight: 700; color: #7c2d12; flex-shrink: 0; }
+  .progress-strip .progress-bar { flex: 1; height: 8px; background: #ffedd5; border-radius: 999px; overflow: hidden; min-width: 120px; }
+  .progress-strip .progress-bar > div { height: 100%; background: var(--ngl-orange); transition: width 200ms; }
+  .progress-strip .progress-stat { color: #9a3412; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; flex-shrink: 0; white-space: nowrap; }
+  .progress-strip .progress-stat strong { color: #7c2d12; }
+  .progress-strip .sep { color: var(--ngl-orange-border); flex-shrink: 0; }
+
+  /* De-emphasized status tab (pre-fetch) */
+  .status-tabs button.muted { color: var(--ink-4); cursor: not-allowed; }
+  .status-tabs button.muted:hover { color: var(--ink-4); }
+  .status-tabs button.muted .badge { background: #f1f5f9; color: var(--ink-4); }
+  /* Flex layout: tabs left · progress fills middle (when fetching) · actions right */
+  .status-tabs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: nowrap; }
+  .status-tabs-row .actions-wrap { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
+  .status-tabs-row .progress-strip { flex: 1; }
+
+  /* De-emphasized status tab (pre-fetch) */
+  .status-tabs button.muted { color: var(--ink-4); cursor: not-allowed; }
+  .status-tabs button.muted:hover { color: var(--ink-4); }
+  .status-tabs button.muted .badge { background: #f1f5f9; color: var(--ink-4); }
+
+  /* Notes box */
+  .notes { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-top: 24px; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+  .notes h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+  .notes code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .notes ul { margin: 4px 0 0; padding-left: 18px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1>Merging Tool</h1>
+    <span class="crumb">Filter mockup · Option C (Type + Customer)</span>
+  </div>
+  <p class="subhead">Click chips, change Customer / Sort, type in Search. Filters compose — Type AND Customer AND Status AND Search all apply at once. Try switching between Pre-fetch and Post-fetch views.</p>
+
+  <div class="view-toggle" role="tablist">
+    <button data-view="pre" class="active">Pre-fetch (Review)</button>
+    <button data-view="fetching">Fetching (sim)</button>
+    <button data-view="post">Post-fetch (Ready)</button>
+  </div>
+
+
+  <!-- Type chips — each chip embeds the WILL FETCH doc-type pill -->
+  <div class="chip-row" id="typeChips"></div>
+
+  <!-- Filter bar: Customer + Search + Reset -->
+  <div class="filter-bar">
+    <select id="custSelect" title="Filter by customer"></select>
+    <div class="search-wrap">
+      <span class="search-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 12a5 5 0 100-10 5 5 0 000 10zM14 14l-3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </span>
+      <input type="text" id="searchInput" class="search" placeholder="Search container, invoice, WO, or customer…" />
+    </div>
+    <button class="reset" id="resetBtn">Reset</button>
+    <span class="meta" id="filterMeta"></span>
+  </div>
+
+  <!-- Status tabs + centered progress strip (when fetching) + action buttons -->
+  <div class="status-tabs-row">
+    <div class="status-tabs" id="statusTabs">
+      <button data-status="all" class="active">All <span class="badge" id="cntAll">0</span></button>
+      <button data-status="errors" class="errors">Errors <span class="badge" id="cntErr">0</span></button>
+      <button data-status="queued" class="queued">Queued <span class="badge" id="cntQ">0</span></button>
+    </div>
+    <div class="progress-strip" id="progressStrip" style="display:none;">
+      <div class="spinner"></div>
+      <span class="progress-main"><span id="fProgress">12</span> / <span id="fTotal">33</span></span>
+      <div class="progress-bar"><div id="fBar" style="width:36%;"></div></div>
+      <span class="progress-stat"><strong id="fElapsed">00:42</strong> elapsed</span>
+      <span class="sep">·</span>
+      <span class="progress-stat">~<strong id="fEta">01:23</strong> left</span>
+      <span class="sep">·</span>
+      <span class="progress-stat"><strong id="fRate">~3.2s</strong>/row</span>
+    </div>
+    <div class="actions-wrap">
+      <button class="pause-btn"  id="pauseBtn"  style="display:none;">⏸ Pause</button>
+      <button class="cancel-btn" id="cancelBtn" style="display:none;">✕ Cancel</button>
+      <button class="secondary-btn retry-btn" id="retryBtn" style="display:none;">↻ Retry errors <span id="retryCount"></span></button>
+      <button class="secondary-btn resume-btn" id="resumeBtn" style="display:none;">↻ Resume fetch <span id="resumeCount"></span></button>
+      <button class="primary-btn" id="primaryBtn">
+        <span id="primaryLabel">Start fetch</span>
+        <span class="count-badge" id="primaryCount">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr id="theadRow"></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="emptyState" style="display:none;">
+      <strong>No rows match these filters.</strong><br>
+      Try clearing the customer or status filter, or use Reset.
+    </div>
+  </div>
+
+  <!-- Read-only sidebar — copied from v2DetailSidebar (merge-v2.js:1539) -->
+  <div class="sidebar-backdrop" id="sbBackdrop"></div>
+  <aside class="detail-sidebar" id="sidebar" aria-hidden="true">
+    <div class="ds-header">
+      <div class="ds-icon fetching" id="sbIcon">!</div>
+      <div class="text">
+        <div class="ds-title" id="sbTitle">Fetching Container</div>
+        <div class="ds-subtitle" id="sbSubtitle">— · Invoice —</div>
+      </div>
+      <button class="ds-close" id="sbClose" aria-label="Close">×</button>
+    </div>
+    <div class="panel-empty-banner fetching" id="sbBanner">
+      <div class="spinner"></div>
+      <span id="sbBannerText"><strong>This row is being fetched right now.</strong> Updates below appear live; actions unlock when this row settles.</span>
+    </div>
+    <div class="ds-body" id="sbBody"></div>
+    <div class="ds-footer">
+      <button class="skip-link" disabled title="Available when fetch completes">Skip this one</button>
+      <button class="nav-btn" disabled title="Available when fetch completes">← Prev</button>
+      <button class="next-issue-btn" disabled title="Errors aren't surfaced yet — wait for fetch to finish">
+        Next Error <span class="count-badge">— left</span> →
+      </button>
+    </div>
+  </aside>
+
+  <div class="notes">
+    <h3>What's shown vs. what the real tool does</h3>
+    <ul>
+      <li><strong>Type chips</strong> (Imports, Exports, Vans, Warehouse, Unknown) replace today's split between the pre-fetch chip row and post-fetch tabs. Each chip carries its <strong>WILL FETCH</strong> pill inline (orange <code>POD</code>, blue <code>BL/POL</code>, etc.) so the chip itself teaches what that type fetches — no separate summary band needed.</li>
+      <li><strong>Customer dropdown</strong> is new. List populates from the manifest's unique customers, sorted A–Z.</li>
+      <li><strong>Sort by column header.</strong> Click <code>CONTAINER</code>, <code>INVOICE #</code>, <code>CUSTOMER</code>, or <code>STATUS</code> to sort ascending; click again for descending; click a third time to clear. Active sort column tints orange.</li>
+      <li><strong>Master checkbox</strong> (top-left of the table) checks/unchecks every <em>visible</em> row at once. Indeterminate dash means "some visible rows checked." So: filter to Errors → click master → all errors unchecked → switch back to All → only OK rows remain checked.</li>
+      <li><strong>Removing rows from the queue:</strong> on the post-fetch view, click the <strong>Queued</strong> tab, then click the master checkbox (or uncheck rows individually). Unchecked queued rows are skipped by Resume fetch — the <code>↻ Resume fetch (N queued)</code> counter updates live as you uncheck. There's no separate "Remove" button needed; the checkbox semantics handle it.</li>
+      <li><strong>Status tabs</strong> only render post-fetch. Counts respect the active Type + Customer + Search filter.</li>
+      <li><strong>Primary action</strong> (top right): <code>Start fetch (N)</code> pre-fetch · <code>Continue to Merge (N)</code> post-fetch. Disabled when nothing's selected.</li>
+      <li><strong>Secondary actions are tab-scoped post-fetch (hybrid pattern):</strong>
+        <ul>
+          <li><strong>All tab</strong> → shows everything that applies (Retry, Resume, Continue to Merge). One-click access to any action without switching tabs.</li>
+          <li><strong>Errors tab</strong> → shows only <code>↻ Retry errors</code> + Continue to Merge.</li>
+          <li><strong>Queued tab</strong> → shows only <code>↻ Resume fetch</code> + Continue to Merge.</li>
+        </ul>
+        Both Retry and Resume fire <em>one batched fetch job</em> — no one-by-one glitching. They auto-hide as you uncheck their underlying rows.</li>
+      <li><strong>Fetching view (the new "sim" tab)</strong> demonstrates how the fetch-in-progress state would work after the fix lands. Rows are clickable — click any one to open the <em>read-only sidebar</em> on the right. Sidebar shows container/INV/WO/customer/will-fetch with retry/skip/manual-upload buttons disabled until the row settles. The orange-tinted row + tiny spinner is the "in-flight" row currently being fetched. Today the same view in the real app is uncliackable; this fixes that.</li>
+      <li><strong>Pre-fetch status tabs</strong> are shown but de-emphasized (Errors/Queued read as <code>—</code> and are non-clickable). They reserve the visual space so the toolbar doesn't jump when transitioning to post-fetch. Hover for a tooltip explaining they activate after the fetch.</li>
+      <li><strong>Filter meta</strong> (right side of the filter bar) shows <code>N of M · &lt;filters&gt; · X selected</code> so you always know what's filtered and how many rides through.</li>
+      <li><strong>Transitions:</strong> tbody fades opacity for 140 ms on every filter/sort change. No row flicker, no jumpy table heights.</li>
+      <li><strong>Click-during-fetch (not in mockup yet):</strong> in the real app, rows are non-interactive while a fetch runs. Plan is to make them clickable but open a read-only sidebar until the row settles.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// ── Sample data — mix of real customers/INV#/WO# from the May errors file ──
+// Each row's routingType is derived from INV# 2nd letter (M=import, E=export, W=warehouse, V=van, else=unknown)
+const SAMPLE = [
+  // Vans (NVH USA, FNS, AJ)
+  { rowNum: 3,  inv: "SV26040026F",   cont: "3405000",    wo: "SV2604100001", cust: "FNS, INC. - NJ",            date: "04/30/2026", status: "err",   statusText: "TMS Docs not found" },
+  { rowNum: 4,  inv: "SV26050013F",   cont: "T1022",      wo: "SV2605060003", cust: "NVH USA, INC",              date: "05/06/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 5,  inv: "SV26050012F",   cont: "T1013",      wo: "SV2605060002", cust: "NVH USA, INC",              date: "05/06/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 6,  inv: "SV26050011F",   cont: "T1013",      wo: "SV2605060001", cust: "NVH USA, INC",              date: "05/06/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 7,  inv: "SV26050010F",   cont: "T1022",      wo: "SV2603160040", cust: "NVH USA, INC",              date: "05/06/2026", status: "fb",    statusText: "Fetched (POL)" },
+  { rowNum: 8,  inv: "SV26050009F",   cont: "T1013",      wo: "SV2603160039", cust: "NVH USA, INC",              date: "05/06/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 9,  inv: "SV26050008F",   cont: "T1022",      wo: "SV2603160038", cust: "NVH USA, INC",              date: "05/06/2026", status: "queue", statusText: "Queued" },
+  { rowNum: 10, inv: "SV26050007F",   cont: "Special",    wo: "SV2603160037", cust: "NVH USA, INC",              date: "05/06/2026", status: "err",   statusText: "TMS Docs not found" },
+  { rowNum: 11, inv: "SV26050006F",   cont: "T1022",      wo: "SV2603160036", cust: "NVH USA, INC",              date: "05/06/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 12, inv: "SV26050005F",   cont: "T1013",      wo: "SV2603160035", cust: "NVH USA, INC",              date: "05/06/2026", status: "queue", statusText: "Queued" },
+  { rowNum: 13, inv: "PV26050001F",   cont: "lebz306962", wo: "PV2605260003", cust: "AJ LOGISVALUE USA INC",     date: "05/12/2026", status: "ok",    statusText: "Fetched" },
+
+  // Imports (M as 2nd letter)
+  { rowNum: 18, inv: "MM26050039F",   cont: "KOCU2198782",wo: "MM2604170001", cust: "KCC TRANSPORT SYSTEMS INC", date: "05/07/2026", status: "err",   statusText: "Invoice not in QBO" },
+  { rowNum: 20, inv: "SM26050075F",   cont: "MNBU3835590",wo: "SM2605040003", cust: "JB LOGIS, INC.",            date: "05/11/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 32, inv: "LM26050661F",   cont: "TCNU5600575",wo: "LM2605080035", cust: "ROH USA INC",               date: "05/13/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 33, inv: "LM26050662F",   cont: "MSCU4567890",wo: "LM2605080036", cust: "ROH USA INC",               date: "05/13/2026", status: "fb",    statusText: "Fetched (TMS POD)" },
+  { rowNum: 34, inv: "LM26050663F",   cont: "TGHU1122334",wo: "LM2605080037", cust: "IDEA NUOVA",                date: "05/13/2026", status: "queue", statusText: "Queued" },
+  { rowNum: 35, inv: "LM26050664F",   cont: "TGHU2233445",wo: "LM2605080038", cust: "IDEA NUOVA",                date: "05/13/2026", status: "queue", statusText: "Queued" },
+  { rowNum: 36, inv: "LM26050665F",   cont: "TGHU3344556",wo: "LM2605080039", cust: "IDEA NUOVA",                date: "05/14/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 37, inv: "LM26050666F",   cont: "TGHU4455667",wo: "LM2605080040", cust: "IDEA NUOVA",                date: "05/14/2026", status: "err",   statusText: "Needs PDF" },
+  { rowNum: 40, inv: "PM26050120F",   cont: "HLBU8899001",wo: "PM2605100021", cust: "TAYLOR LOGISTICS INC",      date: "05/15/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 41, inv: "PM26050121F",   cont: "HLBU8899002",wo: "PM2605100022", cust: "TAYLOR LOGISTICS INC",      date: "05/15/2026", status: "ok",    statusText: "Fetched" },
+
+  // Exports (E as 2nd letter)
+  { rowNum: 50, inv: "SE26050006F",   cont: "TLLU5611863",wo: "SX2605210003", cust: "BNX SHIPPING INC. - GA",    date: "05/21/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 51, inv: "SE26050011F",   cont: "TLLU4197580",wo: "SX2605210004", cust: "BNX SHIPPING INC. - GA",    date: "05/21/2026", status: "fb",    statusText: "Fetched (POL)" },
+  { rowNum: 52, inv: "SE26050010F",   cont: "BEAU5509240",wo: "SX2605210005", cust: "BNX SHIPPING INC. - GA",    date: "05/21/2026", status: "err",   statusText: "Needs BL/POL" },
+  { rowNum: 53, inv: "LE26050012F",   cont: "MSKU1234567",wo: "LX2605210006", cust: "OEC GROUP",                 date: "05/22/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 54, inv: "LE26050013F",   cont: "MSKU1234568",wo: "LX2605210007", cust: "OEC GROUP",                 date: "05/22/2026", status: "queue", statusText: "Queued" },
+
+  // Warehouse (W as 2nd letter)
+  { rowNum: 2,  inv: "SW04302026TRL", cont: "",           wo: "",             cust: "AJ LOGISVALUE USA INC",     date: "04/30/2026", status: "err",   statusText: "No attachments on QBO" },
+  { rowNum: 19, inv: "SW04302026HL",  cont: "",           wo: "",             cust: "HL LOGISTICS AMERICA CORP.",date: "05/08/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 60, inv: "PW260430CC01",  cont: "",           wo: "",             cust: "COOK CHEMICAL CO",          date: "05/01/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 61, inv: "LW260512WH01",  cont: "",           wo: "",             cust: "ROH USA INC",               date: "05/12/2026", status: "ok",    statusText: "Fetched" },
+  { rowNum: 62, inv: "LW260512WH02",  cont: "",           wo: "",             cust: "IDEA NUOVA",                date: "05/12/2026", status: "queue", statusText: "Queued" },
+
+  // Unknown — prefix doesn't match M/E/W/V
+  { rowNum: 65, inv: "AB26050099",    cont: "ABCD1234567",wo: "AB26050099",   cust: "MISC CUSTOMER LLC",         date: "05/18/2026", status: "err",   statusText: "Routing unclear" },
+  { rowNum: 66, inv: "ZZ26050100",    cont: "ABCD7654321",wo: "ZZ26050100",   cust: "MISC CUSTOMER LLC",         date: "05/18/2026", status: "queue", statusText: "Queued" },
+];
+
+// Derive routingType from INV# 2nd letter
+function routingTypeOf(inv) {
+  if (!inv || inv.length < 2) return "unknown";
+  const c = inv[1].toUpperCase();
+  if (c === "M") return "import";
+  if (c === "E") return "export";
+  if (c === "W") return "warehouse";
+  if (c === "V") return "van";
+  return "unknown";
+}
+SAMPLE.forEach(r => { r.routingType = routingTypeOf(r.inv); });
+
+const TYPE_LABEL = { import: "Imports", export: "Exports", warehouse: "Warehouse", van: "Vans", unknown: "Unknown" };
+const TYPE_ORDER = ["import", "export", "warehouse", "van", "unknown"];
+const WILL_CHIP  = { import: "POD", export: "BL/POL", warehouse: "All QBO Docs", van: "TMS Docs", unknown: "?" };
+
+// ── UI state ──
+const state = {
+  view: "pre",            // 'pre' | 'fetching' | 'post'
+  type: "all",
+  customer: "all",
+  status: "all",
+  sortKey: null,
+  sortDir: "asc",
+  search: "",
+  selected: new Set(SAMPLE.map(r => r.inv)),
+};
+
+// Tag a single row as "in-flight" during the fetching-sim view (for visual flair)
+const FETCHING_INFLIGHT_INV = "LM26050663F";
+
+// ── Render helpers ──
+function highlightInv(inv) {
+  if (!inv || inv.length < 2) return escapeHtml(inv || "");
+  const c = inv[1].toUpperCase();
+  if (["M","E","V","W"].includes(c)) {
+    return escapeHtml(inv[0]) + '<span class="inv-letter">' + escapeHtml(inv[1]) + '</span>' + escapeHtml(inv.slice(2));
+  }
+  return escapeHtml(inv);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function applyFilters() {
+  let rows = SAMPLE.slice();
+  if (state.type !== "all")      rows = rows.filter(r => r.routingType === state.type);
+  if (state.customer !== "all")  rows = rows.filter(r => r.cust === state.customer);
+  if (state.view === "post" && state.status !== "all") {
+    if (state.status === "errors") rows = rows.filter(r => r.status === "err");
+    if (state.status === "queued") rows = rows.filter(r => r.status === "queue");
+  }
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    rows = rows.filter(r =>
+      (r.cont || "").toLowerCase().includes(q) ||
+      (r.inv  || "").toLowerCase().includes(q) ||
+      (r.wo   || "").toLowerCase().includes(q) ||
+      (r.cust || "").toLowerCase().includes(q));
+  }
+  // Sort
+  if (state.sortKey) {
+    const dir = state.sortDir === "desc" ? -1 : 1;
+    const cmp = {
+      cont:   (a,b) => (a.cont||"").localeCompare(b.cont||""),
+      inv:    (a,b) => (a.inv||"").localeCompare(b.inv||""),
+      cust:   (a,b) => (a.cust||"").localeCompare(b.cust||""),
+      status: (a,b) => statusRank(a.status) - statusRank(b.status),
+    }[state.sortKey];
+    if (cmp) rows.sort((a, b) => cmp(a, b) * dir);
+  } else {
+    rows.sort((a, b) => a.rowNum - b.rowNum);
+  }
+  return rows;
+}
+function statusRank(s) { return ({ err: 0, queue: 1, fb: 2, ok: 3 })[s] ?? 4; }
+
+function renderTypeChips() {
+  const cnt = { all: SAMPLE.length, import:0, export:0, warehouse:0, van:0, unknown:0 };
+  SAMPLE.forEach(r => cnt[r.routingType]++);
+  const types = [ ["all", "All", null], ...TYPE_ORDER.map(t => [t, TYPE_LABEL[t], t]) ];
+  document.getElementById("typeChips").innerHTML = types.map(([key, label, pillKey]) => {
+    const pill = pillKey
+      ? `<span class="will-chip ${pillKey}">${WILL_CHIP[pillKey]}</span>`
+      : "";
+    return `<button class="chip ${state.type === key ? "active" : ""}" data-type="${key}">
+      <span class="chip-name">${label}</span>
+      ${pill}
+      <span class="count">${cnt[key]}</span>
+    </button>`;
+  }).join("");
+}
+
+function renderCustomerSelect() {
+  const counts = {};
+  SAMPLE.forEach(r => { counts[r.cust] = (counts[r.cust] || 0) + 1; });
+  const customers = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+  const sel = document.getElementById("custSelect");
+  sel.innerHTML = `<option value="all">All customers (${SAMPLE.length})</option>` +
+    customers.map(c => `<option value="${escapeHtml(c)}" ${state.customer === c ? "selected" : ""}>${escapeHtml(c)} (${counts[c]})</option>`).join("");
+}
+
+function renderStatusTabs() {
+  const tabs = document.getElementById("statusTabs");
+  // Show on Post-fetch (full functionality) AND Pre-fetch (de-emphasized) AND Fetching
+  tabs.style.display = "flex";
+  const visibleForCounts = applyFiltersIgnoringStatus();
+  const cntAll = visibleForCounts.length;
+  const cntErr = visibleForCounts.filter(r => r.status === "err").length;
+  const cntQ   = visibleForCounts.filter(r => r.status === "queue").length;
+  document.getElementById("cntAll").textContent = cntAll;
+  // Pre-fetch: no errors yet (all rows are about to be fetched), all rows count as queued by definition
+  if (state.view === "pre") {
+    document.getElementById("cntErr").textContent = "—";
+    document.getElementById("cntQ").textContent   = "—";
+  } else {
+    document.getElementById("cntErr").textContent = cntErr;
+    document.getElementById("cntQ").textContent   = cntQ;
+  }
+  tabs.querySelectorAll("button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.status === state.status);
+    // Pre-fetch: Errors and Queued tabs are muted (no data yet)
+    const muted = state.view === "pre" && (btn.dataset.status === "errors" || btn.dataset.status === "queued");
+    btn.classList.toggle("muted", muted);
+    btn.title = muted ? "Status filters become active after the fetch runs" : "";
+  });
+}
+function applyFiltersIgnoringStatus() {
+  const save = state.status;
+  state.status = "all";
+  const r = applyFilters();
+  state.status = save;
+  return r;
+}
+
+function renderHead() {
+  const head = document.getElementById("theadRow");
+  // [label, sortKey]  — null sortKey means non-sortable
+  const showDocCols = state.view === "post" || state.view === "fetching";
+  const cols = showDocCols
+    ? [["", null], ["CONTAINER", "cont"], ["INVOICE #", "inv"], ["CUSTOMER", "cust"], ["WILL FETCH", null], ["DOCUMENTS", null], ["STATUS", "status"]]
+    : [["", null], ["CONTAINER", "cont"], ["INVOICE #", "inv"], ["CUSTOMER", "cust"], ["WILL FETCH", null]];
+  head.innerHTML = cols.map(([label, key], i) => {
+    if (i === 0) return `<th class="check-col"><input type="checkbox" id="masterCheck" title="Check/uncheck all visible rows" /></th>`;
+    if (!key) return `<th>${label}</th>`;
+    const active = state.sortKey === key;
+    const arrow = active ? (state.sortDir === "asc" ? "▲" : "▼") : "↕";
+    return `<th class="sortable ${active ? "sort-active" : ""}" data-sort="${key}">
+      ${label} <span class="arrow">${arrow}</span>
+    </th>`;
+  }).join("");
+
+  // Wire master checkbox
+  const master = document.getElementById("masterCheck");
+  master.addEventListener("change", () => {
+    const visible = applyFilters();
+    if (master.checked) visible.forEach(r => state.selected.add(r.inv));
+    else                visible.forEach(r => state.selected.delete(r.inv));
+    renderRows();
+  });
+
+  // Wire column-header sorting — click toggles asc/desc, third click clears
+  head.querySelectorAll("th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (state.sortKey !== key) {
+        state.sortKey = key;
+        state.sortDir = "asc";
+      } else if (state.sortDir === "asc") {
+        state.sortDir = "desc";
+      } else {
+        state.sortKey = null;
+        state.sortDir = "asc";
+      }
+      renderHead();   // re-render arrows
+      renderRows();
+    });
+  });
+}
+
+function updateMasterCheckbox(visibleRows) {
+  const master = document.getElementById("masterCheck");
+  if (!master) return;
+  const total = visibleRows.length;
+  const checked = visibleRows.filter(r => state.selected.has(r.inv)).length;
+  if (total === 0) {
+    master.checked = false; master.indeterminate = false; master.disabled = true;
+  } else if (checked === 0) {
+    master.checked = false; master.indeterminate = false; master.disabled = false;
+  } else if (checked === total) {
+    master.checked = true;  master.indeterminate = false; master.disabled = false;
+  } else {
+    master.checked = false; master.indeterminate = true;  master.disabled = false;
+  }
+}
+
+function updateSelectionToolbar() {
+  updateMasterCheckbox(applyFilters());
+  renderActionRow();
+}
+
+function renderRows() {
+  const rowsEl = document.getElementById("rows");
+  const emptyEl = document.getElementById("emptyState");
+  rowsEl.classList.add("fade");
+  setTimeout(() => {
+    const rows = applyFilters();
+    if (rows.length === 0) {
+      rowsEl.innerHTML = "";
+      emptyEl.style.display = "block";
+    } else {
+      emptyEl.style.display = "none";
+      rowsEl.innerHTML = rows.map(r => rowHtml(r)).join("");
+      // Wire row checkboxes
+      rowsEl.querySelectorAll(".row-check").forEach(cb => {
+        cb.addEventListener("change", e => {
+          const inv = e.target.dataset.inv;
+          if (e.target.checked) state.selected.add(inv);
+          else                  state.selected.delete(inv);
+          updateSelectionToolbar();
+        });
+      });
+      // Wire row clicks during Fetching view → open read-only sidebar
+      if (state.view === "fetching") {
+        rowsEl.querySelectorAll("tr.row-clickable").forEach(tr => {
+          tr.addEventListener("click", e => {
+            // Don't intercept clicks on the row checkbox itself
+            if (e.target.closest(".check-col")) return;
+            openSidebar(tr.dataset.inv);
+          });
+        });
+      }
+    }
+    const selectedTotal = state.selected.size;
+    document.getElementById("filterMeta").textContent =
+      `${rows.length} of ${SAMPLE.length}`
+      + (state.type !== "all" ? ` · ${TYPE_LABEL[state.type]}` : "")
+      + (state.customer !== "all" ? ` · ${state.customer}` : "")
+      + (state.view === "post" && state.status !== "all" ? ` · ${state.status === "errors" ? "Errors" : "Queued"}` : "")
+      + ` · ${selectedTotal} selected`;
+    updateSelectionToolbar();
+    requestAnimationFrame(() => rowsEl.classList.remove("fade"));
+  }, 140);
+}
+
+function rowHtml(r) {
+  let cls = "";
+  if (state.view === "post") {
+    cls = r.status === "err" ? "row-err" : r.status === "queue" ? "row-queue" : "";
+  } else if (state.view === "fetching") {
+    // Simulated fetching state: in-flight row gets orange tint, queued stays grey
+    if (r.inv === FETCHING_INFLIGHT_INV) cls = "row-fetching";
+    else if (r.status === "queue") cls = "row-queue";
+    cls += " row-clickable";
+  }
+  const cont = r.routingType === "warehouse"
+    ? `<span style="color:var(--ink-4);">—</span>`
+    : (r.cont ? `<span class="mono">${escapeHtml(r.cont)}</span>` : `<span style="color:var(--ink-4);">—</span>`);
+  const willChip = `<span class="will-chip ${r.routingType}">${WILL_CHIP[r.routingType]}</span>`;
+
+  const isQueued = state.view === "post" && r.status === "queue";
+  const isChecked = state.selected.has(r.inv);
+  const tooltip = isQueued ? "Uncheck to remove from queue (won't be fetched on Resume)" : "";
+  const checkCell = `<td class="check-col">
+    <input type="checkbox" class="row-check" data-inv="${escapeHtml(r.inv)}"
+           ${isChecked ? "checked" : ""} title="${tooltip}" />
+  </td>`;
+
+  if (state.view === "pre") {
+    return `<tr class="${cls}" data-inv="${escapeHtml(r.inv)}">
+      ${checkCell}
+      <td>${cont}</td>
+      <td><span class="mono">${highlightInv(r.inv)}</span></td>
+      <td>${escapeHtml(r.cust)}</td>
+      <td>${willChip}</td>
+    </tr>`;
+  }
+  if (state.view === "fetching") {
+    // Pretend ~12 random rows are already fetched, 1 in-flight, rest queued.
+    // For demo we just label the in-flight row, leave others as queued.
+    const isInFlight = r.inv === FETCHING_INFLIGHT_INV;
+    const docPills = isInFlight
+      ? `<span class="doc-pill ok">INV</span><span class="doc-pill queue">DOC <span class="spinner" style="display:inline-block;vertical-align:middle;margin-left:4px;width:9px;height:9px;border-width:1.5px;"></span></span>`
+      : `<span class="doc-pill queue">INV</span><span class="doc-pill queue">DOC</span>`;
+    const statusCell = isInFlight
+      ? `<span class="status-text" style="color:var(--ngl-orange);">Fetching now…</span>`
+      : `<span class="status-text queue">Waiting in queue</span>`;
+    return `<tr class="${cls}" data-inv="${escapeHtml(r.inv)}">
+      ${checkCell}
+      <td>${cont}</td>
+      <td><span class="mono">${highlightInv(r.inv)}</span></td>
+      <td>${escapeHtml(r.cust)}</td>
+      <td>${willChip}</td>
+      <td>${docPills}</td>
+      <td>${statusCell}</td>
+    </tr>`;
+  }
+  // Post-fetch
+  const docPills = r.status === "queue"
+    ? `<span class="doc-pill queue">INV</span><span class="doc-pill queue">DOC</span>`
+    : r.status === "err"
+      ? `<span class="doc-pill ok">INV</span><span class="doc-pill miss">DOC</span>`
+      : r.status === "fb"
+        ? `<span class="doc-pill ok">INV</span><span class="doc-pill fb">DOC</span>`
+        : `<span class="doc-pill ok">INV</span><span class="doc-pill ok">DOC</span>`;
+  const statusCell = `<span class="status-dot ${r.status}"></span><span class="status-text ${r.status}">${escapeHtml(r.statusText)}</span>`;
+  return `<tr class="${cls}">
+    ${checkCell}
+    <td>${cont}</td>
+    <td><span class="mono">${highlightInv(r.inv)}</span></td>
+    <td>${escapeHtml(r.cust)}</td>
+    <td>${willChip}</td>
+    <td>${docPills}</td>
+    <td>${statusCell}</td>
+  </tr>`;
+}
+
+function renderActionRow() {
+  const primaryBtn   = document.getElementById("primaryBtn");
+  const primaryLbl   = document.getElementById("primaryLabel");
+  const primaryCnt   = document.getElementById("primaryCount");
+  const resumeBtn    = document.getElementById("resumeBtn");
+  const resumeCount  = document.getElementById("resumeCount");
+  const retryBtn     = document.getElementById("retryBtn");
+  const retryCount   = document.getElementById("retryCount");
+  const progressStrip = document.getElementById("progressStrip");
+
+  progressStrip.style.display = state.view === "fetching" ? "flex" : "none";
+  document.getElementById("pauseBtn").style.display  = state.view === "fetching" ? "inline-flex" : "none";
+  document.getElementById("cancelBtn").style.display = state.view === "fetching" ? "inline-flex" : "none";
+
+  if (state.view === "fetching") {
+    primaryBtn.style.display = "none";
+    resumeBtn.style.display  = "none";
+    retryBtn.style.display   = "none";
+    return;
+  } else {
+    primaryBtn.style.display = "inline-flex";
+  }
+
+  if (state.view === "pre") {
+    primaryLbl.textContent = "Start fetch";
+    resumeBtn.style.display = "none";
+    retryBtn.style.display  = "none";
+  } else {
+    primaryLbl.textContent = "Continue to Merge";
+
+    // Resume button — All tab OR Queued tab, when selected queued rows exist
+    const queuedCount = SAMPLE.filter(r => r.status === "queue" && state.selected.has(r.inv)).length;
+    const showResume = (state.status === "all" || state.status === "queued") && queuedCount > 0;
+    if (showResume) {
+      resumeBtn.style.display = "inline-flex";
+      resumeCount.textContent = `(${queuedCount} queued)`;
+    } else {
+      resumeBtn.style.display = "none";
+    }
+
+    // Retry button — All tab OR Errors tab, when selected error rows exist
+    const errorCount = SAMPLE.filter(r => r.status === "err" && state.selected.has(r.inv)).length;
+    const showRetry = (state.status === "all" || state.status === "errors") && errorCount > 0;
+    if (showRetry) {
+      retryBtn.style.display = "inline-flex";
+      retryCount.textContent = `(${errorCount})`;
+    } else {
+      retryBtn.style.display = "none";
+    }
+  }
+  // Selected count for the primary button — pre-fetch counts ALL selected,
+  // post-fetch counts only selected rows that have a fetchResult (i.e., merge-able).
+  const mergeable = state.view === "post"
+    ? SAMPLE.filter(r => state.selected.has(r.inv) && r.status !== "queue").length
+    : state.selected.size;
+  primaryCnt.textContent = mergeable;
+  primaryBtn.disabled = mergeable === 0;
+}
+
+function rerender() {
+  renderTypeChips();
+  renderCustomerSelect();
+  renderStatusTabs();
+  renderActionRow();
+  renderHead();
+  renderRows();
+}
+
+// ── Event wiring ──
+document.querySelectorAll(".view-toggle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".view-toggle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.view = btn.dataset.view;
+    if (state.view === "pre" || state.view === "fetching") state.status = "all";
+    closeSidebar();
+    if (state.view === "fetching") startFetchSim(); else stopFetchSim();
+    rerender();
+  });
+});
+document.getElementById("typeChips").addEventListener("click", e => {
+  const btn = e.target.closest(".chip");
+  if (!btn) return;
+  state.type = btn.dataset.type;
+  rerender();
+});
+document.getElementById("custSelect").addEventListener("change", e => {
+  state.customer = e.target.value;
+  renderStatusTabs();
+  renderRows();
+});
+document.getElementById("searchInput").addEventListener("input", e => {
+  state.search = e.target.value.trim();
+  renderStatusTabs();
+  renderRows();
+});
+document.getElementById("statusTabs").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  // Muted tabs (Errors/Queued pre-fetch) are non-interactive
+  if (btn.classList.contains("muted")) return;
+  state.status = btn.dataset.status;
+  document.querySelectorAll("#statusTabs button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderActionRow();
+  renderRows();
+});
+
+// ── Live fetch timer (sim) ──
+const fetchSim = {
+  total: SAMPLE.length,           // 33 rows
+  done: 12,
+  startedAt: null,
+  perRowMs: 3200,                 // ~3.2s per row average
+  timer: null,
+};
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+}
+function updateProgressStrip() {
+  if (state.view !== "fetching") return;
+  if (!fetchSim.startedAt) fetchSim.startedAt = Date.now() - fetchSim.done * fetchSim.perRowMs;
+  const elapsed = Date.now() - fetchSim.startedAt;
+  const remaining = (fetchSim.total - fetchSim.done) * fetchSim.perRowMs;
+  document.getElementById("fProgress").textContent = fetchSim.done;
+  document.getElementById("fTotal").textContent    = fetchSim.total;
+  document.getElementById("fBar").style.width      = `${(fetchSim.done / fetchSim.total) * 100}%`;
+  document.getElementById("fElapsed").textContent  = fmtTime(elapsed);
+  document.getElementById("fEta").textContent      = fmtTime(remaining);
+  document.getElementById("fRate").textContent     = `~${(fetchSim.perRowMs / 1000).toFixed(1)}s`;
+}
+function startFetchSim() {
+  stopFetchSim();
+  fetchSim.startedAt = Date.now() - fetchSim.done * fetchSim.perRowMs;
+  updateProgressStrip();
+  fetchSim.timer = setInterval(updateProgressStrip, 1000);
+}
+function stopFetchSim() {
+  if (fetchSim.timer) { clearInterval(fetchSim.timer); fetchSim.timer = null; }
+}
+
+// ── Read-only sidebar — same layout as v2DetailSidebar in the real app ──
+function openSidebar(inv) {
+  const row = SAMPLE.find(r => r.inv === inv);
+  if (!row) return;
+  const inFlight = row.inv === FETCHING_INFLIGHT_INV;
+  const typeLabel = TYPE_LABEL[row.routingType];
+  const docName = row.routingType === "export" ? "BL or POL"
+                : row.routingType === "warehouse" ? "any QBO attachment"
+                : row.routingType === "van" ? "TMS document"
+                : row.routingType === "unknown" ? "POD, BL, or POL"
+                : "POD";
+
+  // Header
+  document.getElementById("sbTitle").textContent = inFlight ? "Fetching Container" : "Container Queued";
+  document.getElementById("sbSubtitle").textContent = `${row.cont || "Warehouse"} · Invoice ${row.inv}`;
+
+  // Banner text
+  document.getElementById("sbBannerText").innerHTML = inFlight
+    ? "<strong>This row is being fetched right now.</strong> The trace below shows progress; retry/upload unlock when it settles."
+    : "<strong>This row is queued.</strong> It will start as soon as an in-flight slot opens up. Uncheck the row in the table to skip it.";
+
+  // Routing trace — mirrors the real renderRoutingTrace shape (arrows + markers)
+  const chain = row.routingType === "van"
+    ? [
+        ["fallback", "INV# prefix <code>V</code> — trailer van", "note"],
+        ["note", "Plan: try POD → BL → POL → IT → ITE on TMS", "note"],
+      ]
+    : row.routingType === "import"
+      ? [
+        ["success", "INV# prefix <code>M</code> — import", "note"],
+        ["note", "Plan: try POD on QBO, fall back to TMS POD", "note"],
+      ]
+      : row.routingType === "export"
+        ? [
+          ["success", "INV# prefix <code>E</code> — export", "note"],
+          ["note", "Plan: try BL/POL on QBO, fall back to TMS BOL/POL", "note"],
+        ]
+        : row.routingType === "warehouse"
+          ? [
+            ["success", "INV# prefix <code>W</code> — warehouse", "note"],
+            ["note", "Plan: grab all QBO attachments (no TMS fallback)", "note"],
+          ]
+          : [
+            ["fallback", "INV# prefix non-standard — fell back to safety chain", "note"],
+            ["note", "Plan: try POD → BL → POL → IT → ITE", "note"],
+          ];
+
+  // Append the in-flight step + pending step
+  if (inFlight) {
+    chain.push(["active", "Fetching now — invoice PDF pulled · pulling " + docName + " from TMS", "active"]);
+  } else {
+    chain.push(["note", "Awaiting slot — no fetch attempted yet", "note"]);
+  }
+
+  const traceHtml = chain.map(([cls, html]) => `
+    <div class="step ${cls}">
+      <span class="marker">→</span>
+      <span class="text">${html}</span>
+    </div>
+  `).join("");
+
+  // Body — Customer · What's Happening · Routing trace · Resolve (disabled retry + dashed upload)
+  document.getElementById("sbBody").innerHTML = `
+    <div class="ds-section">
+      <div class="ds-section-label">Customer</div>
+      <div style="font-size:0.92rem; font-weight:600; color:#0f172a;">${escapeHtml(row.cust || "—")}</div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">What's Happening</div>
+      <div class="happened-block fetching">
+        <div class="title">${inFlight ? "Pulling documents now" : "Waiting in queue"}</div>
+        <div class="body">${inFlight
+          ? `Routing type: <strong>${typeLabel}</strong>. Invoice PDF pulled · now walking the doc chain on TMS. Updates appear here in real time.`
+          : `Routing type: <strong>${typeLabel}</strong>. Up next in the queue — the fetcher will pick this up shortly. You can uncheck the row in the table to skip it.`}</div>
+      </div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Routing trace</div>
+      <div class="routing-trace">${traceHtml}</div>
+    </div>
+
+    <div class="ds-section">
+      <div class="ds-section-label">Resolve</div>
+      <button class="retry-api-btn" disabled title="Available when this row finishes fetching">↻ Retry API call</button>
+      <div class="resolve-divider"><span>or upload manually</span></div>
+      <label class="ds-upload disabled" title="Available when this row finishes fetching">
+        <div class="icon">⬆</div>
+        <div class="title">Drop ${escapeHtml(docName)} for ${escapeHtml(row.cont || row.wo || row.inv)}</div>
+        <div class="help">.pdf only — replaces whatever the API would have returned</div>
+      </label>
+    </div>
+  `;
+  document.getElementById("sidebar").classList.add("open");
+  document.getElementById("sbBackdrop").classList.add("open");
+  document.getElementById("sidebar").setAttribute("aria-hidden", "false");
+}
+function closeSidebar() {
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sbBackdrop").classList.remove("open");
+  document.getElementById("sidebar").setAttribute("aria-hidden", "true");
+}
+document.getElementById("sbClose").addEventListener("click", closeSidebar);
+document.getElementById("sbBackdrop").addEventListener("click", closeSidebar);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSidebar(); });
+document.getElementById("resetBtn").addEventListener("click", () => {
+  state.type = "all"; state.customer = "all"; state.status = "all";
+  state.sortKey = null; state.sortDir = "asc"; state.search = "";
+  document.getElementById("searchInput").value = "";
+  rerender();
+});
+document.getElementById("primaryBtn").addEventListener("click", () => {
+  const count = document.getElementById("primaryCount").textContent;
+  const label = document.getElementById("primaryLabel").textContent;
+  alert(`Demo: "${label}" clicked — would process ${count} selected rows`);
+});
+document.getElementById("resumeBtn").addEventListener("click", () => {
+  alert(`Demo: Resume fetch — would re-attempt the queued rows in ONE batched job`);
+});
+document.getElementById("retryBtn").addEventListener("click", () => {
+  alert(`Demo: Retry errors — would re-fetch all errored rows in ONE batched job (no glitch)`);
+});
+document.getElementById("pauseBtn").addEventListener("click", () => {
+  const btn = document.getElementById("pauseBtn");
+  if (fetchSim.timer) {
+    stopFetchSim();
+    btn.innerHTML = "▶ Resume";
+  } else {
+    startFetchSim();
+    btn.innerHTML = "⏸ Pause";
+  }
+});
+document.getElementById("cancelBtn").addEventListener("click", () => {
+  if (!confirm("Cancel the fetch? Rows already fetched will keep their data; queued rows will stay queued.")) return;
+  stopFetchSim();
+  alert("Demo: Fetch cancelled. Switching to Post-fetch view.");
+  document.querySelector('.view-toggle button[data-view="post"]').click();
+});
+
+// First paint
+rerender();
+</script>
+</body>
+</html>
