@@ -104,10 +104,21 @@ export function getDatePrefix() {
  * @returns {string}
  */
 export function buildMergedFilename(row, datePrefix) {
-  if (!row.containerNumber) throw new Error('buildMergedFilename: row.containerNumber is required');
   const sanitize = s => String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
   const inv = (row.invoiceNumber || '').trim();
   const wo  = (row.workOrderNumber || '').trim();
+
+  // Van rows: skip the unreliable container field, use INV# + WO# instead.
+  // Trailer "container" values are often trailer IDs (T1022), PO numbers (3405000),
+  // or the literal word "Special" — none of which uniquely identify the row.
+  if (row.routingType === 'van') {
+    if (!inv) throw new Error('buildMergedFilename: van row needs invoice number');
+    if (!wo)  return `${datePrefix}_${sanitize(inv)}_merged.pdf`;
+    return `${datePrefix}_${sanitize(inv)}_${sanitize(wo)}_merged.pdf`;
+  }
+
+  // Non-van rows: original behavior — container is required, INV# (or WO# fallback) + container in filename
+  if (!row.containerNumber) throw new Error('buildMergedFilename: row.containerNumber is required');
   const key = inv || wo;
   const container = sanitize(row.containerNumber);
   if (key) return `${datePrefix}_${sanitize(key)}_${container}_merged.pdf`;
@@ -129,6 +140,7 @@ export function parseInvType(inv) {
   if (c === 'M') return 'import';
   if (c === 'E') return 'export';
   if (c === 'W') return 'warehouse';
+  if (c === 'V') return 'van';
   return null;
 }
 
@@ -155,6 +167,9 @@ export function routingDecisionFor(row) {
   if (fromInv === 'warehouse') {
     return { type: 'warehouse', expectedDoc: 'All QBO Docs' };
   }
+  if (fromInv === 'van') {
+    return { type: 'van', expectedDoc: '?' };
+  }
   if (fromInv) {
     return { type: fromInv, expectedDoc: fromInv === 'import' ? 'POD' : 'BL/POL' };
   }
@@ -177,7 +192,7 @@ export function routingDecisionFor(row) {
 export function renderInvoiceNumberHtml(inv) {
   if (!inv || inv.length < 2) return escHtml(inv || '');
   const c = inv[1].toUpperCase();
-  if (c === 'M' || c === 'E' || c === 'X' || c === 'W') {
+  if (c === 'M' || c === 'E' || c === 'X' || c === 'W' || c === 'V') {
     return escHtml(inv[0]) + '<span class="inv-letter">' + escHtml(inv[1]) + '</span>' + escHtml(inv.slice(2));
   }
   return escHtml(inv);

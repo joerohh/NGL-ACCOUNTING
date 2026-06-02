@@ -1361,6 +1361,29 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 select.sort-select:focus  { outline: none; border-color: #ea580c; color: #ea580c; }
 #mergeToolViewV2 .toolbar .filter-meta { color: #94a3b8; margin-left: auto; }
 
+/* Customer dropdown filter — sits in the toolbar next to the search input.
+   Populated dynamically from manifest's unique customers (see renderCustomerDropdown). */
+.customer-select {
+  padding: 8px 28px 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'><path d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  font-family: inherit;
+  max-width: 280px;
+}
+.customer-select:focus {
+  outline: none;
+  border-color: #ea580c;
+  box-shadow: 0 0 0 3px rgba(234,88,12,0.12);
+}
+
 /* ── Controls line + dropdown buttons ── */
 #mergeToolViewV2 .controls-line {
   display: flex; align-items: center; gap: 10px;
@@ -1707,6 +1730,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .routing-summary .group .chip.import  { background: #dbeafe; color: #1e40af; }
 #mergeToolViewV2 .routing-summary .group .chip.export  { background: #f3e8ff; color: #6b21a8; }
 #mergeToolViewV2 .routing-summary .group .chip.unknown { background: #f1f5f9; color: #94a3b8; }
+#mergeToolViewV2 .routing-summary .group .chip.van     { background: #fef3c7; color: #92400e; }
 #mergeToolViewV2 .routing-summary .hint {
   margin-left: auto;
   font-size: 0.78rem; color: #94a3b8;
@@ -1724,6 +1748,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .will-chip.export  { background: #f3e8ff; color: #6b21a8; }
 #mergeToolViewV2 .will-chip.unknown { background: #f1f5f9; color: #94a3b8; }
 #mergeToolViewV2 .will-chip.whdocs  { background: #ffedd5; color: #9a3412; }
+#mergeToolViewV2 .will-chip.van     { background: #fef3c7; color: #92400e; }
 
 /* Warehouse chip in routing-summary band */
 #mergeToolViewV2 .routing-summary .group .chip.warehouse { background: #ffedd5; color: #9a3412; }
@@ -1851,6 +1876,15 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   background: #2563eb;
 }
 #mergeToolViewV2 .merge-btn.resume:hover { background: #1d4ed8; }
+#mergeToolViewV2 .merge-btn.retry-secondary {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+#mergeToolViewV2 .merge-btn.retry-secondary:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
 #mergeToolViewV2 .merge-btn .last-fetched-meta {
   display: block; font-size: 0.66rem; font-weight: 500; opacity: 0.85;
   margin-top: 2px; text-align: left;
@@ -3435,4 +3469,364 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;
 }
 .subject-preview em { color: #475569; font-style: italic; }
+
+/* ══════════════════════════════════════════════════════════
+   AR Dashboard — Build modal (R2 M2)
+   5-drop input → summary preview → save
+   ══════════════════════════════════════════════════════════ */
+
+.ar-or-build { margin-top:18px; font-size:0.85rem; color:#64748b; }
+.ar-or-build a { color:#ea580c; font-weight:700; cursor:pointer; text-decoration:underline; }
+
+.ar-build-modal-overlay {
+  position:fixed; inset:0; background:rgba(15,23,42,0.45);
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:32px 24px; z-index:9000; backdrop-filter:blur(2px);
+  overflow-y:auto;
+}
+.ar-build-modal {
+  background:#fff; border-radius:12px; width:100%; max-width:620px;
+  display:flex; flex-direction:column; overflow:hidden;
+  box-shadow:0 12px 36px rgba(0,0,0,0.16);
+  font-family:'Segoe UI',-apple-system,sans-serif;
+  font-size:14px; line-height:1.45;
+}
+.ar-build-modal.preview { max-width:880px; }
+.ar-build-modal.drag-active { box-shadow:0 0 0 4px rgba(234,88,12,0.25), 0 12px 36px rgba(0,0,0,0.16); }
+
+.ar-build-header {
+  padding:13px 18px; border-bottom:1px solid #e2e8f0;
+  display:flex; align-items:center; gap:10px; background:#fff;
+}
+.ar-build-header h4 { font-size:1rem; font-weight:800; color:#0f172a; margin:0; }
+.ar-build-header .date-sub { font-size:0.74rem; color:#64748b; font-weight:600; }
+.ar-build-header .build-ms { font-size:0.7rem; color:#15803d; background:#dcfce7;
+  padding:2px 8px; border-radius:4px; font-weight:700; margin-left:auto; }
+.ar-build-header .close-x { color:#94a3b8; font-size:1.4rem; cursor:pointer; line-height:1;
+  margin-left:auto; padding:0 4px; }
+
+.ar-build-body {
+  padding:14px 18px; overflow-y:auto; background:#f8fafc;
+  max-height:calc(100vh - 200px);
+}
+
+.ar-build-intro {
+  font-size:0.78rem; color:#475569; padding:0 0 12px; line-height:1.45;
+}
+.ar-build-intro b { color:#0f172a; }
+
+/* Drop rows */
+.ar-drop-list { display:flex; flex-direction:column; gap:8px; }
+.ar-drop-row {
+  display:flex; align-items:stretch; gap:0;
+  border:1px solid #e2e8f0; border-radius:8px;
+  background:#fff; overflow:hidden;
+}
+.ar-drop-row.done { border-color:#bbf7d0; }
+.ar-drop-row.error { border-color:#fecaca; }
+.ar-drop-num {
+  width:36px; flex-shrink:0; background:#f1f5f9; color:#64748b;
+  display:flex; align-items:center; justify-content:center;
+  font-size:0.78rem; font-weight:800;
+}
+.ar-drop-row.done .ar-drop-num { background:#22c55e; color:#fff; }
+.ar-drop-row.error .ar-drop-num { background:#dc2626; color:#fff; }
+.ar-drop-body { padding:10px 14px; flex:1; min-width:0; }
+.ar-drop-title {
+  font-size:0.84rem; font-weight:800; color:#0f172a;
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+}
+.ar-drop-hint {
+  font-size:0.7rem; color:#94a3b8; font-weight:500;
+  font-family:'Consolas',monospace;
+}
+.ar-drop-body p { font-size:0.74rem; color:#64748b; margin-top:2px; margin-bottom:0; }
+.ar-drop-done {
+  font-size:0.74rem; color:#15803d; margin-top:3px; font-weight:600;
+}
+.ar-drop-done .filename { font-family:'Consolas',monospace; color:#0f172a; font-weight:700; }
+.ar-drop-error { font-size:0.74rem; color:#b91c1c; margin-top:3px; font-weight:600; }
+.ar-drop-error .filename { font-family:'Consolas',monospace; }
+
+.ar-drop-zone {
+  width:170px; flex-shrink:0; background:#fafbff;
+  border-left:1px dashed #e2e8f0;
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+  padding:6px 8px; color:#94a3b8; font-size:0.74rem; text-align:center; gap:2px;
+  cursor:pointer; user-select:none;
+}
+.ar-drop-zone .icon { font-size:1rem; color:#cbd5e1; }
+.ar-drop-zone .label { font-weight:700; color:#64748b; }
+.ar-drop-zone .sub { font-size:0.66rem; color:#94a3b8; }
+.ar-drop-zone:hover { background:#fff7ed; color:#ea580c; }
+.ar-drop-zone:hover .label { color:#ea580c; }
+.ar-drop-zone:hover .icon { color:#ea580c; }
+
+.ar-drop-zone-done {
+  width:170px; flex-shrink:0; background:#f0fdf4;
+  border-left:1px solid #bbf7d0;
+  display:flex; align-items:center; justify-content:center; padding:6px 8px;
+}
+.ar-drop-zone-done .change-link {
+  font-size:0.7rem; color:#0369a1; cursor:pointer;
+  text-decoration:underline; font-weight:600;
+}
+
+.ar-build-hint {
+  font-size:0.72rem; color:#64748b; margin-top:10px;
+  padding:9px 12px; background:#fff; border:1px dashed #e2e8f0;
+  border-radius:6px; display:flex; align-items:center; gap:8px;
+}
+.ar-build-hint b { color:#0f172a; }
+
+.ar-build-footer {
+  padding:11px 18px; border-top:1px solid #e2e8f0;
+  display:flex; gap:10px; align-items:center; background:#fff;
+}
+.ar-build-footer .footer-note { font-size:0.72rem; color:#64748b;
+  margin-right:auto; display:flex; align-items:center; gap:8px; }
+.ar-build-footer .progress-pill {
+  background:#fff7ed; color:#9a3412;
+  padding:3px 9px; border-radius:999px;
+  font-size:0.7rem; font-weight:700;
+}
+.ar-build-footer .progress-pill.ready { background:#dcfce7; color:#166534; }
+.ar-build-footer .path-pill {
+  font-family:'Consolas',monospace; background:#f1f5f9;
+  padding:2px 7px; border-radius:4px; color:#334155; font-weight:600;
+}
+.ar-build-footer .folder-link {
+  color:#0369a1; cursor:pointer; text-decoration:underline; font-size:0.72rem;
+}
+
+.ar-build-modal .ngl-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:8px 14px; border-radius:6px; font-size:0.8rem; font-weight:700;
+  cursor:pointer; border:1px solid; white-space:nowrap;
+}
+.ar-build-modal .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569; }
+.ar-build-modal .ngl-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
+.ar-build-modal .ngl-btn-primary.disabled,
+.ar-build-modal .ngl-btn-primary[disabled] {
+  background:#fde6d3; border-color:#fde6d3; color:#c2410c;
+  cursor:not-allowed; opacity:0.7;
+}
+
+/* Preview state */
+.ar-headline {
+  background:#fff; border:1px solid #e2e8f0; border-radius:10px;
+  padding:12px 16px; margin-bottom:12px;
+  display:flex; align-items:center; gap:18px;
+}
+.ar-headline .stat { display:flex; flex-direction:column; min-width:0; }
+.ar-headline .stat .lbl {
+  font-size:0.66rem; color:#94a3b8;
+  text-transform:uppercase; letter-spacing:0.05em; font-weight:700;
+}
+.ar-headline .stat .val {
+  font-size:1.45rem; font-weight:800; color:#0f172a;
+  font-variant-numeric:tabular-nums; line-height:1.15;
+}
+.ar-headline .arrow { color:#cbd5e1; font-size:1.4rem; }
+.ar-headline .delta {
+  padding:8px 12px; border-radius:6px;
+  font-size:0.78rem; font-weight:800;
+  display:flex; flex-direction:column; align-items:center;
+  min-width:108px; margin-left:auto;
+}
+.ar-headline .delta.up { background:#dcfce7; color:#166534; }
+.ar-headline .delta.down { background:#fee2e2; color:#991b1b; }
+.ar-headline .delta.flat { background:#f1f5f9; color:#475569; }
+.ar-headline .delta .d-label {
+  font-size:0.6rem; opacity:0.85;
+  text-transform:uppercase; letter-spacing:0.04em; font-weight:700;
+}
+.ar-headline .delta .d-val {
+  font-size:1rem; font-variant-numeric:tabular-nums;
+}
+
+.ar-source-strip {
+  display:flex; flex-wrap:wrap; gap:6px 12px;
+  padding:8px 12px; background:#fff; border:1px solid #e2e8f0;
+  border-radius:8px; font-size:0.72rem; color:#475569; margin-bottom:12px;
+}
+.ar-source-strip .src { display:inline-flex; align-items:center; gap:4px; }
+.ar-source-strip .src::before {
+  content:''; width:6px; height:6px; background:#22c55e; border-radius:50%;
+}
+.ar-source-strip b { color:#0f172a; font-weight:700; }
+.ar-source-strip .age-note { margin-left:auto; color:#64748b; font-style:italic; }
+
+.ar-section-h {
+  display:flex; align-items:center; gap:10px;
+  font-size:0.86rem; font-weight:800; color:#0f172a;
+  padding:7px 12px; margin:0 0 8px;
+  background:#fff; border-left:4px solid #ea580c;
+  border-radius:0 6px 6px 0;
+  border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0;
+  border-bottom:1px solid #e2e8f0;
+}
+.ar-section-h .sub {
+  font-size:0.72rem; color:#64748b; font-weight:500; margin-left:auto;
+}
+
+.ar-kpi-grid {
+  display:grid; grid-template-columns:repeat(4, 1fr);
+  gap:9px; margin-bottom:12px;
+}
+.ar-kpi {
+  background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+  padding:10px 12px; cursor:pointer; position:relative;
+  transition:border-color 0.12s, box-shadow 0.12s;
+}
+.ar-kpi:hover { border-color:#ea580c; box-shadow:0 2px 6px rgba(234,88,12,0.08); }
+.ar-kpi.active { border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,0.10); }
+.ar-kpi.alert {
+  border-color:#fed7aa;
+  background:linear-gradient(180deg, #fff7ed 0%, #fff 65%);
+}
+.ar-kpi.alert.active { border-color:#ea580c; }
+.ar-kpi .lbl {
+  font-size:0.63rem; color:#94a3b8;
+  text-transform:uppercase; letter-spacing:0.04em; font-weight:700;
+  margin-bottom:3px; display:flex; align-items:center; gap:6px;
+}
+.ar-kpi .ico {
+  width:16px; height:16px; border-radius:4px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:0.7rem; font-weight:800;
+}
+.ar-kpi .ico.green { background:#dcfce7; color:#15803d; }
+.ar-kpi .ico.blue { background:#dbeafe; color:#1d4ed8; }
+.ar-kpi .ico.purple { background:#ede9fe; color:#6d28d9; }
+.ar-kpi .ico.red { background:#fee2e2; color:#b91c1c; }
+.ar-kpi .val {
+  font-size:1.3rem; font-weight:800; color:#0f172a;
+  font-variant-numeric:tabular-nums; line-height:1.1;
+}
+.ar-kpi.alert .val { color:#9a3412; }
+.ar-kpi .sub { font-size:0.7rem; color:#64748b; margin-top:2px; }
+.ar-kpi .pop-hint {
+  font-size:0.62rem; color:#ea580c; font-weight:700;
+  margin-top:5px; opacity:0;
+  transition:opacity 0.15s;
+}
+.ar-kpi:hover .pop-hint, .ar-kpi.active .pop-hint { opacity:1; }
+
+.ar-detail-panel {
+  background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+  padding:0; margin-bottom:12px; overflow:hidden;
+}
+.ar-detail-panel .dp-head {
+  padding:9px 12px; border-bottom:1px solid #e2e8f0;
+  display:flex; align-items:center; gap:10px; background:#f8fafc;
+}
+.ar-detail-panel .dp-title {
+  font-size:0.84rem; font-weight:800; color:#0f172a;
+}
+.ar-detail-panel .dp-sub {
+  font-size:0.72rem; color:#64748b; margin-left:6px;
+}
+
+.ar-dp-table {
+  width:100%; border-collapse:collapse; font-size:0.76rem;
+}
+.ar-dp-table thead th {
+  background:#f1f5f9; color:#475569;
+  font-weight:700; text-transform:uppercase;
+  font-size:0.62rem; letter-spacing:0.04em;
+  padding:6px 10px; text-align:left;
+  border-bottom:1px solid #e2e8f0; white-space:nowrap;
+}
+.ar-dp-table thead th.num { text-align:right; }
+.ar-dp-table tbody td {
+  padding:6px 10px; border-bottom:1px solid #f1f5f9;
+  color:#0f172a; vertical-align:middle; white-space:nowrap;
+}
+.ar-dp-table tbody tr:hover { background:#fff7ed; }
+.ar-dp-table tbody tr:last-child td { border-bottom:none; }
+.ar-dp-table .num { text-align:right; font-variant-numeric:tabular-nums; }
+.ar-dp-table .mono {
+  font-family:'Consolas',monospace; font-weight:600; color:#334155;
+}
+.ar-dp-table .muted { color:#64748b; }
+.ar-dp-table .pos { color:#15803d; font-weight:700; }
+.ar-dp-table .neg { color:#b91c1c; font-weight:700; }
+.ar-dp-table .more-row {
+  text-align:center; padding:8px; color:#64748b;
+  font-size:0.72rem; background:#f8fafc;
+}
+
+/* ── Merge tool — sortable column headers ── */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 120ms, background-color 120ms;
+}
+th.sortable:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+th.sortable .sort-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+th.sortable.sort-active {
+  color: #ea580c;
+  background: #fff7ed;
+}
+th.sortable.sort-active .sort-arrow {
+  color: #ea580c;
+}
+
+/* ── Task 17: Fetching progress strip (live timer + pause + cancel) ── */
+/* Lives inline in the tabs-row during Fetching state, right of the tab buttons.
+   Replaces the old .progress-line block — same layout slot, different look. */
+#mergeToolViewV2 .progress-strip {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px;
+  font-size: 13px; color: #9a3412;
+  flex: 1; min-width: 240px;
+  margin-left: 14px;
+}
+#mergeToolViewV2 .progress-strip .progress-main { font-weight: 700; color: #7c2d12; flex-shrink: 0; }
+#mergeToolViewV2 .progress-strip .progress-bar { flex: 1; height: 8px; background: #ffedd5; border-radius: 999px; overflow: hidden; min-width: 120px; }
+#mergeToolViewV2 .progress-strip .progress-bar > div { height: 100%; background: #ea580c; transition: width 200ms; }
+#mergeToolViewV2 .progress-strip .progress-stat { color: #9a3412; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; flex-shrink: 0; white-space: nowrap; }
+#mergeToolViewV2 .progress-strip .progress-stat strong { color: #7c2d12; }
+#mergeToolViewV2 .progress-strip .sep { color: #fed7aa; flex-shrink: 0; }
+#mergeToolViewV2 .progress-strip .spinner {
+  width: 14px; height: 14px; border: 2px solid #fed7aa; border-top-color: #ea580c;
+  border-radius: 50%; animation: ngl-spin 0.8s linear infinite; flex-shrink: 0;
+}
+@keyframes ngl-spin { to { transform: rotate(360deg); } }
+
+/* Override the older .pause-btn / .cancel-btn rules defined earlier in the file
+   so the Fetching toolbar buttons match the new progress-strip palette. The old
+   rules are still cheap to keep — they're scoped to .progress-line which we no
+   longer render — but these win because they come later in the cascade. */
+#mergeToolViewV2 .progress-strip + .pause-btn,
+#mergeToolViewV2 .tabs-row > .pause-btn {
+  background: #fff; color: #334155; border: 1px solid #cbd5e1;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  transition: background-color 120ms, border-color 120ms;
+  margin-left: 8px;
+}
+#mergeToolViewV2 .progress-strip + .pause-btn:hover,
+#mergeToolViewV2 .tabs-row > .pause-btn:hover { background: #f1f5f9; border-color: #94a3b8; color: #334155; }
+
+#mergeToolViewV2 .tabs-row > .cancel-btn {
+  background: #fff; color: #dc2626; border: 1px solid #fca5a5;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  transition: background-color 120ms, border-color 120ms;
+  margin-left: 8px;
+}
+#mergeToolViewV2 .tabs-row > .cancel-btn:hover { background: #fef2f2; border-color: #dc2626; color: #dc2626; }
 

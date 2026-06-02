@@ -160,6 +160,39 @@ export const agentBridge = {
     } catch (e) { return { error: e.message }; }
   },
 
+  async pauseJob(jobId) {
+    try {
+      const res = await this._authFetch(
+        this.baseUrl + '/jobs/' + encodeURIComponent(jobId) + '/pause',
+        { method: 'POST' }
+      );
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async resumeJob(jobId) {
+    try {
+      const res = await this._authFetch(
+        this.baseUrl + '/jobs/' + encodeURIComponent(jobId) + '/resume',
+        { method: 'POST' }
+      );
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
+  async cancelJob(jobId) {
+    try {
+      const res = await this._authFetch(
+        this.baseUrl + '/jobs/' + encodeURIComponent(jobId) + '/cancel',
+        { method: 'POST' }
+      );
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { return { error: e.message }; }
+  },
+
   streamProgress(jobId, onEvent) {
     const self = this;
     let retries = 0;

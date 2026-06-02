@@ -29,6 +29,9 @@ const v2State = {
   sortMode: 'excel',
   activeTab: 'all',
   routingTypeFilter: 'all', // 'all' | 'import' | 'export' | 'warehouse' | 'unknown'
+  customerFilter: 'all',    // 'all' | <exact customer name from row.customer>
+  sortKey: null,            // 'cont' | 'inv' | 'cust' | 'status' | null
+  sortDir: 'asc',           // 'asc' | 'desc'
   showAllInSuccess: false,
   // M3: fetch + sidebar
   jobId: null,
@@ -37,6 +40,9 @@ const v2State = {
   fetchTotal: 0,
   fetchCurrentContainer: '',
   lastFetchedContainer: '',
+  fetchStartedAt: null,    // Date.now() when fetch started
+  fetchPaused: false,
+  fetchTimerInterval: null,
   openSidebarRow: null,
   queuedRetries: [],
   completedContainers: null,
@@ -121,12 +127,19 @@ export function setStateV2(name) {
     v2State.searchQuery = '';
     v2State.sortMode = 'excel';
     v2State.activeTab = 'all';
+    v2State.userPickedReadyTab = false;
     v2State.routingTypeFilter = 'all';
+    v2State.customerFilter = 'all';
+    v2State.sortKey = null;
+    v2State.sortDir = 'asc';
     v2State.showAllInSuccess = false;
     v2State.fetchProgress = 0;
     v2State.fetchTotal = 0;
     v2State.fetchCurrentContainer = '';
     v2State.lastFetchedContainer = '';
+    v2State.fetchStartedAt = null;
+    v2State.fetchPaused = false;
+    stopFetchTimer();
     v2State.openSidebarRow = null;
     v2State.queuedRetries = [];
     v2State.completedContainers = null;
@@ -154,6 +167,11 @@ export function setStateV2(name) {
   if (v2State.subMode === 'review') {
     updateMasterCheckbox();
     updateFetchButton();
+  }
+  // Ready also has a master checkbox — sync its tri-state after the DOM mounts.
+  // requestAnimationFrame so the just-set innerHTML is committed first.
+  if (v2State.subMode === 'ready') {
+    requestAnimationFrame(updateMasterIndeterminate);
   }
   // After any re-render that includes the sidebar, latch SortableJS onto the
   // doc list so the user can drag attachments to reorder. Re-init each render
@@ -192,7 +210,11 @@ async function handleExcelChange(e) {
   // Default-active tab: Issues if any issue exists, All otherwise.
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   v2State.activeTab = hasIssues ? 'issues' : 'all';
+  v2State.userPickedReadyTab = false;
   v2State.routingTypeFilter = 'all';
+  v2State.customerFilter = 'all';
+  v2State.sortKey = null;
+  v2State.sortDir = 'asc';
   v2State.searchQuery = '';
   v2State.sortMode = 'excel';
   v2State.showAllInSuccess = false;
@@ -441,11 +463,66 @@ function getVisibleRows() {
   if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
     rows = rows.filter(r => r.routingType === v2State.routingTypeFilter);
   }
+  if (v2State.customerFilter && v2State.customerFilter !== 'all') {
+    rows = rows.filter(r => r.customer === v2State.customerFilter);
+  }
   if (v2State.searchQuery) {
     const q = v2State.searchQuery.toLowerCase();
     rows = rows.filter(r => r.containerNumber.toLowerCase().includes(q));
   }
-  return sortRows(rows, v2State.sortMode);
+  rows = sortRows(rows, v2State.sortMode);
+  // Column-header sort runs LAST so it overrides the dropdown sortMode when active.
+  if (v2State.sortKey) {
+    const dir = v2State.sortDir === 'desc' ? -1 : 1;
+    const cmp = {
+      cont:   (a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''),
+      inv:    (a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''),
+      cust:   (a, b) => (a.customer || '').localeCompare(b.customer || ''),
+      status: (a, b) => statusSortRank(a) - statusSortRank(b),
+    }[v2State.sortKey];
+    if (cmp) rows = rows.slice().sort((a, b) => cmp(a, b) * dir);
+  }
+  return rows;
+}
+
+// State-aware "currently visible" computation for the master checkbox.
+// In Review, this matches getVisibleRows() exactly. In Ready, it mirrors the
+// inline pipeline used by renderReady (status tabs: all/errors/queued, plus
+// customer filter, search, and column-header sort).
+//
+// Don't refactor getVisibleRows() / renderReady() to share this — they each
+// have one extra concern (routing-type + dropdown sort for Review, the
+// errors/queued tab partition for Ready) that doesn't generalize cleanly.
+// This function is the master-checkbox-only viewpoint.
+function getCurrentlyVisibleRows() {
+  // Review state: delegate to the existing canonical pipeline.
+  if (v2State.subMode === 'review') return getVisibleRows();
+
+  // Ready state (post-fetch): mirror renderReady's inline filter chain.
+  let rows = v2State.rows.slice();
+  if (v2State.activeTab === 'errors') {
+    rows = rows.filter(r => !r.skipped && r.fetchResult && (r.fetchResult.podPill === 'miss' || r.fetchResult.invPill === 'miss'));
+  } else if (v2State.activeTab === 'queued') {
+    rows = rows.filter(r => !r.fetchResult && !r.skipped);
+  }
+  if (v2State.customerFilter && v2State.customerFilter !== 'all') {
+    rows = rows.filter(r => r.customer === v2State.customerFilter);
+  }
+  if (v2State.searchQuery) {
+    const q = v2State.searchQuery.toLowerCase();
+    rows = rows.filter(r => (r.containerNumber || '').toLowerCase().includes(q));
+  }
+  if (v2State.sortKey) {
+    const dir = v2State.sortDir === 'desc' ? -1 : 1;
+    const cmp = {
+      cont:   (a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''),
+      inv:    (a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''),
+      cust:   (a, b) => (a.customer || '').localeCompare(b.customer || ''),
+      status: (a, b) => statusSortRank(a) - statusSortRank(b),
+    }[v2State.sortKey];
+    if (cmp) rows.sort((a, b) => cmp(a, b) * dir);
+  }
+  return rows;
 }
 
 function routingTypeFilterTabs() {
@@ -453,11 +530,21 @@ function routingTypeFilterTabs() {
   const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
   const exports_   = v2State.rows.filter(r => r.routingType === 'export').length;
   const warehouses = v2State.rows.filter(r => r.routingType === 'warehouse').length;
+  const vans       = v2State.rows.filter(r => r.routingType === 'van').length;
   const unknown    = v2State.rows.filter(r => r.routingType === 'unknown').length;
   const f = v2State.routingTypeFilter || 'all';
+  const pillFor = {
+    import:    `<span class="will-chip import">POD</span>`,
+    export:    `<span class="will-chip export">BL/POL</span>`,
+    warehouse: `<span class="will-chip whdocs">All QBO Docs</span>`,
+    van:       `<span class="will-chip van">TMS Docs</span>`,
+    unknown:   `<span class="will-chip unknown">?</span>`,
+  };
   const btn = (key, label, count) => `
     <button class="tab ${f === key ? 'active' : ''}" onclick="window.v2SetRoutingTypeFilter('${key}')">
-      ${label} <span class="count">${count}</span>
+      <span class="chip-name">${label}</span>
+      ${pillFor[key] || ''}
+      <span class="count">${count}</span>
     </button>`;
   return `
     <div class="filter-tabs">
@@ -465,6 +552,7 @@ function routingTypeFilterTabs() {
       ${btn('import', 'Import', imports)}
       ${btn('export', 'Export', exports_)}
       ${btn('warehouse', 'Warehouse', warehouses)}
+      ${btn('van', 'Van', vans)}
       ${btn('unknown', 'Unknown', unknown)}
     </div>
   `;
@@ -472,9 +560,69 @@ function routingTypeFilterTabs() {
 
 function v2SetRoutingTypeFilter(key) {
   v2State.routingTypeFilter = key;
-  setStateV2('review');
+  // Re-render in whichever state we're currently in (review / fetching / ready) —
+  // previously this hard-coded 'review' which forced post-fetch users back to
+  // the pre-fetch screen, blowing away the fetch state.
+  setStateV2(v2State.subMode || 'review');
 }
 window.v2SetRoutingTypeFilter = v2SetRoutingTypeFilter;
+
+// ── Customer dropdown filter ──
+// Populated dynamically from manifest's unique customers, sorted A-Z, with
+// per-customer row counts. Composes with the routing-type filter + search.
+function renderCustomerDropdown() {
+  const counts = new Map();
+  for (const r of v2State.rows) {
+    if (!r.customer) continue;
+    counts.set(r.customer, (counts.get(r.customer) || 0) + 1);
+  }
+  const customers = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const selected = v2State.customerFilter || 'all';
+  const totalRows = v2State.rows.length;
+  return `<select class="customer-select" onchange="window.v2SetCustomerFilter(this.value)" title="Filter by customer">
+    <option value="all" ${selected === 'all' ? 'selected' : ''}>All customers (${totalRows})</option>
+    ${customers.map(([name, n]) => `
+      <option value="${escHtml(name)}" ${selected === name ? 'selected' : ''}>${escHtml(name)} (${n})</option>
+    `).join('')}
+  </select>`;
+}
+
+window.v2SetCustomerFilter = function (value) {
+  v2State.customerFilter = value;
+  // Match the pattern used by v2SetRoutingTypeFilter — re-render via setStateV2
+  // using whatever sub-state we're currently in (review or ready).
+  setStateV2(v2State.subMode || 'review');
+};
+
+// Status-column sort rank: errors first (0), queued (no fetchResult) middle (1), OK rows last (2).
+function statusSortRank(r) {
+  if (r.fetchResult?.podPill === 'miss' || r.fetchResult?.invPill === 'miss') return 0;
+  if (!r.fetchResult) return 1;
+  return 2;
+}
+
+// Sortable column header markup. KEY is one of: 'cont' | 'inv' | 'cust' | 'status'.
+function sortableTh(key, label) {
+  const active  = v2State.sortKey === key;
+  const arrow   = active ? (v2State.sortDir === 'asc' ? '▲' : '▼') : '↕';
+  const cls     = `sortable${active ? ' sort-active' : ''}`;
+  return `<th class="${cls}" onclick="window.v2HandleHeaderSort('${key}')">${label} <span class="sort-arrow">${arrow}</span></th>`;
+}
+
+// Clickable column-header sort handler. Cycles: none → asc → desc → cleared.
+window.v2HandleHeaderSort = function (key) {
+  if (v2State.sortKey !== key) {
+    v2State.sortKey = key;
+    v2State.sortDir = 'asc';
+  } else if (v2State.sortDir === 'asc') {
+    v2State.sortDir = 'desc';
+  } else {
+    // third click clears the sort
+    v2State.sortKey = null;
+    v2State.sortDir = 'asc';
+  }
+  setStateV2(v2State.subMode || 'review');
+};
 
 function sortRows(rows, mode) {
   const out = rows.slice();
@@ -508,6 +656,7 @@ function willChipFor(row) {
   if (row.routingType === 'import')    return `<span class="will-chip import">POD</span>`;
   if (row.routingType === 'export')    return `<span class="will-chip export">BL/POL</span>`;
   if (row.routingType === 'warehouse') return `<span class="will-chip whdocs">All QBO Docs</span>`;
+  if (row.routingType === 'van')       return `<span class="will-chip van">TMS Docs</span>`;
   return `<span class="will-chip unknown">?</span>`;
 }
 
@@ -613,18 +762,22 @@ function fetchRowMarkup(rowIdx, row, opts) {
   ].filter(Boolean).join(' ');
 
   // M4: errored rows are unchecked by default but still INTERACTIVE.
-  // Skipped (dedup) rows remain disabled — they can't be merged at all.
+  // M5 (Task 14): queued rows are also INTERACTIVE — unchecking removes from Resume fetch.
+  // Only skipped (dedup) rows remain disabled — they can't be merged at all.
   const hasFetch    = !!row.fetchResult;
   const isErrorRow  = row.fetchResult?.podPill === 'miss';
   const isSkipped   = !!row.skipped;
-  const interactive = hasFetch && !isSkipped;
+  const interactive = !isSkipped;
   const checkAttrs  = `${row.selected && interactive ? 'checked' : ''} ${interactive ? '' : 'disabled'}`;
   const checkTitle  = isErrorRow ? 'This row is missing its POD/BL. If checked, the merge will include only the invoice page for this container.'
-                   : isQueued ? 'Not yet fetched'
+                   : isQueued ? 'Uncheck to remove from queue (won\'t be fetched on Resume)'
                    : row.skipped ? 'Skipped — re-click Fix Error to undo'
                    : '';
 
-  const trAttrs = isError
+  // Task 15: rows are clickable during error states (Review/Ready) AND during
+  // active Fetching. In the latter case, the sidebar opens in a read-only
+  // variant (Retry/Skip/Upload disabled until the row settles).
+  const trAttrs = (isError || v2State.subMode === 'fetching')
     ? `onclick="window.v2OpenSidebar(${rowIdx})" style="cursor:pointer;"`
     : '';
 
@@ -683,20 +836,31 @@ function updateFilterMeta() {
 }
 
 function updateMasterCheckbox() {
+  // Single source of truth: defer to updateMasterIndeterminate so Review +
+  // Ready rerenderers don't have to know which header id is mounted.
+  updateMasterIndeterminate();
+}
+
+// Drives the header master-checkbox tri-state (unchecked / indeterminate /
+// checked) based on whatever rows the current filter + sort + search pipeline
+// is actually showing. Skipped rows don't count toward the total or the
+// checked tally — they're locked-out of selection.
+function updateMasterIndeterminate() {
   const master = document.getElementById('v2MasterCheck');
   if (!master) return;
-  const visible = getVisibleRows();
-  if (visible.length === 0) {
-    master.checked = false; master.indeterminate = false; return;
+  const visible = getCurrentlyVisibleRows();
+  const selectable = visible.filter(r => !r.skipped);
+  const total = selectable.length;
+  const checked = selectable.filter(r => r.selected).length;
+  if (total === 0) {
+    master.checked = false;
+    master.indeterminate = false;
+    master.disabled = true;
+    return;
   }
-  const checkedCount = visible.filter(r => r.selected).length;
-  if (checkedCount === 0) {
-    master.checked = false; master.indeterminate = false;
-  } else if (checkedCount === visible.length) {
-    master.checked = true;  master.indeterminate = false;
-  } else {
-    master.checked = false; master.indeterminate = true;
-  }
+  master.disabled = false;
+  master.indeterminate = checked > 0 && checked < total;
+  master.checked = checked === total;
 }
 
 function updateFetchButton() {
@@ -837,6 +1001,7 @@ function routingSummaryBand() {
   const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
   const exports_   = v2State.rows.filter(r => r.routingType === 'export').length;
   const warehouses = v2State.rows.filter(r => r.routingType === 'warehouse').length;
+  const vans       = v2State.rows.filter(r => r.routingType === 'van').length;
   const unknown    = v2State.rows.filter(r => r.routingType === 'unknown').length;
   return `
     <div class="routing-summary">
@@ -853,11 +1018,15 @@ function routingSummaryBand() {
         <span class="chip warehouse">All QBO Docs</span>
         <strong>${warehouses}</strong> warehouse
       </span>
+      <span class="group">
+        <span class="chip van">TMS Docs</span>
+        <strong>${vans}</strong> van${vans !== 1 ? 's' : ''}
+      </span>
       ${unknown ? `<span class="group">
         <span class="chip unknown">?</span>
         <strong>${unknown}</strong> unknown
       </span>` : ''}
-      <span class="hint">Decided by INV# letter (M / E / W) · falls back to WO# letter when prefix is non-standard</span>
+      <span class="hint">Decided by INV# letter (M / E / W / V) · falls back to WO# letter when prefix is non-standard</span>
     </div>
   `;
 }
@@ -881,6 +1050,7 @@ function renderReviewSuccess() {
     expanded = `
       <div style="margin-top:24px;">
         <div class="toolbar">
+          ${renderCustomerDropdown()}
           <input type="text" class="search" placeholder="Search containers…"
                  value="${escHtml(v2State.searchQuery)}"
                  oninput="window.v2HandleSearch(this.value)" />
@@ -893,12 +1063,14 @@ function renderReviewSuccess() {
           <table class="merge-table">
             <thead>
               <tr>
-                <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
+                <th class="check-col"><input type="checkbox" id="v2MasterCheck"
+                        title="Check/uncheck all visible rows"
+                        onchange="window.v2ToggleAllVisible(this.checked)" /></th>
                 <th>Row</th>
-                <th>Container</th>
-                <th>Invoice #</th>
+                ${sortableTh('cont', 'Container')}
+                ${sortableTh('inv',  'Invoice #')}
                 ${hasAnyWO() ? '<th>WO #</th>' : ''}
-                <th>Customer</th>
+                ${sortableTh('cust', 'Customer')}
                 <th>Will fetch</th>
                 <th>Validation</th>
               </tr>
@@ -915,7 +1087,6 @@ function renderReviewSuccess() {
   return `
     ${topBarOnlyExcel()}
     ${routingTypeFilterTabs()}
-    ${routingSummaryBand()}
     <div class="review-success-card">
       <div class="check-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -952,7 +1123,6 @@ function renderReviewWithIssues() {
   return `
     ${topBarOnlyExcel()}
     ${routingTypeFilterTabs()}
-    ${routingSummaryBand()}
 
     <div class="controls-line" style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:11px 16px;">
       <div style="font-size:0.86rem; color:#78350f;">
@@ -978,6 +1148,7 @@ function renderReviewWithIssues() {
     </div>
 
     <div class="toolbar">
+      ${renderCustomerDropdown()}
       <input type="text" class="search" placeholder="Search containers…"
              value="${escHtml(v2State.searchQuery)}"
              oninput="window.v2HandleSearch(this.value)" />
@@ -991,12 +1162,14 @@ function renderReviewWithIssues() {
       <table class="merge-table">
         <thead>
           <tr>
-            <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
+            <th class="check-col"><input type="checkbox" id="v2MasterCheck"
+                    title="Check/uncheck all visible rows"
+                    onchange="window.v2ToggleAllVisible(this.checked)" /></th>
             <th>Row</th>
-            <th>Container</th>
-            <th>Invoice #</th>
+            ${sortableTh('cont', 'Container')}
+            ${sortableTh('inv',  'Invoice #')}
             ${hasAnyWO() ? '<th>WO #</th>' : ''}
-            <th>Customer</th>
+            ${sortableTh('cust', 'Customer')}
             <th>Will fetch</th>
             <th>Validation</th>
           </tr>
@@ -1007,13 +1180,78 @@ function renderReviewWithIssues() {
   `;
 }
 
+// ── Progress strip helpers (Task 17: live timer + Pause/Cancel) ──
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function renderFetchingProgressStrip() {
+  const done = v2State.fetchProgress || 0;
+  const total = v2State.fetchTotal || v2State.rows.length || 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const elapsed = v2State.fetchStartedAt ? Date.now() - v2State.fetchStartedAt : 0;
+  const msPerRow = done > 0 ? elapsed / done : 0;
+  const remainingMs = (total - done) * msPerRow;
+  const paused = !!v2State.fetchPaused;
+
+  return `
+    <div class="progress-strip" id="v2ProgressStrip">
+      ${paused ? '<span style="font-size:14px;">⏸</span>' : '<div class="spinner"></div>'}
+      <span class="progress-main"><span id="v2ProgDone">${done}</span> / <span id="v2ProgTotal">${total}</span></span>
+      <div class="progress-bar"><div id="v2ProgBar" style="width:${pct}%"></div></div>
+      <span class="progress-stat"><strong id="v2ProgElapsed">${fmtTime(elapsed)}</strong> elapsed</span>
+      <span class="sep">·</span>
+      <span class="progress-stat">~<strong id="v2ProgEta">${fmtTime(remainingMs)}</strong> left</span>
+      <span class="sep">·</span>
+      <span class="progress-stat"><strong id="v2ProgRate">${msPerRow > 0 ? '~' + (msPerRow / 1000).toFixed(1) + 's' : '~—'}</strong>/row</span>
+    </div>
+    <button class="pause-btn" onclick="window.v2TogglePauseFetch()" id="v2PauseBtn">${paused ? '▶ Resume' : '⏸ Pause'}</button>
+    <button class="cancel-btn" onclick="window.v2CancelFetch()">✕ Cancel</button>
+  `;
+}
+
+function startFetchTimer() {
+  stopFetchTimer();
+  v2State.fetchTimerInterval = setInterval(() => {
+    if (v2State.subMode !== 'fetching') {
+      stopFetchTimer();
+      return;
+    }
+    const done = v2State.fetchProgress || 0;
+    const total = v2State.fetchTotal || v2State.rows.length || 0;
+    const elapsed = v2State.fetchStartedAt ? Date.now() - v2State.fetchStartedAt : 0;
+    const msPerRow = done > 0 ? elapsed / done : 0;
+    const remainingMs = (total - done) * msPerRow;
+    const elapsedEl = document.getElementById('v2ProgElapsed');
+    const etaEl     = document.getElementById('v2ProgEta');
+    const rateEl    = document.getElementById('v2ProgRate');
+    const doneEl    = document.getElementById('v2ProgDone');
+    const totalEl   = document.getElementById('v2ProgTotal');
+    const barEl     = document.getElementById('v2ProgBar');
+    if (elapsedEl) elapsedEl.textContent = fmtTime(elapsed);
+    if (etaEl)     etaEl.textContent     = fmtTime(remainingMs);
+    if (rateEl)    rateEl.textContent    = msPerRow > 0 ? `~${(msPerRow / 1000).toFixed(1)}s` : '~—';
+    if (doneEl)    doneEl.textContent    = done;
+    if (totalEl)   totalEl.textContent   = total;
+    if (barEl)     barEl.style.width     = total > 0 ? `${Math.round((done / total) * 100)}%` : '0%';
+  }, 1000);
+}
+
+function stopFetchTimer() {
+  if (v2State.fetchTimerInterval) {
+    clearInterval(v2State.fetchTimerInterval);
+    v2State.fetchTimerInterval = null;
+  }
+}
+
 function renderFetching() {
-  // Use fetchTotal (= unique container count from job_started) for consistency
-  // across progress, tabs, and toolbar. Falls back to selected count before SSE arrives.
-  const total = v2State.fetchTotal || v2State.rows.filter(r => r.selected).length || v2State.rows.length;
-  const done = v2State.fetchProgress;
+  // Progress counters (done / total / percent / elapsed / ETA / rate) and the
+  // Pause/Cancel buttons all live inside renderFetchingProgressStrip() now —
+  // see Task 17. The strip's tickers update via startFetchTimer / updateLiveCounters
+  // without re-rendering this function, so we just need the per-tab counts here.
   const cur = v2State.fetchCurrentContainer || '—';
-  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
   // Tabs split by current state
   const fetchedRows = v2State.rows.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss');
@@ -1033,6 +1271,22 @@ function renderFetching() {
   else if (fetchTab === 'failed')  visibleRows = failedRows;
   else                              visibleRows = v2State.rows;
 
+  // Apply routing-type filter (Imports / Exports / Warehouse / Van / Unknown)
+  if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
+    visibleRows = visibleRows.filter(r => r.routingType === v2State.routingTypeFilter);
+  }
+
+  // Apply search filter
+  if (v2State.searchQuery) {
+    const q = v2State.searchQuery.toLowerCase();
+    visibleRows = visibleRows.filter(r =>
+      (r.containerNumber || '').toLowerCase().includes(q)
+      || (r.invoiceNumber || '').toLowerCase().includes(q)
+      || (r.workOrderNumber || '').toLowerCase().includes(q)
+      || (r.customer || '').toLowerCase().includes(q)
+    );
+  }
+
   const bodyRows = visibleRows.map(row => {
     const i = v2State.rows.indexOf(row);
     return fetchRowMarkup(i, row, {
@@ -1048,32 +1302,26 @@ function renderFetching() {
 
   return `
     ${topBarWithDrop()}
-    ${routingSummaryBand()}
-    <div class="progress-line">
-      <div class="now">
-        <strong>Fetching ${done} / ${total}</strong>
-        &nbsp; <span class="container-name">${escHtml(cur)}</span>
-      </div>
-      <div class="progress-track"><div class="progress-fill" style="width:${percent}%;"></div></div>
-      <button class="pause-btn" onclick="window.v2CancelFetch()" title="Pause — you can resume from where you left off">⏸ Pause</button>
-      <button class="cancel-link" onclick="window.v2CancelAndReset()" title="Cancel and discard all progress">Cancel</button>
-    </div>
+    ${routingTypeFilterTabs()}
     <div class="tabs-row">
       <div class="tabs">
         <button class="tab ${fetchTab === 'all' ? 'active' : ''}" onclick="window.v2HandleFetchTab('all')">All <span class="count">${allCount}</span></button>
         <button class="tab ${fetchTab === 'fetched' ? 'active' : ''}" onclick="window.v2HandleFetchTab('fetched')">Fetched <span class="count" id="v2FetchTabFetchedCount">${fetchedCount}</span></button>
         <button class="tab has-issues ${fetchTab === 'failed' ? 'active' : ''}" onclick="window.v2HandleFetchTab('failed')">Failed <span class="count" id="v2FetchTabFailedCount">${failedCount}</span></button>
       </div>
+      ${renderFetchingProgressStrip()}
     </div>
     <div class="toolbar">
-      <input type="text" class="search" placeholder="Search containers…" />
-      <span class="filter-meta" id="v2FetchToolbarMeta">${done} / ${total} fetched · ${failedCount} failed</span>
+      <input type="text" class="search" placeholder="Search containers, invoices, WO#, customer…"
+             value="${escHtml(v2State.searchQuery)}"
+             oninput="window.v2HandleFetchSearch(this.value)" />
+      <span class="filter-meta" id="v2FetchToolbarMeta">${escHtml(cur)}</span>
     </div>
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th>Container</th><th>Invoice #</th><th>Customer</th>
-          <th>Will fetch</th><th>Documents</th><th>Status</th><th></th>
+          ${sortableTh('cont', 'Container')}${sortableTh('inv', 'Invoice #')}${sortableTh('cust', 'Customer')}
+          <th>Will fetch</th><th>Documents</th>${sortableTh('status', 'Status')}<th></th>
         </tr></thead>
         <tbody id="v2FetchTbody">${bodyRows}</tbody>
       </table>
@@ -1096,13 +1344,18 @@ function renderReady() {
   const errors = all.filter(r => !r.skipped && r.fetchResult && (r.fetchResult.podPill === 'miss' || r.fetchResult.invPill === 'miss'));
   const ready  = all.filter(r => !r.skipped && r.fetchResult && r.fetchResult.podPill !== 'miss' && r.fetchResult.invPill !== 'miss');
 
-  // Active tab — Errors-default-when-errors rule
-  if (errors.length > 0 && v2State.activeTab !== 'errors' && v2State.activeTab !== 'queued') {
+  // Active tab — Errors-default-when-errors rule, but ONLY on first entry to Ready
+  // (when the user hasn't explicitly picked a tab). Once they click All/Errors/Queued,
+  // respect that choice on subsequent re-renders. Previously this auto-jumped to Errors
+  // on EVERY render, locking the user out of the All tab whenever errors > 0.
+  if (errors.length > 0 && !v2State.userPickedReadyTab && !v2State.activeTab) {
     v2State.activeTab = 'errors';
   } else if (errors.length === 0 && queued.length === 0) {
     if (v2State.activeTab === 'errors' || v2State.activeTab === 'queued') {
       v2State.activeTab = 'all';
     }
+  } else if (!v2State.activeTab) {
+    v2State.activeTab = 'all';
   }
 
   // Filter rows based on active tab
@@ -1111,10 +1364,32 @@ function renderReady() {
   else if (v2State.activeTab === 'queued') visibleRows = queued;
   else visibleRows = all;
 
+  // Apply routing-type filter (Imports / Exports / Warehouse / Van / Unknown)
+  if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
+    visibleRows = visibleRows.filter(r => r.routingType === v2State.routingTypeFilter);
+  }
+
+  // Apply customer filter (composes with the active tab)
+  if (v2State.customerFilter && v2State.customerFilter !== 'all') {
+    visibleRows = visibleRows.filter(r => r.customer === v2State.customerFilter);
+  }
+
   // Apply search
   if (v2State.searchQuery) {
     const q = v2State.searchQuery.toLowerCase();
     visibleRows = visibleRows.filter(r => r.containerNumber.toLowerCase().includes(q));
+  }
+
+  // Column-header sort (applied AFTER all filters + search so it operates on the visible set)
+  if (v2State.sortKey) {
+    const dir = v2State.sortDir === 'desc' ? -1 : 1;
+    const cmp = {
+      cont:   (a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''),
+      inv:    (a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''),
+      cust:   (a, b) => (a.customer || '').localeCompare(b.customer || ''),
+      status: (a, b) => statusSortRank(a) - statusSortRank(b),
+    }[v2State.sortKey];
+    if (cmp) visibleRows = visibleRows.slice().sort((a, b) => cmp(a, b) * dir);
   }
 
   // Selection count for the action button
@@ -1123,6 +1398,15 @@ function renderReady() {
   const selected = selectableRows.filter(r => r.selected).length;
 
   const isPartial = queued.length > 0;
+
+  // Hybrid status-scoped action buttons (Task 13)
+  // Retry/Resume buttons are scoped to the active status tab and visible only
+  // when the relevant selected count is > 0. Continue to Merge is always shown.
+  const selectedErrors = errors.filter(r => r.selected).length;
+  const selectedQueued = queued.filter(r => r.selected).length;
+  const activeTab = v2State.activeTab || 'all';
+  const showRetry  = (activeTab === 'all' || activeTab === 'errors') && selectedErrors > 0;
+  const showResume = (activeTab === 'all' || activeTab === 'queued') && selectedQueued > 0;
 
   // Action bar
   const actionBar = isPartial ? `
@@ -1135,10 +1419,16 @@ function renderReady() {
         <span style="color:#94a3b8;">●</span> <strong>${queued.length}</strong> queued
       </div>
       <div class="ready-action-right">
-        <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
-          ↻ Resume fetch
-          <span class="count-badge">${queued.length} queued</span>
-        </button>
+        ${showRetry ? `
+          <button class="merge-btn retry-secondary" onclick="window.v2RetryAllErrors()">
+            ↻ Retry errors <span class="count-badge">${selectedErrors}</span>
+          </button>
+        ` : ''}
+        ${showResume ? `
+          <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
+            ↻ Resume fetch <span class="count-badge">${selectedQueued} queued</span>
+          </button>
+        ` : ''}
         <button class="merge-btn" id="v2BtnContinueMerge" ${selected === 0 ? 'disabled' : ''}
                 onclick="window.v2ClickContinueMerge()" title="Merge what's already fetched — queued rows wait for Resume">
           Continue to Merge
@@ -1155,6 +1445,16 @@ function renderReady() {
           <span style="color:#94a3b8;">(click any error row)</span>` : ''}
       </div>
       <div class="ready-action-right">
+        ${showRetry ? `
+          <button class="merge-btn retry-secondary" onclick="window.v2RetryAllErrors()">
+            ↻ Retry errors <span class="count-badge">${selectedErrors}</span>
+          </button>
+        ` : ''}
+        ${showResume ? `
+          <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
+            ↻ Resume fetch <span class="count-badge">${selectedQueued} queued</span>
+          </button>
+        ` : ''}
         <button class="merge-btn" id="v2BtnContinueMerge" ${selected === 0 ? 'disabled' : ''}
                 onclick="window.v2ClickContinueMerge()">
           Continue to Merge
@@ -1192,6 +1492,7 @@ function renderReady() {
 
   const toolbarHtml = `
     <div class="toolbar">
+      ${renderCustomerDropdown()}
       <input type="text" class="search" placeholder="Search containers…"
              value="${escHtml(v2State.searchQuery)}"
              oninput="window.v2HandleReadySearch(this.value)" />
@@ -1214,9 +1515,11 @@ function renderReady() {
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th class="check-col"><input type="checkbox" id="v2ReadyMaster" onclick="window.v2ToggleAllReady(this.checked)" /></th>
-          <th>Container</th><th>Invoice #</th><th>Customer</th>
-          <th>Will fetch</th><th>Documents</th><th>Status</th><th></th>
+          <th class="check-col"><input type="checkbox" id="v2MasterCheck"
+                  title="Check/uncheck all visible rows"
+                  onchange="window.v2ToggleAllVisible(this.checked)" /></th>
+          ${sortableTh('cont', 'Container')}${sortableTh('inv', 'Invoice #')}${sortableTh('cust', 'Customer')}
+          <th>Will fetch</th><th>Documents</th>${sortableTh('status', 'Status')}<th></th>
         </tr></thead>
         <tbody id="v2ReadyTbody">${bodyRows}</tbody>
       </table>
@@ -1233,7 +1536,7 @@ function renderReady() {
 
   return `
     ${topBarWithDrop()}
-    ${routingSummaryBand()}
+    ${routingTypeFilterTabs()}
     ${actionBar}
     ${tabsHtml}
     ${toolbarHtml}
@@ -1477,6 +1780,14 @@ function renderSidebar(rowIdx) {
   const row = v2State.rows[rowIdx];
   if (!row) return '';
 
+  // Task 15: mid-fetch read-only variant.
+  // If we're in Fetching state AND this row hasn't settled yet, render the
+  // orange-tinted read-only sidebar (Retry/Skip/Upload disabled).
+  const isFetching = v2State.subMode === 'fetching' && !row.fetchResult && !row.skipped;
+  if (isFetching) {
+    return renderFetchingSidebar(rowIdx, row);
+  }
+
   const isResolved = !!(row.fetchResult && row.fetchResult.podPill !== 'miss');
   const sidebarClass = `detail-sidebar open${isResolved ? ' resolved' : ''}`;
 
@@ -1551,6 +1862,75 @@ function renderSidebar(rowIdx) {
         ${bodyTop}
       </div>
       ${footer}
+    </div>
+    <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>
+  `;
+}
+
+// Task 15: read-only sidebar variant rendered while a row is mid-fetch or
+// still queued. Reuses the same v2DetailSidebar CSS (styles.css ~1951+) and
+// just swaps the error-red palette for an orange/amber tint via inline color
+// overrides — no new CSS needed.
+function renderFetchingSidebar(rowIdx, row) {
+  const isInFlight = row.containerNumber && row.containerNumber === v2State.fetchCurrentContainer;
+  const subtitle = `${escHtml(row.containerNumber || 'Warehouse')} · Invoice ${escHtml(row.invoiceNumber || '—')}`;
+  const titleText = isInFlight ? 'Fetching Container' : 'Container Queued';
+  const bannerText = isInFlight
+    ? '<strong>This row is being fetched right now.</strong> Updates appear live; actions unlock when this row settles.'
+    : '<strong>This row is queued.</strong> It will start as soon as an in-flight slot opens up. You can uncheck the row to skip.';
+  const docName = (row.routingType === 'export') ? 'BL or POL'
+                : (row.routingType === 'warehouse') ? 'any QBO attachment'
+                : (row.routingType === 'van') ? 'TMS document'
+                : (row.routingType === 'unknown') ? 'POD, BL, or POL'
+                : 'POD';
+  const routingTypeLabel = ({
+    import: 'Imports', export: 'Exports', warehouse: 'Warehouse', van: 'Van', unknown: 'Unknown'
+  })[row.routingType] || row.routingType || 'unknown';
+
+  return `
+    <div class="detail-sidebar open" id="v2DetailSidebar">
+      <div class="ds-header">
+        <div class="ds-icon" style="background:#fff7ed;color:#ea580c;">!</div>
+        <div>
+          <div class="ds-title">${titleText}</div>
+          <div class="ds-subtitle">${subtitle}</div>
+        </div>
+        <button class="ds-close" onclick="window.v2CloseSidebar()">×</button>
+      </div>
+      <div class="panel-empty-banner" style="background:#fff7ed;border-bottom-color:#fed7aa;color:#9a3412;">
+        <span>${bannerText}</span>
+      </div>
+      <div class="ds-body">
+        <div class="ds-section">
+          <div class="ds-section-label">Customer</div>
+          <div style="font-size:0.92rem;font-weight:600;color:#0f172a;">${escHtml(row.customer || '—')}</div>
+        </div>
+        <div class="ds-section">
+          <div class="ds-section-label">What's Happening</div>
+          <div class="happened-block" style="background:#fff7ed;border-color:#fed7aa;">
+            <div class="title" style="color:#9a3412;">${isInFlight ? 'Pulling documents now' : 'Waiting in queue'}</div>
+            <div class="body" style="color:#7c2d12;">
+              Routing type: <strong>${escHtml(routingTypeLabel)}</strong>.
+              ${isInFlight ? 'Invoice PDF pulled · now walking the doc chain on TMS.' : 'The fetcher will pick this up shortly.'}
+            </div>
+          </div>
+        </div>
+        <div class="ds-section">
+          <div class="ds-section-label">Resolve</div>
+          <button class="retry-api-btn" disabled title="Available when this row finishes fetching">↻ Retry API call</button>
+          <div class="resolve-divider"><span>or upload manually</span></div>
+          <label class="ds-upload" style="opacity:0.55;cursor:not-allowed;pointer-events:none;">
+            <div class="icon">⬆</div>
+            <div class="title">Drop ${escHtml(docName)} for ${escHtml(row.containerNumber || row.workOrderNumber || row.invoiceNumber)}</div>
+            <div class="help">.pdf only — replaces whatever the API would have returned</div>
+          </label>
+        </div>
+      </div>
+      <div class="ds-footer">
+        <button class="skip-link" disabled title="Available when fetch completes">Skip this one</button>
+        <button class="nav-btn" disabled title="Available when fetch completes">← Prev</button>
+        <button class="next-issue-btn" disabled title="Wait for fetch to finish">Next Error</button>
+      </div>
     </div>
     <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>
   `;
@@ -2016,13 +2396,17 @@ window.v2TriggerExcel = triggerExcel;
 window.v2SetState = setStateV2;
 
 async function v2ClickFetch() {
-  // Build the fetch payload — dedup selected rows by container.
+  // Build the fetch payload — dedup selected rows by INVOICE NUMBER (INV# is
+  // unique per row). Previously this deduped by container number, which
+  // collapsed rows that share a container — 18 warehouse rows all have empty
+  // container '', 25 van rows share T1022/T1013 — turning a 67-row fetch
+  // into a 30-row fetch and leaving the rest stuck "queued" forever.
   const selected = v2State.rows.filter(r => r.selected);
   const seen = new Set();
   const containers = [];
   for (const row of selected) {
-    const key = row.containerNumber.toLowerCase();
-    if (seen.has(key)) continue;
+    const key = (row.invoiceNumber || row.containerNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     containers.push({
       containerNumber: row.containerNumber,
@@ -2041,12 +2425,15 @@ async function v2ClickFetch() {
   v2State.fetchCurrentContainer = '';
   v2State.lastFetchedContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
   // Clear any stale fetchResult on rows we're about to fetch
   for (const row of v2State.rows) {
     if (row.selected) { row.fetchResult = null; row.skipped = false; }
   }
 
   setStateV2('fetching');
+  startFetchTimer();
 
   try {
     v2State.jobIncludesInvoice = true;
@@ -2066,11 +2453,33 @@ window.v2ClickFetch = v2ClickFetch;
 
 function v2HandleReadyTab(tab) {
   v2State.activeTab = tab;
+  v2State.userPickedReadyTab = true;   // user override — don't auto-jump back to Errors
   setStateV2('ready');
 }
 function v2HandleReadySearch(value) {
   v2State.searchQuery = value;
   setStateV2('ready');
+  restoreSearchFocus();
+}
+
+function v2HandleFetchSearch(value) {
+  v2State.searchQuery = value;
+  setStateV2('fetching');
+  restoreSearchFocus();
+}
+window.v2HandleFetchSearch = v2HandleFetchSearch;
+
+// After a re-render that destroys the search input, put the cursor back where
+// it was. setStateV2 rebuilds the whole DOM, so every keystroke would otherwise
+// drop focus and the user couldn't type a second character.
+function restoreSearchFocus() {
+  requestAnimationFrame(() => {
+    const input = document.querySelector('.merge-tool .search, #mergeToolViewV2 .search');
+    if (!input) return;
+    input.focus();
+    const len = input.value.length;
+    input.setSelectionRange(len, len);
+  });
 }
 function v2ToggleAllReady(checked) {
   // M4: errored rows now toggle with the master too (they can be opted-in for invoice-only).
@@ -2091,6 +2500,8 @@ function v2ToggleFetchRow(rowIdx, checked) {
     // M4: count errored-but-checked rows too — they merge as invoice-only.
     cnt.textContent = v2State.rows.filter(r => r.selected && r.fetchResult && !r.skipped).length;
   }
+  // Sync the master-checkbox tri-state after every per-row toggle.
+  updateMasterIndeterminate();
 }
 function v2ClickContinueMerge() {
   // Count unchecked rows that COULD have been merged (have fetchResult, not skipped).
@@ -2111,12 +2522,13 @@ async function v2RetryAllErrors() {
   const errors = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
   if (errors.length === 0) return;
 
-  // Dedup by container
+  // Dedup by invoice number (INV# is unique). Container-based dedup collapses
+  // van/warehouse rows that share containers — see v2ResumeFetch for the full note.
   const seen = new Set();
   const containers = [];
   for (const row of errors) {
-    const key = row.containerNumber.toLowerCase();
-    if (seen.has(key)) continue;
+    const key = (row.invoiceNumber || row.containerNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     containers.push({
       containerNumber: row.containerNumber,
@@ -2130,8 +2542,11 @@ async function v2RetryAllErrors() {
   v2State.fetchTotal = containers.length;
   v2State.fetchCurrentContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
 
   setStateV2('fetching');
+  startFetchTimer();
 
   try {
     v2State.jobIncludesInvoice = false;
@@ -2153,12 +2568,15 @@ async function v2ResumeFetch() {
   const queued = v2State.rows.filter(r => r.selected && !r.fetchResult && !r.skipped);
   if (queued.length === 0) return;
 
-  // Dedup by container
+  // Dedup by invoice number (INV# is unique per row). Previously dedup was by
+  // container number — but multiple invoices can share a container (NVH USA
+  // trailer vans share T1022/T1013 across many invoices; warehouse rows have
+  // empty container ''). That bug collapsed N queued rows into 1.
   const seen = new Set();
   const containers = [];
   for (const row of queued) {
-    const key = row.containerNumber.toLowerCase();
-    if (seen.has(key)) continue;
+    const key = (row.invoiceNumber || row.containerNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     containers.push({
       containerNumber: row.containerNumber,
@@ -2171,8 +2589,11 @@ async function v2ResumeFetch() {
   v2State.fetchProgress = 0;
   v2State.fetchCurrentContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
 
   setStateV2('fetching');
+  startFetchTimer();
   try {
     v2State.jobIncludesInvoice = true;
     v2State.jobIncludesDoc = true;
@@ -2300,7 +2721,16 @@ function handleSseEvent(evt) {
       break;
 
     case 'job_paused':
-      finalizeFetch({ cancelled: true });
+      // Agent acknowledged the pause but the job is still running, just waiting.
+      // Do NOT finalize — that would terminate the fetch and leave rows queued.
+      // Just sync the UI to the paused state.
+      v2State.fetchPaused = true;
+      setStateV2('fetching');
+      break;
+
+    case 'job_resumed':
+      v2State.fetchPaused = false;
+      setStateV2('fetching');
       break;
   }
 }
@@ -2414,7 +2844,11 @@ function rerenderFetchRow(rowIdx) {
     // Row isn't in the current view (e.g. user filtered to Fetched/Failed tab and this row
     // just changed state). Trigger a full re-render so the row appears in the right tab.
     if (v2State.subMode === 'fetching' && (v2State.activeTab === 'fetched' || v2State.activeTab === 'failed')) {
+      // Preserve search input focus across the re-render — SSE events fire continuously
+      // and would otherwise yank the cursor out every time a row settles.
+      const searchWasFocused = document.activeElement?.classList?.contains('search');
       setStateV2('fetching');
+      if (searchWasFocused) restoreSearchFocus();
     }
     return;
   }
@@ -2439,7 +2873,7 @@ function bumpProgress(container) {
   v2State.fetchProgress = Math.min(v2State.fetchTotal || Infinity, v2State.fetchProgress + 1);
 }
 
-// Surgical updates while Fetching — keeps progress label, progress bar,
+// Surgical updates while Fetching — keeps progress strip counters, progress bar,
 // tab counts, and toolbar meta in sync without a full re-render.
 function updateLiveCounters() {
   const total = v2State.fetchTotal;
@@ -2449,19 +2883,23 @@ function updateLiveCounters() {
   const failedCount  = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss').length;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
-  const now = document.querySelector('#mergeToolViewV2 .progress-line .now');
-  if (now) now.innerHTML = `<strong>Fetching ${done} / ${total}</strong> &nbsp; <span class="container-name">${escHtml(cur)}</span>`;
-  const fill = document.querySelector('#mergeToolViewV2 .progress-fill');
-  if (fill) fill.style.width = `${percent}%`;
+  const doneEl = document.getElementById('v2ProgDone');
+  if (doneEl) doneEl.textContent = done;
+  const totalEl = document.getElementById('v2ProgTotal');
+  if (totalEl) totalEl.textContent = total;
+  const bar = document.getElementById('v2ProgBar');
+  if (bar) bar.style.width = `${percent}%`;
   const fc = document.getElementById('v2FetchTabFetchedCount');
   if (fc) fc.textContent = fetchedCount;
   const ec = document.getElementById('v2FetchTabFailedCount');
   if (ec) ec.textContent = failedCount;
   const meta = document.getElementById('v2FetchToolbarMeta');
-  if (meta) meta.textContent = `${done} / ${total} fetched · ${failedCount} failed`;
+  if (meta) meta.textContent = cur;
 }
 
 function finalizeFetch({ cancelled }) {
+  stopFetchTimer();
+  v2State.fetchPaused = false;
   if (v2State.eventSource) {
     v2State.eventSource.close();
     v2State.eventSource = null;
@@ -2481,10 +2919,52 @@ async function processQueuedRetries() {
   // Snapshot — new retries can still be queued while we process
   const queue = v2State.queuedRetries.slice();
   v2State.queuedRetries = [];
+  if (queue.length === 0) return;
+
+  // Resolve rowIdx → row; dedup by container so a single fetchMissing job
+  // covers every retried row in one shot (mirrors v2ResumeFetch's batching).
+  // This is the Issue 1 fix — previously this loop awaited v2RetryRow per row,
+  // firing N sequential fetchMissing jobs. Now it's one batched job.
+  const seen = new Set();
+  const containers = [];
   for (const { rowIdx } of queue) {
-    // v2RetryRow checks subMode and runs immediately when not 'fetching'
-    try { await v2RetryRow(rowIdx); }
-    catch (err) { console.warn('Queued retry failed for row', rowIdx, err); }
+    const row = v2State.rows[rowIdx];
+    if (!row) continue;
+    const key = (row.containerNumber || row.invoiceNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    containers.push({
+      containerNumber: row.containerNumber,
+      invoiceNumber: row.invoiceNumber,
+    });
+    // Reset row state so the SSE handler re-marks them on hit/miss
+    row.fetchResult = null;
+  }
+  if (containers.length === 0) return;
+
+  // Reuse the live-fetch UI affordances (progress counter, SSE stream handler)
+  v2State.fetchTotal = containers.length;
+  v2State.fetchProgress = 0;
+  v2State.fetchCurrentContainer = '';
+  v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
+
+  setStateV2('fetching');
+  startFetchTimer();
+  try {
+    // Doc-only retries — invoices were already fetched in the main pass.
+    v2State.jobIncludesInvoice = false;
+    v2State.jobIncludesDoc = true;
+    const result = await agentBridge.fetchMissing(containers, ['pod']);
+    if (result.error || !result.jobId) {
+      throw new Error(result.error || 'Agent did not return a jobId');
+    }
+    v2State.jobId = result.jobId;
+    openSseStream(result.jobId);
+  } catch (err) {
+    alert(`Couldn't process queued retries: ${err.message}`);
+    setStateV2('ready');
   }
 }
 
@@ -2522,6 +3002,22 @@ function v2ToggleAll(checked) {
   rerenderTbody();
   updateFetchButton();
 }
+
+// Unified master-checkbox handler — toggles selection on every currently-visible,
+// non-skipped row in whichever state we're in (Review or Ready). Re-renders the
+// current state so checkboxes, header tri-state, and any selection-dependent
+// action button labels (Fetch / Continue to Merge) all update together.
+window.v2ToggleAllVisible = function (checked) {
+  const visible = getCurrentlyVisibleRows();
+  for (const row of visible) {
+    if (row.skipped) continue;
+    // In Ready, queued rows (no fetchResult) toggle too — unchecking removes
+    // them from a Resume; checking opts them back in.
+    row.selected = !!checked;
+  }
+  setStateV2(v2State.subMode || 'review');
+};
+
 window.v2HandleTabClick = v2HandleTabClick;
 window.v2HandleSearch   = v2HandleSearch;
 window.v2HandleSort     = v2HandleSort;
@@ -2529,21 +3025,42 @@ window.v2ToggleRow      = v2ToggleRow;
 window.v2ToggleAll      = v2ToggleAll;
 window.initMergeV2 = initMergeV2;
 
+// Pause toggle — flips between pause and resume. Doesn't tear down the SSE
+// stream; in-flight containers finish and new dispatches wait until /resume.
+async function v2TogglePauseFetch() {
+  if (!v2State.jobId) return;
+  const wasPaused = !!v2State.fetchPaused;
+  try {
+    if (wasPaused) {
+      const res = await agentBridge.resumeJob(v2State.jobId);
+      if (res && res.error) throw new Error(res.error);
+      v2State.fetchPaused = false;
+    } else {
+      const res = await agentBridge.pauseJob(v2State.jobId);
+      if (res && res.error) throw new Error(res.error);
+      v2State.fetchPaused = true;
+    }
+    // Re-render so the button label flips between ⏸ Pause and ▶ Resume,
+    // and the spinner swaps for a paused glyph.
+    setStateV2('fetching');
+  } catch (err) {
+    alert(`Couldn't ${wasPaused ? 'resume' : 'pause'} fetch: ${err.message}`);
+  }
+}
+window.v2TogglePauseFetch = v2TogglePauseFetch;
+
+// True cancel — ends the job and transitions to Ready. Rows already fetched
+// keep their data; queued rows stay queued and can be resumed from Ready.
 async function v2CancelFetch() {
   if (!v2State.jobId) return;
+  if (!confirm('Cancel the fetch? Rows already fetched keep their data; queued rows stay queued.')) return;
   try {
-    await agentBridge._authFetch(
-      `${agentBridge.baseUrl}/jobs/${encodeURIComponent(v2State.jobId)}/pause`,
-      { method: 'POST' }
-    );
+    const res = await agentBridge.cancelJob(v2State.jobId);
+    if (res && res.error) throw new Error(res.error);
+    finalizeFetch({ cancelled: true });
   } catch (err) {
-    console.warn('Cancel POST failed:', err);
+    alert(`Couldn't cancel fetch: ${err.message}`);
   }
-  // Don't transition here — wait for the SSE 'job_paused' event from the backend.
-  // If the SSE stream dies before the event arrives, manually finalize.
-  setTimeout(() => {
-    if (v2State.subMode === 'fetching') finalizeFetch({ cancelled: true });
-  }, 2000);
 }
 window.v2CancelFetch = v2CancelFetch;
 

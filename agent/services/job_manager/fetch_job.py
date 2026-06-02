@@ -26,6 +26,13 @@ def _is_warehouse_row(invoice_number: str) -> bool:
     return invoice_number[1].upper() == "W"
 
 
+def _is_van_row(invoice_number: str) -> bool:
+    """Mirror of routingDecisionFor() — van = INV# position-2 is 'V'."""
+    if not invoice_number or len(invoice_number) < 2:
+        return False
+    return invoice_number[1].upper() == "V"
+
+
 class FetchJobMixin:
     """Handles fetch job lifecycle: create, start, process containers via QBO API."""
 
@@ -103,7 +110,10 @@ class FetchJobMixin:
 
         # INV# pos-2 primary
         inv_letter = inv_no[1] if len(inv_no) >= 2 else ""
-        if inv_letter == "M":
+        if inv_letter == "V":
+            doc_types = ("POD", "POL", "BL", "IT", "ITE")
+            wo_kind = "van (by INV#)"
+        elif inv_letter == "M":
             doc_types = ("POD", "BL", "POL", "IT")
             wo_kind = "import (by INV#)"
         elif inv_letter == "E":
@@ -329,6 +339,13 @@ class FetchJobMixin:
                     "type": "invoice",
                 })
 
+        # Step 2.4: Van rows get tagged here but do NOT short-circuit — they
+        # continue through the normal QBO POD + TMS fallback path below. The
+        # TMS chain selection happens in _tms_pod_fallback via the
+        # inv_letter == "V" branch (POD → POL → BL → IT → ITE).
+        if _is_van_row(container.invoice_number):
+            result.routing_type = "van"
+
         # Step 2.5: Warehouse rows short-circuit here — after the invoice PDF
         # is on disk, but before any POD/BL/POL/TMS-fallback logic.
         # Fetch every QBO attachment, convert xlsx → PDF. No TMS fallback,
@@ -485,15 +502,26 @@ class FetchJobMixin:
         """Sequential processing — one container at a time."""
         from services.job_manager import FetchResult
 
+        was_paused = False
         for i, container in enumerate(job.containers):
-            if job.status == "paused":
+            # Honor the pause flag before dispatching the next container.
+            # In-flight containers are not interrupted; only new dispatches wait.
+            if job.paused and not was_paused:
                 await self._emit(job, "job_paused", {
                     "progress": job.progress,
                     "total": job.total,
                     "message": "Job paused by user",
                 })
                 job._save_state()
-                return
+                was_paused = True
+            while job.paused:
+                await asyncio.sleep(0.5)
+            if was_paused:
+                await self._emit(job, "job_resumed", {
+                    "progress": job.progress,
+                    "total": job.total,
+                })
+                was_paused = False
 
             job.progress = i
             result = FetchResult(container.container_number, container.invoice_number)
@@ -547,16 +575,34 @@ class FetchJobMixin:
 
         sem = asyncio.Semaphore(concurrency)
         completed_count = 0
+        pause_emitted = False
 
         async def process_one(i: int, container):
-            nonlocal completed_count
-
-            if job.status == "paused":
-                return
+            nonlocal completed_count, pause_emitted
 
             async with sem:
-                if job.status == "paused":
-                    return
+                # Honor the pause flag before STARTING this container.
+                # Containers that already acquired the semaphore + began work
+                # run to completion; only new dispatches wait here.
+                if job.paused and not pause_emitted:
+                    pause_emitted = True
+                    await self._emit(job, "job_paused", {
+                        "progress": job.progress,
+                        "total": job.total,
+                        "message": "Job paused by user",
+                    })
+                    job._save_state()
+                was_paused_locally = job.paused
+                while job.paused:
+                    await asyncio.sleep(0.5)
+                if was_paused_locally and pause_emitted:
+                    # First container to wake up clears the emit guard so a
+                    # subsequent pause/resume cycle re-emits.
+                    pause_emitted = False
+                    await self._emit(job, "job_resumed", {
+                        "progress": job.progress,
+                        "total": job.total,
+                    })
 
                 result = FetchResult(container.container_number, container.invoice_number)
 
@@ -605,15 +651,6 @@ class FetchJobMixin:
             for i, c in enumerate(job.containers)
         ]
         await asyncio.gather(*tasks)
-
-        if job.status == "paused":
-            await self._emit(job, "job_paused", {
-                "progress": job.progress,
-                "total": job.total,
-                "message": "Job paused by user",
-            })
-            job._save_state()
-            return
 
         await self._finish_job(job)
 
