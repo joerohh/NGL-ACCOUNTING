@@ -129,6 +129,7 @@ export function parseInvType(inv) {
   if (c === 'M') return 'import';
   if (c === 'E') return 'export';
   if (c === 'W') return 'warehouse';
+  if (c === 'V') return 'van';
   return null;
 }
 
