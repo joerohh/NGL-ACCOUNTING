@@ -40,6 +40,9 @@ const v2State = {
   fetchTotal: 0,
   fetchCurrentContainer: '',
   lastFetchedContainer: '',
+  fetchStartedAt: null,    // Date.now() when fetch started
+  fetchPaused: false,
+  fetchTimerInterval: null,
   openSidebarRow: null,
   queuedRetries: [],
   completedContainers: null,
@@ -133,6 +136,9 @@ export function setStateV2(name) {
     v2State.fetchTotal = 0;
     v2State.fetchCurrentContainer = '';
     v2State.lastFetchedContainer = '';
+    v2State.fetchStartedAt = null;
+    v2State.fetchPaused = false;
+    stopFetchTimer();
     v2State.openSidebarRow = null;
     v2State.queuedRetries = [];
     v2State.completedContainers = null;
@@ -1171,13 +1177,78 @@ function renderReviewWithIssues() {
   `;
 }
 
+// ── Progress strip helpers (Task 17: live timer + Pause/Cancel) ──
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function renderFetchingProgressStrip() {
+  const done = v2State.fetchProgress || 0;
+  const total = v2State.fetchTotal || v2State.rows.length || 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const elapsed = v2State.fetchStartedAt ? Date.now() - v2State.fetchStartedAt : 0;
+  const msPerRow = done > 0 ? elapsed / done : 0;
+  const remainingMs = (total - done) * msPerRow;
+  const paused = !!v2State.fetchPaused;
+
+  return `
+    <div class="progress-strip" id="v2ProgressStrip">
+      ${paused ? '<span style="font-size:14px;">⏸</span>' : '<div class="spinner"></div>'}
+      <span class="progress-main"><span id="v2ProgDone">${done}</span> / <span id="v2ProgTotal">${total}</span></span>
+      <div class="progress-bar"><div id="v2ProgBar" style="width:${pct}%"></div></div>
+      <span class="progress-stat"><strong id="v2ProgElapsed">${fmtTime(elapsed)}</strong> elapsed</span>
+      <span class="sep">·</span>
+      <span class="progress-stat">~<strong id="v2ProgEta">${fmtTime(remainingMs)}</strong> left</span>
+      <span class="sep">·</span>
+      <span class="progress-stat"><strong id="v2ProgRate">${msPerRow > 0 ? '~' + (msPerRow / 1000).toFixed(1) + 's' : '~—'}</strong>/row</span>
+    </div>
+    <button class="pause-btn" onclick="window.v2TogglePauseFetch()" id="v2PauseBtn">${paused ? '▶ Resume' : '⏸ Pause'}</button>
+    <button class="cancel-btn" onclick="window.v2CancelFetch()">✕ Cancel</button>
+  `;
+}
+
+function startFetchTimer() {
+  stopFetchTimer();
+  v2State.fetchTimerInterval = setInterval(() => {
+    if (v2State.subMode !== 'fetching') {
+      stopFetchTimer();
+      return;
+    }
+    const done = v2State.fetchProgress || 0;
+    const total = v2State.fetchTotal || v2State.rows.length || 0;
+    const elapsed = v2State.fetchStartedAt ? Date.now() - v2State.fetchStartedAt : 0;
+    const msPerRow = done > 0 ? elapsed / done : 0;
+    const remainingMs = (total - done) * msPerRow;
+    const elapsedEl = document.getElementById('v2ProgElapsed');
+    const etaEl     = document.getElementById('v2ProgEta');
+    const rateEl    = document.getElementById('v2ProgRate');
+    const doneEl    = document.getElementById('v2ProgDone');
+    const totalEl   = document.getElementById('v2ProgTotal');
+    const barEl     = document.getElementById('v2ProgBar');
+    if (elapsedEl) elapsedEl.textContent = fmtTime(elapsed);
+    if (etaEl)     etaEl.textContent     = fmtTime(remainingMs);
+    if (rateEl)    rateEl.textContent    = msPerRow > 0 ? `~${(msPerRow / 1000).toFixed(1)}s` : '~—';
+    if (doneEl)    doneEl.textContent    = done;
+    if (totalEl)   totalEl.textContent   = total;
+    if (barEl)     barEl.style.width     = total > 0 ? `${Math.round((done / total) * 100)}%` : '0%';
+  }, 1000);
+}
+
+function stopFetchTimer() {
+  if (v2State.fetchTimerInterval) {
+    clearInterval(v2State.fetchTimerInterval);
+    v2State.fetchTimerInterval = null;
+  }
+}
+
 function renderFetching() {
-  // Use fetchTotal (= unique container count from job_started) for consistency
-  // across progress, tabs, and toolbar. Falls back to selected count before SSE arrives.
-  const total = v2State.fetchTotal || v2State.rows.filter(r => r.selected).length || v2State.rows.length;
-  const done = v2State.fetchProgress;
+  // Progress counters (done / total / percent / elapsed / ETA / rate) and the
+  // Pause/Cancel buttons all live inside renderFetchingProgressStrip() now —
+  // see Task 17. The strip's tickers update via startFetchTimer / updateLiveCounters
+  // without re-rendering this function, so we just need the per-tab counts here.
   const cur = v2State.fetchCurrentContainer || '—';
-  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
   // Tabs split by current state
   const fetchedRows = v2State.rows.filter(r => r.fetchResult && r.fetchResult.podPill !== 'miss');
@@ -1213,25 +1284,17 @@ function renderFetching() {
   return `
     ${topBarWithDrop()}
     ${routingSummaryBand()}
-    <div class="progress-line">
-      <div class="now">
-        <strong>Fetching ${done} / ${total}</strong>
-        &nbsp; <span class="container-name">${escHtml(cur)}</span>
-      </div>
-      <div class="progress-track"><div class="progress-fill" style="width:${percent}%;"></div></div>
-      <button class="pause-btn" onclick="window.v2CancelFetch()" title="Pause — you can resume from where you left off">⏸ Pause</button>
-      <button class="cancel-link" onclick="window.v2CancelAndReset()" title="Cancel and discard all progress">Cancel</button>
-    </div>
     <div class="tabs-row">
       <div class="tabs">
         <button class="tab ${fetchTab === 'all' ? 'active' : ''}" onclick="window.v2HandleFetchTab('all')">All <span class="count">${allCount}</span></button>
         <button class="tab ${fetchTab === 'fetched' ? 'active' : ''}" onclick="window.v2HandleFetchTab('fetched')">Fetched <span class="count" id="v2FetchTabFetchedCount">${fetchedCount}</span></button>
         <button class="tab has-issues ${fetchTab === 'failed' ? 'active' : ''}" onclick="window.v2HandleFetchTab('failed')">Failed <span class="count" id="v2FetchTabFailedCount">${failedCount}</span></button>
       </div>
+      ${renderFetchingProgressStrip()}
     </div>
     <div class="toolbar">
       <input type="text" class="search" placeholder="Search containers…" />
-      <span class="filter-meta" id="v2FetchToolbarMeta">${done} / ${total} fetched · ${failedCount} failed</span>
+      <span class="filter-meta" id="v2FetchToolbarMeta">${escHtml(cur)}</span>
     </div>
     <div class="table-wrap">
       <table class="merge-table">
@@ -2327,12 +2390,15 @@ async function v2ClickFetch() {
   v2State.fetchCurrentContainer = '';
   v2State.lastFetchedContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
   // Clear any stale fetchResult on rows we're about to fetch
   for (const row of v2State.rows) {
     if (row.selected) { row.fetchResult = null; row.skipped = false; }
   }
 
   setStateV2('fetching');
+  startFetchTimer();
 
   try {
     v2State.jobIncludesInvoice = true;
@@ -2418,8 +2484,11 @@ async function v2RetryAllErrors() {
   v2State.fetchTotal = containers.length;
   v2State.fetchCurrentContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
 
   setStateV2('fetching');
+  startFetchTimer();
 
   try {
     v2State.jobIncludesInvoice = false;
@@ -2459,8 +2528,11 @@ async function v2ResumeFetch() {
   v2State.fetchProgress = 0;
   v2State.fetchCurrentContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
 
   setStateV2('fetching');
+  startFetchTimer();
   try {
     v2State.jobIncludesInvoice = true;
     v2State.jobIncludesDoc = true;
@@ -2727,7 +2799,7 @@ function bumpProgress(container) {
   v2State.fetchProgress = Math.min(v2State.fetchTotal || Infinity, v2State.fetchProgress + 1);
 }
 
-// Surgical updates while Fetching — keeps progress label, progress bar,
+// Surgical updates while Fetching — keeps progress strip counters, progress bar,
 // tab counts, and toolbar meta in sync without a full re-render.
 function updateLiveCounters() {
   const total = v2State.fetchTotal;
@@ -2737,19 +2809,23 @@ function updateLiveCounters() {
   const failedCount  = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss').length;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
-  const now = document.querySelector('#mergeToolViewV2 .progress-line .now');
-  if (now) now.innerHTML = `<strong>Fetching ${done} / ${total}</strong> &nbsp; <span class="container-name">${escHtml(cur)}</span>`;
-  const fill = document.querySelector('#mergeToolViewV2 .progress-fill');
-  if (fill) fill.style.width = `${percent}%`;
+  const doneEl = document.getElementById('v2ProgDone');
+  if (doneEl) doneEl.textContent = done;
+  const totalEl = document.getElementById('v2ProgTotal');
+  if (totalEl) totalEl.textContent = total;
+  const bar = document.getElementById('v2ProgBar');
+  if (bar) bar.style.width = `${percent}%`;
   const fc = document.getElementById('v2FetchTabFetchedCount');
   if (fc) fc.textContent = fetchedCount;
   const ec = document.getElementById('v2FetchTabFailedCount');
   if (ec) ec.textContent = failedCount;
   const meta = document.getElementById('v2FetchToolbarMeta');
-  if (meta) meta.textContent = `${done} / ${total} fetched · ${failedCount} failed`;
+  if (meta) meta.textContent = cur;
 }
 
 function finalizeFetch({ cancelled }) {
+  stopFetchTimer();
+  v2State.fetchPaused = false;
   if (v2State.eventSource) {
     v2State.eventSource.close();
     v2State.eventSource = null;
@@ -2797,8 +2873,11 @@ async function processQueuedRetries() {
   v2State.fetchProgress = 0;
   v2State.fetchCurrentContainer = '';
   v2State.completedContainers = new Set();
+  v2State.fetchStartedAt = Date.now();
+  v2State.fetchPaused = false;
 
   setStateV2('fetching');
+  startFetchTimer();
   try {
     // Doc-only retries — invoices were already fetched in the main pass.
     v2State.jobIncludesInvoice = false;
@@ -2872,21 +2951,42 @@ window.v2ToggleRow      = v2ToggleRow;
 window.v2ToggleAll      = v2ToggleAll;
 window.initMergeV2 = initMergeV2;
 
+// Pause toggle — flips between pause and resume. Doesn't tear down the SSE
+// stream; in-flight containers finish and new dispatches wait until /resume.
+async function v2TogglePauseFetch() {
+  if (!v2State.jobId) return;
+  const wasPaused = !!v2State.fetchPaused;
+  try {
+    if (wasPaused) {
+      const res = await agentBridge.resumeJob(v2State.jobId);
+      if (res && res.error) throw new Error(res.error);
+      v2State.fetchPaused = false;
+    } else {
+      const res = await agentBridge.pauseJob(v2State.jobId);
+      if (res && res.error) throw new Error(res.error);
+      v2State.fetchPaused = true;
+    }
+    // Re-render so the button label flips between ⏸ Pause and ▶ Resume,
+    // and the spinner swaps for a paused glyph.
+    setStateV2('fetching');
+  } catch (err) {
+    alert(`Couldn't ${wasPaused ? 'resume' : 'pause'} fetch: ${err.message}`);
+  }
+}
+window.v2TogglePauseFetch = v2TogglePauseFetch;
+
+// True cancel — ends the job and transitions to Ready. Rows already fetched
+// keep their data; queued rows stay queued and can be resumed from Ready.
 async function v2CancelFetch() {
   if (!v2State.jobId) return;
+  if (!confirm('Cancel the fetch? Rows already fetched keep their data; queued rows stay queued.')) return;
   try {
-    await agentBridge._authFetch(
-      `${agentBridge.baseUrl}/jobs/${encodeURIComponent(v2State.jobId)}/pause`,
-      { method: 'POST' }
-    );
+    const res = await agentBridge.cancelJob(v2State.jobId);
+    if (res && res.error) throw new Error(res.error);
+    finalizeFetch({ cancelled: true });
   } catch (err) {
-    console.warn('Cancel POST failed:', err);
+    alert(`Couldn't cancel fetch: ${err.message}`);
   }
-  // Don't transition here — wait for the SSE 'job_paused' event from the backend.
-  // If the SSE stream dies before the event arrives, manually finalize.
-  setTimeout(() => {
-    if (v2State.subMode === 'fetching') finalizeFetch({ cancelled: true });
-  }, 2000);
 }
 window.v2CancelFetch = v2CancelFetch;
 
