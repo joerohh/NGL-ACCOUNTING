@@ -2498,10 +2498,49 @@ async function processQueuedRetries() {
   // Snapshot — new retries can still be queued while we process
   const queue = v2State.queuedRetries.slice();
   v2State.queuedRetries = [];
+  if (queue.length === 0) return;
+
+  // Resolve rowIdx → row; dedup by container so a single fetchMissing job
+  // covers every retried row in one shot (mirrors v2ResumeFetch's batching).
+  // This is the Issue 1 fix — previously this loop awaited v2RetryRow per row,
+  // firing N sequential fetchMissing jobs. Now it's one batched job.
+  const seen = new Set();
+  const containers = [];
   for (const { rowIdx } of queue) {
-    // v2RetryRow checks subMode and runs immediately when not 'fetching'
-    try { await v2RetryRow(rowIdx); }
-    catch (err) { console.warn('Queued retry failed for row', rowIdx, err); }
+    const row = v2State.rows[rowIdx];
+    if (!row) continue;
+    const key = (row.containerNumber || row.invoiceNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    containers.push({
+      containerNumber: row.containerNumber,
+      invoiceNumber: row.invoiceNumber,
+    });
+    // Reset row state so the SSE handler re-marks them on hit/miss
+    row.fetchResult = null;
+  }
+  if (containers.length === 0) return;
+
+  // Reuse the live-fetch UI affordances (progress counter, SSE stream handler)
+  v2State.fetchTotal = containers.length;
+  v2State.fetchProgress = 0;
+  v2State.fetchCurrentContainer = '';
+  v2State.completedContainers = new Set();
+
+  setStateV2('fetching');
+  try {
+    // Doc-only retries — invoices were already fetched in the main pass.
+    v2State.jobIncludesInvoice = false;
+    v2State.jobIncludesDoc = true;
+    const result = await agentBridge.fetchMissing(containers, ['pod']);
+    if (result.error || !result.jobId) {
+      throw new Error(result.error || 'Agent did not return a jobId');
+    }
+    v2State.jobId = result.jobId;
+    openSseStream(result.jobId);
+  } catch (err) {
+    alert(`Couldn't process queued retries: ${err.message}`);
+    setStateV2('ready');
   }
 }
 
