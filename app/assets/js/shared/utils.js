@@ -181,7 +181,7 @@ export function routingDecisionFor(row) {
 export function renderInvoiceNumberHtml(inv) {
   if (!inv || inv.length < 2) return escHtml(inv || '');
   const c = inv[1].toUpperCase();
-  if (c === 'M' || c === 'E' || c === 'X' || c === 'W') {
+  if (c === 'M' || c === 'E' || c === 'X' || c === 'W' || c === 'V') {
     return escHtml(inv[0]) + '<span class="inv-letter">' + escHtml(inv[1]) + '</span>' + escHtml(inv.slice(2));
   }
   return escHtml(inv);
