@@ -1270,6 +1270,11 @@ function renderFetching() {
   else if (fetchTab === 'failed')  visibleRows = failedRows;
   else                              visibleRows = v2State.rows;
 
+  // Apply routing-type filter (Imports / Exports / Warehouse / Van / Unknown)
+  if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
+    visibleRows = visibleRows.filter(r => r.routingType === v2State.routingTypeFilter);
+  }
+
   const bodyRows = visibleRows.map(row => {
     const i = v2State.rows.indexOf(row);
     return fetchRowMarkup(i, row, {
@@ -1285,6 +1290,7 @@ function renderFetching() {
 
   return `
     ${topBarWithDrop()}
+    ${routingTypeFilterTabs()}
     ${routingSummaryBand()}
     <div class="tabs-row">
       <div class="tabs">
@@ -1344,6 +1350,11 @@ function renderReady() {
   if (v2State.activeTab === 'errors') visibleRows = errors;
   else if (v2State.activeTab === 'queued') visibleRows = queued;
   else visibleRows = all;
+
+  // Apply routing-type filter (Imports / Exports / Warehouse / Van / Unknown)
+  if (v2State.routingTypeFilter && v2State.routingTypeFilter !== 'all') {
+    visibleRows = visibleRows.filter(r => r.routingType === v2State.routingTypeFilter);
+  }
 
   // Apply customer filter (composes with the active tab)
   if (v2State.customerFilter && v2State.customerFilter !== 'all') {
@@ -1512,6 +1523,7 @@ function renderReady() {
 
   return `
     ${topBarWithDrop()}
+    ${routingTypeFilterTabs()}
     ${routingSummaryBand()}
     ${actionBar}
     ${tabsHtml}
