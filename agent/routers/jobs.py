@@ -89,7 +89,9 @@ async def stream_job_events(job_id: str):
 
 @router.post("/{job_id}/pause")
 async def pause_job(job_id: str):
-    """Pause a running fetch job."""
+    """Pause container dispatch for a running job. In-flight containers
+    finish; new dispatches wait until /resume is called.
+    """
     if not _job_manager:
         raise HTTPException(503, "Agent not initialized")
 
@@ -97,11 +99,34 @@ async def pause_job(job_id: str):
     if not job:
         raise HTTPException(404, f"Job {job_id} not found")
 
-    if job.status != "running":
-        raise HTTPException(400, f"Job is not running (status: {job.status})")
+    job.paused = True
+    return {
+        "ok": True,
+        "jobId": job.id,
+        "paused": True,
+        "progress": job.progress,
+        "total": job.total,
+    }
 
-    job.status = "paused"
-    return {"jobId": job.id, "status": "paused", "progress": job.progress, "total": job.total}
+
+@router.post("/{job_id}/resume")
+async def resume_job(job_id: str):
+    """Resume a paused job's container dispatch."""
+    if not _job_manager:
+        raise HTTPException(503, "Agent not initialized")
+
+    job = _job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    job.paused = False
+    return {
+        "ok": True,
+        "jobId": job.id,
+        "paused": False,
+        "progress": job.progress,
+        "total": job.total,
+    }
 
 
 @router.post("/{job_id}/cancel")

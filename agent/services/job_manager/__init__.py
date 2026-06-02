@@ -158,6 +158,10 @@ class Job:
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self._task: Optional[asyncio.Task] = None
         self.created_at = time.time()
+        # Pause gate: when True, the container dispatch loop holds new
+        # dispatches until cleared. In-flight containers run to completion.
+        # Toggled via POST /jobs/{id}/pause and /jobs/{id}/resume.
+        self.paused = False
 
     def to_dict(self) -> dict:
         return {
