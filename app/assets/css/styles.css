@@ -1876,6 +1876,15 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   background: #2563eb;
 }
 #mergeToolViewV2 .merge-btn.resume:hover { background: #1d4ed8; }
+#mergeToolViewV2 .merge-btn.retry-secondary {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+#mergeToolViewV2 .merge-btn.retry-secondary:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
 #mergeToolViewV2 .merge-btn .last-fetched-meta {
   display: block; font-size: 0.66rem; font-weight: 500; opacity: 0.85;
   margin-top: 2px; text-align: left;

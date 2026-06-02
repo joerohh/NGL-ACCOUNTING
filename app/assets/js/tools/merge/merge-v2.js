@@ -1301,6 +1301,15 @@ function renderReady() {
 
   const isPartial = queued.length > 0;
 
+  // Hybrid status-scoped action buttons (Task 13)
+  // Retry/Resume buttons are scoped to the active status tab and visible only
+  // when the relevant selected count is > 0. Continue to Merge is always shown.
+  const selectedErrors = errors.filter(r => r.selected).length;
+  const selectedQueued = queued.filter(r => r.selected).length;
+  const activeTab = v2State.activeTab || 'all';
+  const showRetry  = (activeTab === 'all' || activeTab === 'errors') && selectedErrors > 0;
+  const showResume = (activeTab === 'all' || activeTab === 'queued') && selectedQueued > 0;
+
   // Action bar
   const actionBar = isPartial ? `
     <div class="ready-action-bar">
@@ -1312,10 +1321,16 @@ function renderReady() {
         <span style="color:#94a3b8;">●</span> <strong>${queued.length}</strong> queued
       </div>
       <div class="ready-action-right">
-        <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
-          ↻ Resume fetch
-          <span class="count-badge">${queued.length} queued</span>
-        </button>
+        ${showRetry ? `
+          <button class="merge-btn retry-secondary" onclick="window.v2RetryAllErrors()">
+            ↻ Retry errors <span class="count-badge">${selectedErrors}</span>
+          </button>
+        ` : ''}
+        ${showResume ? `
+          <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
+            ↻ Resume fetch <span class="count-badge">${selectedQueued} queued</span>
+          </button>
+        ` : ''}
         <button class="merge-btn" id="v2BtnContinueMerge" ${selected === 0 ? 'disabled' : ''}
                 onclick="window.v2ClickContinueMerge()" title="Merge what's already fetched — queued rows wait for Resume">
           Continue to Merge
@@ -1332,6 +1347,16 @@ function renderReady() {
           <span style="color:#94a3b8;">(click any error row)</span>` : ''}
       </div>
       <div class="ready-action-right">
+        ${showRetry ? `
+          <button class="merge-btn retry-secondary" onclick="window.v2RetryAllErrors()">
+            ↻ Retry errors <span class="count-badge">${selectedErrors}</span>
+          </button>
+        ` : ''}
+        ${showResume ? `
+          <button class="merge-btn resume" onclick="window.v2ResumeFetch()" title="Pick up where the fetch left off">
+            ↻ Resume fetch <span class="count-badge">${selectedQueued} queued</span>
+          </button>
+        ` : ''}
         <button class="merge-btn" id="v2BtnContinueMerge" ${selected === 0 ? 'disabled' : ''}
                 onclick="window.v2ClickContinueMerge()">
           Continue to Merge
