@@ -1175,7 +1175,7 @@ const _sendEventHandlers = {
     invSetStepText('Filling email form...');
   },
   awaiting_approval(event) {
-    invAddLog('warning', '  WAITING FOR APPROVAL — review the form in QBO browser');
+    invAddLog('warning', '  WAITING FOR APPROVAL — review the preview below before sending');
     invShowInlineApproval(event);
   },
   approval_confirmed(event) {
@@ -1523,8 +1523,14 @@ function invSourceBadge(source, prefix) {
 }
 
 function invShowInlineApproval(event) {
-  const panel = document.getElementById('invSendProgressPanel');
-  if (!panel) return;
+  // Attach below the v2.71 progress strip when present; fall back to the
+  // legacy invSendProgressPanel for any older view that might still be
+  // around. Inserting AFTER the strip means the approval card appears
+  // right under "Sending invoices" — same place the user is already
+  // looking for the % complete indicator.
+  const anchor = document.getElementById('invProgressStrip')
+              || document.getElementById('invSendProgressPanel');
+  if (!anchor) return;
 
   // Remove any previous approval section
   const existing = document.getElementById('invApprovalSection');
@@ -1612,7 +1618,13 @@ function invShowInlineApproval(event) {
       </button>
     </div>
   `;
-  panel.appendChild(section);
+  // Insert the approval section right after the anchor (progress strip)
+  // so it sits between the "Sending invoices" bar and the results table.
+  if (anchor.parentNode) {
+    anchor.parentNode.insertBefore(section, anchor.nextSibling);
+  } else {
+    anchor.appendChild(section);
+  }
 
   // Scroll the approval section into view
   section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
