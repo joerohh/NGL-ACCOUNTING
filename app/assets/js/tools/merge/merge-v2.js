@@ -560,7 +560,10 @@ function routingTypeFilterTabs() {
 
 function v2SetRoutingTypeFilter(key) {
   v2State.routingTypeFilter = key;
-  setStateV2('review');
+  // Re-render in whichever state we're currently in (review / fetching / ready) —
+  // previously this hard-coded 'review' which forced post-fetch users back to
+  // the pre-fetch screen, blowing away the fetch state.
+  setStateV2(v2State.subMode || 'review');
 }
 window.v2SetRoutingTypeFilter = v2SetRoutingTypeFilter;
 
@@ -1084,7 +1087,6 @@ function renderReviewSuccess() {
   return `
     ${topBarOnlyExcel()}
     ${routingTypeFilterTabs()}
-    ${routingSummaryBand()}
     <div class="review-success-card">
       <div class="check-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -1121,7 +1123,6 @@ function renderReviewWithIssues() {
   return `
     ${topBarOnlyExcel()}
     ${routingTypeFilterTabs()}
-    ${routingSummaryBand()}
 
     <div class="controls-line" style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:11px 16px;">
       <div style="font-size:0.86rem; color:#78350f;">
@@ -1291,7 +1292,6 @@ function renderFetching() {
   return `
     ${topBarWithDrop()}
     ${routingTypeFilterTabs()}
-    ${routingSummaryBand()}
     <div class="tabs-row">
       <div class="tabs">
         <button class="tab ${fetchTab === 'all' ? 'active' : ''}" onclick="window.v2HandleFetchTab('all')">All <span class="count">${allCount}</span></button>
@@ -1524,7 +1524,6 @@ function renderReady() {
   return `
     ${topBarWithDrop()}
     ${routingTypeFilterTabs()}
-    ${routingSummaryBand()}
     ${actionBar}
     ${tabsHtml}
     ${toolbarHtml}
