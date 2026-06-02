@@ -14,7 +14,7 @@
 // ══════════════════════════════════════════════════════════════════
 
 import { invoiceState, sendState, state } from '../../shared/state.js';
-import { escHtml } from '../../shared/utils.js';
+import { escHtml, renderInvoiceNumberHtml, renderContainerCellHtml } from '../../shared/utils.js';
 
 // ────────────────────────────────────────────────────────────────
 // Pill taxonomy — final label + severity per state
@@ -466,8 +466,8 @@ function renderRowsForActiveTab(stage) {
     const needsResolve = isNeedsAttention(pillKey);
     return `
       <div class="v64-row" data-id="${escHtml(row.id || '')}">
-        <div class="v64-row-inv">${escHtml(row.invoiceNumber || '—')}</div>
-        <div class="v64-row-ctn">${escHtml(row.containerNumber || '—')}</div>
+        <div class="v64-row-inv">${renderInvoiceNumberHtml(row.invoiceNumber || '')}</div>
+        <div class="v64-row-ctn">${renderContainerCellHtml(row)}</div>
         <div class="v64-row-cust">
           <span class="v64-cust-code">${escHtml(row.customerCode || '')}</span>
           ${escHtml(row.customerName || '')}
