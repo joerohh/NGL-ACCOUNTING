@@ -453,11 +453,21 @@ function routingTypeFilterTabs() {
   const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
   const exports_   = v2State.rows.filter(r => r.routingType === 'export').length;
   const warehouses = v2State.rows.filter(r => r.routingType === 'warehouse').length;
+  const vans       = v2State.rows.filter(r => r.routingType === 'van').length;
   const unknown    = v2State.rows.filter(r => r.routingType === 'unknown').length;
   const f = v2State.routingTypeFilter || 'all';
+  const pillFor = {
+    import:    `<span class="will-chip import">POD</span>`,
+    export:    `<span class="will-chip export">BL/POL</span>`,
+    warehouse: `<span class="will-chip whdocs">All QBO Docs</span>`,
+    van:       `<span class="will-chip van">TMS Docs</span>`,
+    unknown:   `<span class="will-chip unknown">?</span>`,
+  };
   const btn = (key, label, count) => `
     <button class="tab ${f === key ? 'active' : ''}" onclick="window.v2SetRoutingTypeFilter('${key}')">
-      ${label} <span class="count">${count}</span>
+      <span class="chip-name">${label}</span>
+      ${pillFor[key] || ''}
+      <span class="count">${count}</span>
     </button>`;
   return `
     <div class="filter-tabs">
@@ -465,6 +475,7 @@ function routingTypeFilterTabs() {
       ${btn('import', 'Import', imports)}
       ${btn('export', 'Export', exports_)}
       ${btn('warehouse', 'Warehouse', warehouses)}
+      ${btn('van', 'Vans', vans)}
       ${btn('unknown', 'Unknown', unknown)}
     </div>
   `;
@@ -508,6 +519,7 @@ function willChipFor(row) {
   if (row.routingType === 'import')    return `<span class="will-chip import">POD</span>`;
   if (row.routingType === 'export')    return `<span class="will-chip export">BL/POL</span>`;
   if (row.routingType === 'warehouse') return `<span class="will-chip whdocs">All QBO Docs</span>`;
+  if (row.routingType === 'van')       return `<span class="will-chip van">TMS Docs</span>`;
   return `<span class="will-chip unknown">?</span>`;
 }
 
@@ -837,6 +849,7 @@ function routingSummaryBand() {
   const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
   const exports_   = v2State.rows.filter(r => r.routingType === 'export').length;
   const warehouses = v2State.rows.filter(r => r.routingType === 'warehouse').length;
+  const vans       = v2State.rows.filter(r => r.routingType === 'van').length;
   const unknown    = v2State.rows.filter(r => r.routingType === 'unknown').length;
   return `
     <div class="routing-summary">
@@ -852,6 +865,10 @@ function routingSummaryBand() {
       <span class="group">
         <span class="chip warehouse">All QBO Docs</span>
         <strong>${warehouses}</strong> warehouse
+      </span>
+      <span class="group">
+        <span class="chip van">TMS Docs</span>
+        <strong>${vans}</strong> van${vans !== 1 ? 's' : ''}
       </span>
       ${unknown ? `<span class="group">
         <span class="chip unknown">?</span>
