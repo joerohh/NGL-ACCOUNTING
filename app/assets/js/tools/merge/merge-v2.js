@@ -161,6 +161,11 @@ export function setStateV2(name) {
     updateMasterCheckbox();
     updateFetchButton();
   }
+  // Ready also has a master checkbox — sync its tri-state after the DOM mounts.
+  // requestAnimationFrame so the just-set innerHTML is committed first.
+  if (v2State.subMode === 'ready') {
+    requestAnimationFrame(updateMasterIndeterminate);
+  }
   // After any re-render that includes the sidebar, latch SortableJS onto the
   // doc list so the user can drag attachments to reorder. Re-init each render
   // because innerHTML wipes prior Sortable instances along with the DOM.
@@ -472,6 +477,46 @@ function getVisibleRows() {
   return rows;
 }
 
+// State-aware "currently visible" computation for the master checkbox.
+// In Review, this matches getVisibleRows() exactly. In Ready, it mirrors the
+// inline pipeline used by renderReady (status tabs: all/errors/queued, plus
+// customer filter, search, and column-header sort).
+//
+// Don't refactor getVisibleRows() / renderReady() to share this — they each
+// have one extra concern (routing-type + dropdown sort for Review, the
+// errors/queued tab partition for Ready) that doesn't generalize cleanly.
+// This function is the master-checkbox-only viewpoint.
+function getCurrentlyVisibleRows() {
+  // Review state: delegate to the existing canonical pipeline.
+  if (v2State.subMode === 'review') return getVisibleRows();
+
+  // Ready state (post-fetch): mirror renderReady's inline filter chain.
+  let rows = v2State.rows.slice();
+  if (v2State.activeTab === 'errors') {
+    rows = rows.filter(r => !r.skipped && r.fetchResult && (r.fetchResult.podPill === 'miss' || r.fetchResult.invPill === 'miss'));
+  } else if (v2State.activeTab === 'queued') {
+    rows = rows.filter(r => !r.fetchResult && !r.skipped);
+  }
+  if (v2State.customerFilter && v2State.customerFilter !== 'all') {
+    rows = rows.filter(r => r.customer === v2State.customerFilter);
+  }
+  if (v2State.searchQuery) {
+    const q = v2State.searchQuery.toLowerCase();
+    rows = rows.filter(r => (r.containerNumber || '').toLowerCase().includes(q));
+  }
+  if (v2State.sortKey) {
+    const dir = v2State.sortDir === 'desc' ? -1 : 1;
+    const cmp = {
+      cont:   (a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''),
+      inv:    (a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''),
+      cust:   (a, b) => (a.customer || '').localeCompare(b.customer || ''),
+      status: (a, b) => statusSortRank(a) - statusSortRank(b),
+    }[v2State.sortKey];
+    if (cmp) rows.sort((a, b) => cmp(a, b) * dir);
+  }
+  return rows;
+}
+
 function routingTypeFilterTabs() {
   const total      = v2State.rows.length;
   const imports    = v2State.rows.filter(r => r.routingType === 'import').length;
@@ -776,20 +821,31 @@ function updateFilterMeta() {
 }
 
 function updateMasterCheckbox() {
+  // Single source of truth: defer to updateMasterIndeterminate so Review +
+  // Ready rerenderers don't have to know which header id is mounted.
+  updateMasterIndeterminate();
+}
+
+// Drives the header master-checkbox tri-state (unchecked / indeterminate /
+// checked) based on whatever rows the current filter + sort + search pipeline
+// is actually showing. Skipped rows don't count toward the total or the
+// checked tally — they're locked-out of selection.
+function updateMasterIndeterminate() {
   const master = document.getElementById('v2MasterCheck');
   if (!master) return;
-  const visible = getVisibleRows();
-  if (visible.length === 0) {
-    master.checked = false; master.indeterminate = false; return;
+  const visible = getCurrentlyVisibleRows();
+  const selectable = visible.filter(r => !r.skipped);
+  const total = selectable.length;
+  const checked = selectable.filter(r => r.selected).length;
+  if (total === 0) {
+    master.checked = false;
+    master.indeterminate = false;
+    master.disabled = true;
+    return;
   }
-  const checkedCount = visible.filter(r => r.selected).length;
-  if (checkedCount === 0) {
-    master.checked = false; master.indeterminate = false;
-  } else if (checkedCount === visible.length) {
-    master.checked = true;  master.indeterminate = false;
-  } else {
-    master.checked = false; master.indeterminate = true;
-  }
+  master.disabled = false;
+  master.indeterminate = checked > 0 && checked < total;
+  master.checked = checked === total;
 }
 
 function updateFetchButton() {
@@ -992,7 +1048,9 @@ function renderReviewSuccess() {
           <table class="merge-table">
             <thead>
               <tr>
-                <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
+                <th class="check-col"><input type="checkbox" id="v2MasterCheck"
+                        title="Check/uncheck all visible rows"
+                        onchange="window.v2ToggleAllVisible(this.checked)" /></th>
                 <th>Row</th>
                 ${sortableTh('cont', 'Container')}
                 ${sortableTh('inv',  'Invoice #')}
@@ -1091,7 +1149,9 @@ function renderReviewWithIssues() {
       <table class="merge-table">
         <thead>
           <tr>
-            <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
+            <th class="check-col"><input type="checkbox" id="v2MasterCheck"
+                    title="Check/uncheck all visible rows"
+                    onchange="window.v2ToggleAllVisible(this.checked)" /></th>
             <th>Row</th>
             ${sortableTh('cont', 'Container')}
             ${sortableTh('inv',  'Invoice #')}
@@ -1332,7 +1392,9 @@ function renderReady() {
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th class="check-col"><input type="checkbox" id="v2ReadyMaster" onclick="window.v2ToggleAllReady(this.checked)" /></th>
+          <th class="check-col"><input type="checkbox" id="v2MasterCheck"
+                  title="Check/uncheck all visible rows"
+                  onchange="window.v2ToggleAllVisible(this.checked)" /></th>
           ${sortableTh('cont', 'Container')}${sortableTh('inv', 'Invoice #')}${sortableTh('cust', 'Customer')}
           <th>Will fetch</th><th>Documents</th>${sortableTh('status', 'Status')}<th></th>
         </tr></thead>
@@ -2209,6 +2271,8 @@ function v2ToggleFetchRow(rowIdx, checked) {
     // M4: count errored-but-checked rows too — they merge as invoice-only.
     cnt.textContent = v2State.rows.filter(r => r.selected && r.fetchResult && !r.skipped).length;
   }
+  // Sync the master-checkbox tri-state after every per-row toggle.
+  updateMasterIndeterminate();
 }
 function v2ClickContinueMerge() {
   // Count unchecked rows that COULD have been merged (have fetchResult, not skipped).
@@ -2679,6 +2743,22 @@ function v2ToggleAll(checked) {
   rerenderTbody();
   updateFetchButton();
 }
+
+// Unified master-checkbox handler — toggles selection on every currently-visible,
+// non-skipped row in whichever state we're in (Review or Ready). Re-renders the
+// current state so checkboxes, header tri-state, and any selection-dependent
+// action button labels (Fetch / Continue to Merge) all update together.
+window.v2ToggleAllVisible = function (checked) {
+  const visible = getCurrentlyVisibleRows();
+  for (const row of visible) {
+    if (row.skipped) continue;
+    // In Ready, queued rows (no fetchResult) toggle too — unchecking removes
+    // them from a Resume; checking opts them back in.
+    row.selected = !!checked;
+  }
+  setStateV2(v2State.subMode || 'review');
+};
+
 window.v2HandleTabClick = v2HandleTabClick;
 window.v2HandleSearch   = v2HandleSearch;
 window.v2HandleSort     = v2HandleSort;
