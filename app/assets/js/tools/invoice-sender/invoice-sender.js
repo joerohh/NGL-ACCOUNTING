@@ -870,8 +870,12 @@ function invResendAll() {
     inv.sentAt = null;
     inv.errorMessage = null;
     inv.isResend = true;
-    // Force the subject to [NGL_INV_REVISED] so Gmail creates a new thread
-    inv.resendSubject = '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
+    // Force the subject to [NGL_INV_REVISED] so Gmail creates a new thread.
+    // Warehouse rows have no container — drop the "- Container#X" suffix
+    // so the subject doesn't end with a dangling "Container#".
+    inv.resendSubject = inv.routingType === 'warehouse'
+      ? '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' (Revised)'
+      : '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
   });
   // Clear from localStorage history too
   try {
@@ -925,7 +929,9 @@ async function invSendViaQBO() {
         alreadySent.forEach(inv => {
           inv.sendStatus = '';
           inv.isResend = true;
-          inv.resendSubject = '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
+          inv.resendSubject = inv.routingType === 'warehouse'
+            ? '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' (Revised)'
+            : '[NGL_INV_REVISED] ' + inv.invoiceNumber + ' - Container#' + inv.containerNumber + ' (Revised)';
         });
         invAddLog('info', 'Resending ' + alreadySent.length + ' invoices...');
         readyInvoices = alreadySent;
