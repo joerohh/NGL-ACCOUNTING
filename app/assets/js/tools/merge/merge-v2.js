@@ -751,14 +751,15 @@ function fetchRowMarkup(rowIdx, row, opts) {
   ].filter(Boolean).join(' ');
 
   // M4: errored rows are unchecked by default but still INTERACTIVE.
-  // Skipped (dedup) rows remain disabled — they can't be merged at all.
+  // M5 (Task 14): queued rows are also INTERACTIVE — unchecking removes from Resume fetch.
+  // Only skipped (dedup) rows remain disabled — they can't be merged at all.
   const hasFetch    = !!row.fetchResult;
   const isErrorRow  = row.fetchResult?.podPill === 'miss';
   const isSkipped   = !!row.skipped;
-  const interactive = hasFetch && !isSkipped;
+  const interactive = !isSkipped;
   const checkAttrs  = `${row.selected && interactive ? 'checked' : ''} ${interactive ? '' : 'disabled'}`;
   const checkTitle  = isErrorRow ? 'This row is missing its POD/BL. If checked, the merge will include only the invoice page for this container.'
-                   : isQueued ? 'Not yet fetched'
+                   : isQueued ? 'Uncheck to remove from queue (won\'t be fetched on Resume)'
                    : row.skipped ? 'Skipped — re-click Fix Error to undo'
                    : '';
 
