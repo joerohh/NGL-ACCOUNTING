@@ -6,6 +6,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from services.email_template import build_invoice_email_html
 from services.job_manager.util import normalize_email_list
 
 logger = logging.getLogger("ngl.job_manager")
@@ -143,10 +144,29 @@ class SendWarehouseMixin:
                         "filename": att["fileName"], "data": local.read_bytes(),
                     })
 
+            # Build the same QBO-style HTML body the regular send flows use.
+            # Warehouse rows have no container — pass an empty string so the
+            # reference line is omitted instead of rendering "&gt;&gt;&gt; ".
+            amount = str(invoice_data.get("TotalAmt", "") or invoice.amount or "")
+            due_date = invoice_data.get("DueDate", "") or ""
+            try:
+                invoice_link = await api.get_invoice_link(invoice_id)
+            except Exception:
+                invoice_link = ""
+
+            body = build_invoice_email_html(
+                invoice_number=invoice.invoice_number,
+                container="",
+                customer_name=customer.get("name", "") or "",
+                amount=amount,
+                due_date=due_date,
+                invoice_link=invoice_link,
+            )
+
             send_outcome = await self._email_sender.send_invoice_email(
                 to=to, cc=cc, bcc=bcc,
                 subject=invoice.subject,
-                body=f"Please find attached warehouse invoice {invoice.invoice_number}.",
+                body=body,
                 attachments=email_attachments,
             )
 
