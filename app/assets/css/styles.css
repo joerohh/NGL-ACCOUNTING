@@ -3748,3 +3748,27 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
   font-size:0.72rem; background:#f8fafc;
 }
 
+/* ── Merge tool — sortable column headers ── */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 120ms, background-color 120ms;
+}
+th.sortable:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+th.sortable .sort-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+th.sortable.sort-active {
+  color: #ea580c;
+  background: #fff7ed;
+}
+th.sortable.sort-active .sort-arrow {
+  color: #ea580c;
+}
+

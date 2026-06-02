@@ -30,6 +30,8 @@ const v2State = {
   activeTab: 'all',
   routingTypeFilter: 'all', // 'all' | 'import' | 'export' | 'warehouse' | 'unknown'
   customerFilter: 'all',    // 'all' | <exact customer name from row.customer>
+  sortKey: null,            // 'cont' | 'inv' | 'cust' | 'status' | null
+  sortDir: 'asc',           // 'asc' | 'desc'
   showAllInSuccess: false,
   // M3: fetch + sidebar
   jobId: null,
@@ -124,6 +126,8 @@ export function setStateV2(name) {
     v2State.activeTab = 'all';
     v2State.routingTypeFilter = 'all';
     v2State.customerFilter = 'all';
+    v2State.sortKey = null;
+    v2State.sortDir = 'asc';
     v2State.showAllInSuccess = false;
     v2State.fetchProgress = 0;
     v2State.fetchTotal = 0;
@@ -196,6 +200,8 @@ async function handleExcelChange(e) {
   v2State.activeTab = hasIssues ? 'issues' : 'all';
   v2State.routingTypeFilter = 'all';
   v2State.customerFilter = 'all';
+  v2State.sortKey = null;
+  v2State.sortDir = 'asc';
   v2State.searchQuery = '';
   v2State.sortMode = 'excel';
   v2State.showAllInSuccess = false;
@@ -451,7 +457,19 @@ function getVisibleRows() {
     const q = v2State.searchQuery.toLowerCase();
     rows = rows.filter(r => r.containerNumber.toLowerCase().includes(q));
   }
-  return sortRows(rows, v2State.sortMode);
+  rows = sortRows(rows, v2State.sortMode);
+  // Column-header sort runs LAST so it overrides the dropdown sortMode when active.
+  if (v2State.sortKey) {
+    const dir = v2State.sortDir === 'desc' ? -1 : 1;
+    const cmp = {
+      cont:   (a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''),
+      inv:    (a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''),
+      cust:   (a, b) => (a.customer || '').localeCompare(b.customer || ''),
+      status: (a, b) => statusSortRank(a) - statusSortRank(b),
+    }[v2State.sortKey];
+    if (cmp) rows = rows.slice().sort((a, b) => cmp(a, b) * dir);
+  }
+  return rows;
 }
 
 function routingTypeFilterTabs() {
@@ -517,6 +535,36 @@ window.v2SetCustomerFilter = function (value) {
   v2State.customerFilter = value;
   // Match the pattern used by v2SetRoutingTypeFilter — re-render via setStateV2
   // using whatever sub-state we're currently in (review or ready).
+  setStateV2(v2State.subMode || 'review');
+};
+
+// Status-column sort rank: errors first (0), queued (no fetchResult) middle (1), OK rows last (2).
+function statusSortRank(r) {
+  if (r.fetchResult?.podPill === 'miss' || r.fetchResult?.invPill === 'miss') return 0;
+  if (!r.fetchResult) return 1;
+  return 2;
+}
+
+// Sortable column header markup. KEY is one of: 'cont' | 'inv' | 'cust' | 'status'.
+function sortableTh(key, label) {
+  const active  = v2State.sortKey === key;
+  const arrow   = active ? (v2State.sortDir === 'asc' ? '▲' : '▼') : '↕';
+  const cls     = `sortable${active ? ' sort-active' : ''}`;
+  return `<th class="${cls}" onclick="window.v2HandleHeaderSort('${key}')">${label} <span class="sort-arrow">${arrow}</span></th>`;
+}
+
+// Clickable column-header sort handler. Cycles: none → asc → desc → cleared.
+window.v2HandleHeaderSort = function (key) {
+  if (v2State.sortKey !== key) {
+    v2State.sortKey = key;
+    v2State.sortDir = 'asc';
+  } else if (v2State.sortDir === 'asc') {
+    v2State.sortDir = 'desc';
+  } else {
+    // third click clears the sort
+    v2State.sortKey = null;
+    v2State.sortDir = 'asc';
+  }
   setStateV2(v2State.subMode || 'review');
 };
 
@@ -946,10 +994,10 @@ function renderReviewSuccess() {
               <tr>
                 <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
                 <th>Row</th>
-                <th>Container</th>
-                <th>Invoice #</th>
+                ${sortableTh('cont', 'Container')}
+                ${sortableTh('inv',  'Invoice #')}
                 ${hasAnyWO() ? '<th>WO #</th>' : ''}
-                <th>Customer</th>
+                ${sortableTh('cust', 'Customer')}
                 <th>Will fetch</th>
                 <th>Validation</th>
               </tr>
@@ -1045,10 +1093,10 @@ function renderReviewWithIssues() {
           <tr>
             <th class="check-col"><input type="checkbox" id="v2MasterCheck" onclick="window.v2ToggleAll(this.checked)" /></th>
             <th>Row</th>
-            <th>Container</th>
-            <th>Invoice #</th>
+            ${sortableTh('cont', 'Container')}
+            ${sortableTh('inv',  'Invoice #')}
             ${hasAnyWO() ? '<th>WO #</th>' : ''}
-            <th>Customer</th>
+            ${sortableTh('cust', 'Customer')}
             <th>Will fetch</th>
             <th>Validation</th>
           </tr>
@@ -1124,8 +1172,8 @@ function renderFetching() {
     <div class="table-wrap">
       <table class="merge-table">
         <thead><tr>
-          <th>Container</th><th>Invoice #</th><th>Customer</th>
-          <th>Will fetch</th><th>Documents</th><th>Status</th><th></th>
+          ${sortableTh('cont', 'Container')}${sortableTh('inv', 'Invoice #')}${sortableTh('cust', 'Customer')}
+          <th>Will fetch</th><th>Documents</th>${sortableTh('status', 'Status')}<th></th>
         </tr></thead>
         <tbody id="v2FetchTbody">${bodyRows}</tbody>
       </table>
@@ -1172,6 +1220,18 @@ function renderReady() {
   if (v2State.searchQuery) {
     const q = v2State.searchQuery.toLowerCase();
     visibleRows = visibleRows.filter(r => r.containerNumber.toLowerCase().includes(q));
+  }
+
+  // Column-header sort (applied AFTER all filters + search so it operates on the visible set)
+  if (v2State.sortKey) {
+    const dir = v2State.sortDir === 'desc' ? -1 : 1;
+    const cmp = {
+      cont:   (a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''),
+      inv:    (a, b) => (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''),
+      cust:   (a, b) => (a.customer || '').localeCompare(b.customer || ''),
+      status: (a, b) => statusSortRank(a) - statusSortRank(b),
+    }[v2State.sortKey];
+    if (cmp) visibleRows = visibleRows.slice().sort((a, b) => cmp(a, b) * dir);
   }
 
   // Selection count for the action button
@@ -1273,8 +1333,8 @@ function renderReady() {
       <table class="merge-table">
         <thead><tr>
           <th class="check-col"><input type="checkbox" id="v2ReadyMaster" onclick="window.v2ToggleAllReady(this.checked)" /></th>
-          <th>Container</th><th>Invoice #</th><th>Customer</th>
-          <th>Will fetch</th><th>Documents</th><th>Status</th><th></th>
+          ${sortableTh('cont', 'Container')}${sortableTh('inv', 'Invoice #')}${sortableTh('cust', 'Customer')}
+          <th>Will fetch</th><th>Documents</th>${sortableTh('status', 'Status')}<th></th>
         </tr></thead>
         <tbody id="v2ReadyTbody">${bodyRows}</tbody>
       </table>
