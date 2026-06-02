@@ -1707,6 +1707,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .routing-summary .group .chip.import  { background: #dbeafe; color: #1e40af; }
 #mergeToolViewV2 .routing-summary .group .chip.export  { background: #f3e8ff; color: #6b21a8; }
 #mergeToolViewV2 .routing-summary .group .chip.unknown { background: #f1f5f9; color: #94a3b8; }
+#mergeToolViewV2 .routing-summary .group .chip.van     { background: #fef3c7; color: #92400e; }
 #mergeToolViewV2 .routing-summary .hint {
   margin-left: auto;
   font-size: 0.78rem; color: #94a3b8;
@@ -1724,6 +1725,7 @@ tr.sh-detail-error td:last-child { color: #dc2626; font-weight: 600; }
 #mergeToolViewV2 .will-chip.export  { background: #f3e8ff; color: #6b21a8; }
 #mergeToolViewV2 .will-chip.unknown { background: #f1f5f9; color: #94a3b8; }
 #mergeToolViewV2 .will-chip.whdocs  { background: #ffedd5; color: #9a3412; }
+#mergeToolViewV2 .will-chip.van     { background: #fef3c7; color: #92400e; }
 
 /* Warehouse chip in routing-summary band */
 #mergeToolViewV2 .routing-summary .group .chip.warehouse { background: #ffedd5; color: #9a3412; }
