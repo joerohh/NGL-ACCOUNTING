@@ -30,6 +30,13 @@ class RetryInvoiceMixin:
         Returns:
             {status: 'sent'|'error', error: str|None, attachments_sent: int}
         """
+        # Warehouse routing wins. Warehouse retries don't take caller files —
+        # all docs come from QBO. Re-run the warehouse send flow instead of
+        # the standard caller-file retry path.
+        from services.job_manager.fetch_job import _is_warehouse_row
+        if _is_warehouse_row(invoice["invoice_number"]):
+            return await self._retry_warehouse_invoice(invoice)
+
         invoice_number = invoice["invoice_number"]
         invoice_id = invoice["invoice_id"]
         container = invoice.get("container_number") or ""
@@ -158,6 +165,58 @@ class RetryInvoiceMixin:
             "status": "sent",
             "error": None,
             "attachments_sent": len(email_attachments),
+        }
+
+    async def _retry_warehouse_invoice(self, invoice: dict) -> dict:
+        """Re-run the warehouse send flow for one invoice. No caller files —
+        every supporting doc comes from QBO. Shares all logic with the normal
+        warehouse send so behavior matches end-to-end."""
+        from services.database import get_customer
+        from services.job_manager import SendRequest, SendResult
+
+        invoice_number = invoice["invoice_number"]
+        customer_code = invoice.get("customer_code", "")
+        customer = get_customer(customer_code)
+        if not customer:
+            return {
+                "status": "error",
+                "error": f"Customer {customer_code} not found",
+                "attachments_sent": 0,
+            }
+        if not self._email_sender:
+            return {
+                "status": "error",
+                "error": "Email sender not configured",
+                "attachments_sent": 0,
+            }
+
+        # Minimal SendRequest + SendResult for the warehouse mixin.
+        req = SendRequest(
+            invoice_number=invoice_number,
+            container_number="",
+            customer_code=customer_code,
+            amount=str(invoice.get("amount", "") or ""),
+            subject=invoice.get("subject") or f"Warehouse Invoice {invoice_number}",
+        )
+        res = SendResult(invoice_number, "", customer_code)
+
+        # Stub a job-like object satisfying the fields _send_warehouse_invoice
+        # touches: .test_mode (skipped — retry has implicit approval),
+        # .events (asyncio.Queue used by _emit_send), .id (logging).
+        import asyncio as _asyncio
+        class _RetryJob:
+            id = f"retry-{invoice_number}"
+            test_mode = False
+            status = "running"
+            events = _asyncio.Queue()
+        stub_job = _RetryJob()
+
+        await self._send_warehouse_invoice(stub_job, req, customer, res, 0)
+
+        return {
+            "status": "sent" if res.status == "sent" else "error",
+            "error": res.error,
+            "attachments_sent": len(res.warehouse_attachments or []),
         }
 
     async def _background_qbo_upload(self, invoice_id: str, file_path: Path, slot: str) -> None:
