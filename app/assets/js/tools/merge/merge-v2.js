@@ -763,7 +763,10 @@ function fetchRowMarkup(rowIdx, row, opts) {
                    : row.skipped ? 'Skipped — re-click Fix Error to undo'
                    : '';
 
-  const trAttrs = isError
+  // Task 15: rows are clickable during error states (Review/Ready) AND during
+  // active Fetching. In the latter case, the sidebar opens in a read-only
+  // variant (Retry/Skip/Upload disabled until the row settles).
+  const trAttrs = (isError || v2State.subMode === 'fetching')
     ? `onclick="window.v2OpenSidebar(${rowIdx})" style="cursor:pointer;"`
     : '';
 
@@ -1683,6 +1686,14 @@ function renderSidebar(rowIdx) {
   const row = v2State.rows[rowIdx];
   if (!row) return '';
 
+  // Task 15: mid-fetch read-only variant.
+  // If we're in Fetching state AND this row hasn't settled yet, render the
+  // orange-tinted read-only sidebar (Retry/Skip/Upload disabled).
+  const isFetching = v2State.subMode === 'fetching' && !row.fetchResult && !row.skipped;
+  if (isFetching) {
+    return renderFetchingSidebar(rowIdx, row);
+  }
+
   const isResolved = !!(row.fetchResult && row.fetchResult.podPill !== 'miss');
   const sidebarClass = `detail-sidebar open${isResolved ? ' resolved' : ''}`;
 
@@ -1757,6 +1768,75 @@ function renderSidebar(rowIdx) {
         ${bodyTop}
       </div>
       ${footer}
+    </div>
+    <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>
+  `;
+}
+
+// Task 15: read-only sidebar variant rendered while a row is mid-fetch or
+// still queued. Reuses the same v2DetailSidebar CSS (styles.css ~1951+) and
+// just swaps the error-red palette for an orange/amber tint via inline color
+// overrides — no new CSS needed.
+function renderFetchingSidebar(rowIdx, row) {
+  const isInFlight = row.containerNumber && row.containerNumber === v2State.fetchCurrentContainer;
+  const subtitle = `${escHtml(row.containerNumber || 'Warehouse')} · Invoice ${escHtml(row.invoiceNumber || '—')}`;
+  const titleText = isInFlight ? 'Fetching Container' : 'Container Queued';
+  const bannerText = isInFlight
+    ? '<strong>This row is being fetched right now.</strong> Updates appear live; actions unlock when this row settles.'
+    : '<strong>This row is queued.</strong> It will start as soon as an in-flight slot opens up. You can uncheck the row to skip.';
+  const docName = (row.routingType === 'export') ? 'BL or POL'
+                : (row.routingType === 'warehouse') ? 'any QBO attachment'
+                : (row.routingType === 'van') ? 'TMS document'
+                : (row.routingType === 'unknown') ? 'POD, BL, or POL'
+                : 'POD';
+  const routingTypeLabel = ({
+    import: 'Imports', export: 'Exports', warehouse: 'Warehouse', van: 'Van', unknown: 'Unknown'
+  })[row.routingType] || row.routingType || 'unknown';
+
+  return `
+    <div class="detail-sidebar open" id="v2DetailSidebar">
+      <div class="ds-header">
+        <div class="ds-icon" style="background:#fff7ed;color:#ea580c;">!</div>
+        <div>
+          <div class="ds-title">${titleText}</div>
+          <div class="ds-subtitle">${subtitle}</div>
+        </div>
+        <button class="ds-close" onclick="window.v2CloseSidebar()">×</button>
+      </div>
+      <div class="panel-empty-banner" style="background:#fff7ed;border-bottom-color:#fed7aa;color:#9a3412;">
+        <span>${bannerText}</span>
+      </div>
+      <div class="ds-body">
+        <div class="ds-section">
+          <div class="ds-section-label">Customer</div>
+          <div style="font-size:0.92rem;font-weight:600;color:#0f172a;">${escHtml(row.customer || '—')}</div>
+        </div>
+        <div class="ds-section">
+          <div class="ds-section-label">What's Happening</div>
+          <div class="happened-block" style="background:#fff7ed;border-color:#fed7aa;">
+            <div class="title" style="color:#9a3412;">${isInFlight ? 'Pulling documents now' : 'Waiting in queue'}</div>
+            <div class="body" style="color:#7c2d12;">
+              Routing type: <strong>${escHtml(routingTypeLabel)}</strong>.
+              ${isInFlight ? 'Invoice PDF pulled · now walking the doc chain on TMS.' : 'The fetcher will pick this up shortly.'}
+            </div>
+          </div>
+        </div>
+        <div class="ds-section">
+          <div class="ds-section-label">Resolve</div>
+          <button class="retry-api-btn" disabled title="Available when this row finishes fetching">↻ Retry API call</button>
+          <div class="resolve-divider"><span>or upload manually</span></div>
+          <label class="ds-upload" style="opacity:0.55;cursor:not-allowed;pointer-events:none;">
+            <div class="icon">⬆</div>
+            <div class="title">Drop ${escHtml(docName)} for ${escHtml(row.containerNumber || row.workOrderNumber || row.invoiceNumber)}</div>
+            <div class="help">.pdf only — replaces whatever the API would have returned</div>
+          </label>
+        </div>
+      </div>
+      <div class="ds-footer">
+        <button class="skip-link" disabled title="Available when fetch completes">Skip this one</button>
+        <button class="nav-btn" disabled title="Available when fetch completes">← Prev</button>
+        <button class="next-issue-btn" disabled title="Wait for fetch to finish">Next Error</button>
+      </div>
     </div>
     <div class="sidebar-backdrop open" onclick="window.v2CloseSidebar()"></div>
   `;
