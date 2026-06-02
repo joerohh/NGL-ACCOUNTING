@@ -156,6 +156,9 @@ export function routingDecisionFor(row) {
   if (fromInv === 'warehouse') {
     return { type: 'warehouse', expectedDoc: 'All QBO Docs' };
   }
+  if (fromInv === 'van') {
+    return { type: 'van', expectedDoc: '?' };
+  }
   if (fromInv) {
     return { type: fromInv, expectedDoc: fromInv === 'import' ? 'POD' : 'BL/POL' };
   }
