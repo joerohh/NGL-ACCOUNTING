@@ -2383,13 +2383,17 @@ window.v2TriggerExcel = triggerExcel;
 window.v2SetState = setStateV2;
 
 async function v2ClickFetch() {
-  // Build the fetch payload — dedup selected rows by container.
+  // Build the fetch payload — dedup selected rows by INVOICE NUMBER (INV# is
+  // unique per row). Previously this deduped by container number, which
+  // collapsed rows that share a container — 18 warehouse rows all have empty
+  // container '', 25 van rows share T1022/T1013 — turning a 67-row fetch
+  // into a 30-row fetch and leaving the rest stuck "queued" forever.
   const selected = v2State.rows.filter(r => r.selected);
   const seen = new Set();
   const containers = [];
   for (const row of selected) {
-    const key = row.containerNumber.toLowerCase();
-    if (seen.has(key)) continue;
+    const key = (row.invoiceNumber || row.containerNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     containers.push({
       containerNumber: row.containerNumber,
