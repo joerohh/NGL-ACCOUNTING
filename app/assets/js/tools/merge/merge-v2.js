@@ -475,7 +475,7 @@ function routingTypeFilterTabs() {
       ${btn('import', 'Import', imports)}
       ${btn('export', 'Export', exports_)}
       ${btn('warehouse', 'Warehouse', warehouses)}
-      ${btn('van', 'Vans', vans)}
+      ${btn('van', 'Van', vans)}
       ${btn('unknown', 'Unknown', unknown)}
     </div>
   `;
@@ -874,7 +874,7 @@ function routingSummaryBand() {
         <span class="chip unknown">?</span>
         <strong>${unknown}</strong> unknown
       </span>` : ''}
-      <span class="hint">Decided by INV# letter (M / E / W) · falls back to WO# letter when prefix is non-standard</span>
+      <span class="hint">Decided by INV# letter (M / E / W / V) · falls back to WO# letter when prefix is non-standard</span>
     </div>
   `;
 }
