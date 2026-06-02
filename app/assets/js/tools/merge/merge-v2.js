@@ -127,6 +127,7 @@ export function setStateV2(name) {
     v2State.searchQuery = '';
     v2State.sortMode = 'excel';
     v2State.activeTab = 'all';
+    v2State.userPickedReadyTab = false;
     v2State.routingTypeFilter = 'all';
     v2State.customerFilter = 'all';
     v2State.sortKey = null;
@@ -209,6 +210,7 @@ async function handleExcelChange(e) {
   // Default-active tab: Issues if any issue exists, All otherwise.
   const hasIssues = v2State.rows.some(r => r.status !== 'ok');
   v2State.activeTab = hasIssues ? 'issues' : 'all';
+  v2State.userPickedReadyTab = false;
   v2State.routingTypeFilter = 'all';
   v2State.customerFilter = 'all';
   v2State.sortKey = null;
@@ -1323,13 +1325,18 @@ function renderReady() {
   const errors = all.filter(r => !r.skipped && r.fetchResult && (r.fetchResult.podPill === 'miss' || r.fetchResult.invPill === 'miss'));
   const ready  = all.filter(r => !r.skipped && r.fetchResult && r.fetchResult.podPill !== 'miss' && r.fetchResult.invPill !== 'miss');
 
-  // Active tab — Errors-default-when-errors rule
-  if (errors.length > 0 && v2State.activeTab !== 'errors' && v2State.activeTab !== 'queued') {
+  // Active tab — Errors-default-when-errors rule, but ONLY on first entry to Ready
+  // (when the user hasn't explicitly picked a tab). Once they click All/Errors/Queued,
+  // respect that choice on subsequent re-renders. Previously this auto-jumped to Errors
+  // on EVERY render, locking the user out of the All tab whenever errors > 0.
+  if (errors.length > 0 && !v2State.userPickedReadyTab && !v2State.activeTab) {
     v2State.activeTab = 'errors';
   } else if (errors.length === 0 && queued.length === 0) {
     if (v2State.activeTab === 'errors' || v2State.activeTab === 'queued') {
       v2State.activeTab = 'all';
     }
+  } else if (!v2State.activeTab) {
+    v2State.activeTab = 'all';
   }
 
   // Filter rows based on active tab
@@ -2418,6 +2425,7 @@ window.v2ClickFetch = v2ClickFetch;
 
 function v2HandleReadyTab(tab) {
   v2State.activeTab = tab;
+  v2State.userPickedReadyTab = true;   // user override — don't auto-jump back to Errors
   setStateV2('ready');
 }
 function v2HandleReadySearch(value) {
@@ -2465,12 +2473,13 @@ async function v2RetryAllErrors() {
   const errors = v2State.rows.filter(r => r.fetchResult?.podPill === 'miss' && !r.skipped);
   if (errors.length === 0) return;
 
-  // Dedup by container
+  // Dedup by invoice number (INV# is unique). Container-based dedup collapses
+  // van/warehouse rows that share containers — see v2ResumeFetch for the full note.
   const seen = new Set();
   const containers = [];
   for (const row of errors) {
-    const key = row.containerNumber.toLowerCase();
-    if (seen.has(key)) continue;
+    const key = (row.invoiceNumber || row.containerNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     containers.push({
       containerNumber: row.containerNumber,
@@ -2510,12 +2519,15 @@ async function v2ResumeFetch() {
   const queued = v2State.rows.filter(r => r.selected && !r.fetchResult && !r.skipped);
   if (queued.length === 0) return;
 
-  // Dedup by container
+  // Dedup by invoice number (INV# is unique per row). Previously dedup was by
+  // container number — but multiple invoices can share a container (NVH USA
+  // trailer vans share T1022/T1013 across many invoices; warehouse rows have
+  // empty container ''). That bug collapsed N queued rows into 1.
   const seen = new Set();
   const containers = [];
   for (const row of queued) {
-    const key = row.containerNumber.toLowerCase();
-    if (seen.has(key)) continue;
+    const key = (row.invoiceNumber || row.containerNumber || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     containers.push({
       containerNumber: row.containerNumber,
@@ -2660,7 +2672,16 @@ function handleSseEvent(evt) {
       break;
 
     case 'job_paused':
-      finalizeFetch({ cancelled: true });
+      // Agent acknowledged the pause but the job is still running, just waiting.
+      // Do NOT finalize — that would terminate the fetch and leave rows queued.
+      // Just sync the UI to the paused state.
+      v2State.fetchPaused = true;
+      setStateV2('fetching');
+      break;
+
+    case 'job_resumed':
+      v2State.fetchPaused = false;
+      setStateV2('fetching');
       break;
   }
 }
