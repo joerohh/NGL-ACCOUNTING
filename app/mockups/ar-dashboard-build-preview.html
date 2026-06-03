@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Build preview (the viewer)</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+  .scenes { display:flex; flex-direction:column; gap:28px }
+  .scene-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; padding:4px 10px; border-radius:4px; margin-bottom:8px; background:#0369a1 }
+  .scene-label.b { background:#7c3aed }
+  .scene-label.c { background:#0f766e }
+  .scene-label.d { background:#b45309 }
+  .scene-caption { color:#475569; font-size:0.83rem; margin-bottom:10px }
+
+  /* shared shell */
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.04); position:relative }
+  .shell { display:grid; grid-template-columns: 184px 1fr; min-height:680px }
+  .sidebar { background:#0f172a; color:#cbd5e1; padding:16px 0 }
+  .sidebar .brand { color:#fff; font-weight:800; font-size:0.95rem; padding:0 16px 14px; border-bottom:1px solid #1e293b; margin-bottom:10px; letter-spacing:0.02em }
+  .sidebar .brand .accent { color:#ea580c }
+  .sidebar .nav-section-label { font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase; color:#64748b; font-weight:700; padding:6px 16px 2px }
+  .sidebar .nav-item { display:flex; align-items:center; gap:8px; padding:8px 16px; font-size:0.82rem; color:#cbd5e1; cursor:pointer; border-left:3px solid transparent }
+  .sidebar .nav-item.active { color:#fff; background:#1e293b; border-left-color:#ea580c; font-weight:700 }
+  .sidebar .nav-item .ico { width:14px; text-align:center; opacity:0.8 }
+
+  .main { background:#f8fafc; padding:18px 22px; position:relative; overflow:hidden }
+  .top-banner { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:9px 13px; display:flex; align-items:center; gap:12px; margin-bottom:12px; font-size:0.76rem; color:#475569 }
+  .top-banner .health { display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#15803d }
+  .top-banner .health::before { content:''; display:inline-block; width:8px; height:8px; background:#22c55e; border-radius:50% }
+  .top-banner .right { margin-left:auto; color:#94a3b8 }
+  .page-h { display:flex; align-items:flex-end; gap:10px; margin-bottom:12px }
+  .page-h h3 { font-size:1.05rem; font-weight:800; color:#0f172a }
+  .page-h .date { color:#64748b; font-size:0.78rem; font-weight:600 }
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:transparent; margin-bottom:14px; overflow-x:hidden }
+  .ngl-tab { padding:8px 11px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.78rem; font-weight:600; color:#94a3b8; white-space:nowrap; cursor:default }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+
+  /* modal overlay — wider so the preview can breathe */
+  .modal-overlay { position:absolute; inset:0; background:rgba(15,23,42,0.45); display:flex; align-items:flex-start; justify-content:center; padding:24px 20px; backdrop-filter:blur(2px) }
+  .modal { background:#fff; border-radius:12px; width:100%; max-width:880px; max-height:100%; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.16) }
+  .modal-header { padding:13px 18px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:10px; background:#fff }
+  .modal-header h4 { font-size:1rem; font-weight:800; color:#0f172a }
+  .modal-header .date-sub { font-size:0.74rem; color:#64748b; font-weight:600 }
+  .modal-header .close-x { margin-left:auto; color:#94a3b8; font-size:1.3rem; cursor:pointer; line-height:1 }
+  .modal-header .build-ms { font-size:0.7rem; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:4px; font-weight:700; margin-left:auto }
+  .modal-body { padding:14px 18px; overflow-y:auto; background:#f8fafc }
+  .modal-footer { padding:11px 18px; border-top:1px solid #e2e8f0; display:flex; gap:10px; align-items:center; background:#fff }
+  .modal-footer .footer-note { font-size:0.72rem; color:#64748b; margin-right:auto; display:flex; align-items:center; gap:8px }
+  .modal-footer .footer-note .path-pill { font-family:'Consolas',monospace; background:#f1f5f9; padding:2px 7px; border-radius:4px; color:#334155; font-weight:600 }
+
+  /* buttons */
+  .ngl-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; font-size:0.8rem; font-weight:700; cursor:pointer; border:1px solid; white-space:nowrap }
+  .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569 }
+  .ngl-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff }
+  .ngl-btn.small { padding:5px 10px; font-size:0.72rem }
+
+  /* ====== Headline strip: yesterday → today → net change ====== */
+  .headline { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 16px; margin-bottom:12px; display:flex; align-items:center; gap:18px }
+  .headline .stat { display:flex; flex-direction:column; min-width:0 }
+  .headline .stat .lbl { font-size:0.66rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:700 }
+  .headline .stat .val { font-size:1.45rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; line-height:1.15 }
+  .headline .arrow { color:#cbd5e1; font-size:1.4rem }
+  .headline .delta { padding:8px 12px; background:#dcfce7; border-radius:6px; font-size:0.78rem; font-weight:800; color:#166534; display:flex; flex-direction:column; align-items:center; min-width:108px; margin-left:auto }
+  .headline .delta.down { background:#fee2e2; color:#991b1b }
+  .headline .delta.up { background:#dcfce7; color:#166534 }
+  .headline .delta .d-label { font-size:0.6rem; opacity:0.85; text-transform:uppercase; letter-spacing:0.04em; font-weight:700 }
+  .headline .delta .d-val { font-size:1rem; font-variant-numeric:tabular-nums }
+
+  /* ====== Section header (orange left-bar) ====== */
+  .section-h { display:flex; align-items:center; gap:10px; font-size:0.86rem; font-weight:800; color:#0f172a; padding:7px 12px; margin:0 0 8px; background:#fff; border-left:4px solid #ea580c; border-radius:0 6px 6px 0; border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0 }
+  .section-h .sub { font-size:0.72rem; color:#64748b; font-weight:500; margin-left:auto }
+
+  /* ====== KPI tiles ====== */
+  .kpi-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:9px; margin-bottom:12px }
+  .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; cursor:pointer; position:relative; transition:border-color 0.12s, box-shadow 0.12s }
+  .kpi:hover { border-color:#ea580c; box-shadow:0 2px 6px rgba(234,88,12,0.08) }
+  .kpi.active { border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,0.10) }
+  .kpi.alert { border-color:#fed7aa; background:linear-gradient(180deg, #fff7ed 0%, #fff 65%) }
+  .kpi.alert.active { border-color:#ea580c }
+  .kpi .lbl { font-size:0.63rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; margin-bottom:3px; display:flex; align-items:center; gap:6px }
+  .kpi .ico { width:16px; height:16px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800 }
+  .kpi .ico.green { background:#dcfce7; color:#15803d }
+  .kpi .ico.blue { background:#dbeafe; color:#1d4ed8 }
+  .kpi .ico.purple { background:#ede9fe; color:#6d28d9 }
+  .kpi .ico.red { background:#fee2e2; color:#b91c1c }
+  .kpi .val { font-size:1.3rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; line-height:1.1 }
+  .kpi.alert .val { color:#9a3412 }
+  .kpi .sub { font-size:0.7rem; color:#64748b; margin-top:2px }
+  .kpi .pop-hint { font-size:0.62rem; color:#ea580c; font-weight:700; margin-top:5px; opacity:0.0; transition:opacity 0.15s }
+  .kpi:hover .pop-hint, .kpi.active .pop-hint { opacity:1 }
+
+  /* ====== Expanded detail panel ====== */
+  .detail-panel { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:0; margin-bottom:12px; overflow:hidden }
+  .detail-panel .dp-head { padding:9px 12px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:10px; background:#f8fafc }
+  .detail-panel .dp-title { font-size:0.84rem; font-weight:800; color:#0f172a }
+  .detail-panel .dp-sub { font-size:0.72rem; color:#64748b; margin-left:6px }
+  .detail-panel .dp-tools { margin-left:auto; display:flex; align-items:center; gap:6px }
+  .detail-panel .dp-tools .search { font-size:0.72rem; background:#fff; border:1px solid #e2e8f0; padding:4px 8px; border-radius:4px; color:#64748b; width:140px }
+  .detail-panel .dp-tools .ngl-btn.small { padding:4px 8px }
+
+  .dp-table { width:100%; border-collapse:collapse; font-size:0.76rem }
+  .dp-table thead th { background:#f1f5f9; color:#475569; font-weight:700; text-transform:uppercase; font-size:0.62rem; letter-spacing:0.04em; padding:6px 10px; text-align:left; border-bottom:1px solid #e2e8f0; white-space:nowrap }
+  .dp-table tbody td { padding:6px 10px; border-bottom:1px solid #f1f5f9; color:#0f172a; vertical-align:middle; white-space:nowrap }
+  .dp-table tbody tr:hover { background:#fff7ed }
+  .dp-table tbody tr:last-child td { border-bottom:none }
+  .dp-table .num { text-align:right; font-variant-numeric:tabular-nums }
+  .dp-table .mono { font-family:'Consolas',monospace; font-weight:600; color:#334155 }
+  .dp-table .muted { color:#64748b }
+  .dp-table .pos { color:#15803d; font-weight:700 }
+  .dp-table .neg { color:#b91c1c; font-weight:700 }
+  .dp-table tfoot td { background:#f8fafc; font-weight:800; color:#0f172a; padding:7px 10px; border-top:2px solid #e2e8f0; font-size:0.74rem }
+
+  /* Suspense list — looks different from a normal table */
+  .susp-list { display:flex; flex-direction:column }
+  .susp-row { display:grid; grid-template-columns:34px 1fr 110px 120px; gap:10px; padding:10px 14px; border-bottom:1px solid #f1f5f9; align-items:center }
+  .susp-row:last-child { border-bottom:none }
+  .susp-row .badge { width:28px; height:28px; border-radius:50%; background:#fee2e2; color:#b91c1c; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.78rem }
+  .susp-row.warn .badge { background:#fef3c7; color:#92400e }
+  .susp-row .body { min-width:0 }
+  .susp-row .title { font-size:0.82rem; font-weight:700; color:#0f172a }
+  .susp-row .title .mono { font-family:'Consolas',monospace; color:#334155 }
+  .susp-row .why { font-size:0.72rem; color:#64748b; margin-top:2px }
+  .susp-row .amt { text-align:right; font-variant-numeric:tabular-nums; font-size:0.82rem; font-weight:800; color:#9a3412 }
+  .susp-row .actions { display:flex; gap:5px; justify-content:flex-end }
+  .susp-row .actions .ngl-btn.small { padding:4px 9px }
+
+  /* Edit-in-place affordances */
+  .edit-cell { background:#fff7ed; border:1px solid #fed7aa; padding:5px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:4px; box-shadow:0 0 0 3px rgba(234,88,12,0.12); position:relative }
+  .edit-cell input { border:none; background:transparent; font-family:inherit; font-size:0.78rem; font-variant-numeric:tabular-nums; font-weight:700; color:#9a3412; width:64px; text-align:right; outline:none }
+  .edit-cell .save-x { display:flex; gap:2px; margin-left:6px }
+  .edit-cell .save-x .ok { background:#16a34a; color:#fff; width:18px; height:18px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.66rem; font-weight:800 }
+  .edit-cell .save-x .cancel { background:#f1f5f9; color:#64748b; width:18px; height:18px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.7rem }
+  .edited-pip { display:inline-block; width:6px; height:6px; border-radius:50%; background:#ea580c; margin-left:6px }
+  .help-pop { background:#0f172a; color:#fff; font-size:0.7rem; padding:6px 9px; border-radius:5px; margin:6px 0 0; display:inline-flex; align-items:center; gap:6px }
+
+  /* footer add-row button (M4) */
+  .add-row-bar { padding:8px 12px; background:#fff7ed; border-top:1px dashed #fed7aa; display:flex; align-items:center; gap:8px; font-size:0.74rem; color:#9a3412 }
+  .add-row-bar .ngl-btn.small { padding:4px 10px; background:#fff; border-color:#fed7aa; color:#9a3412 }
+
+  /* per-source meta strip */
+  .source-strip { display:flex; flex-wrap:wrap; gap:6px 12px; padding:8px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; font-size:0.72rem; color:#475569; margin-bottom:12px }
+  .source-strip .src { display:inline-flex; align-items:center; gap:4px }
+  .source-strip .src::before { content:''; width:6px; height:6px; background:#22c55e; border-radius:50% }
+  .source-strip .src.warn::before { background:#f59e0b }
+  .source-strip b { color:#0f172a; font-weight:700 }
+  .source-strip .age-note { margin-left:auto; color:#64748b; font-style:italic }
+</style>
+</head>
+<body>
+
+<h2>AR Dashboard — Build preview (the viewer)</h2>
+<div class="subtitle">After the engine runs, this is what Jihyun sees BEFORE she clicks Save. Four states, each progressively deeper: default → click a tile → suspense triage → M4 edit-in-place. Build date: <b>Tuesday, May 19, 2026</b>.</div>
+
+<div class="scenes">
+
+<!-- ============================================================
+     Scene A — Preview default (totals + 4 KPI tiles, nothing expanded)
+============================================================ -->
+<div>
+  <div class="scene-label">A — Preview default (post-build, nothing expanded)</div>
+  <div class="scene-caption">Yesterday's AR vs Today's, net change, and 4 click-through tiles. The viewer keeps the dashboard visible behind a soft scrim so context isn't lost.</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+        <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+        <div class="nav-item"><span class="ico">👥</span>Customers</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+        <div class="nav-section-label" style="margin-top:14px">Account</div>
+        <div class="nav-item"><span class="ico">⚙️</span>Settings</div>
+        <div class="nav-item"><span class="ico">📜</span>History</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span>QBO ✓</span><span>TMS ✓</span>
+          <span class="right">v2.76.x</span>
+        </div>
+        <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+        <div class="ngl-tabs-row">
+          <button class="ngl-tab active">Summary</button>
+          <button class="ngl-tab">Collections</button>
+          <button class="ngl-tab">Overdue</button>
+          <button class="ngl-tab">Partial Pays</button>
+          <button class="ngl-tab">New Invoices</button>
+          <button class="ngl-tab">TMS</button>
+          <button class="ngl-tab">Adjustments</button>
+          <button class="ngl-tab">Suspense</button>
+          <button class="ngl-tab">Customers</button>
+        </div>
+
+        <div class="modal-overlay">
+          <div class="modal">
+            <div class="modal-header">
+              <h4>Today's workbook is ready</h4>
+              <span class="date-sub">· Tuesday, May 19, 2026</span>
+              <span class="build-ms">Built in 0.6s</span>
+              <span class="close-x" style="margin-left:8px">×</span>
+            </div>
+            <div class="modal-body">
+
+              <div class="headline">
+                <div class="stat">
+                  <div class="lbl">Yesterday's AR</div>
+                  <div class="val">$1,847,210</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="stat">
+                  <div class="lbl">Today's AR</div>
+                  <div class="val">$1,885,755</div>
+                </div>
+                <div class="delta up">
+                  <span class="d-label">Net change</span>
+                  <span class="d-val">+$38,545</span>
+                </div>
+              </div>
+
+              <div class="source-strip">
+                <span class="src"><b>Yesterday's workbook</b> AR_AGING_05_18_2026.xlsx · 867 rows</span>
+                <span class="src"><b>QBO Collection</b> 232 payment lines · $172,895</span>
+                <span class="src"><b>QBO Schedule</b> 134 new invoices · $211,440</span>
+                <span class="src"><b>TAB BANK</b> 198 remittance rows</span>
+                <span class="src"><b>TMS Reconcile</b> 110 AR-type rows</span>
+                <span class="age-note">Aged forward <b>+1 day</b> · was last built Monday 5/18</span>
+              </div>
+
+              <div class="section-h">What changed today<span class="sub">click a tile to see the rows</span></div>
+              <div class="kpi-grid">
+                <div class="kpi">
+                  <div class="lbl"><span class="ico blue">+</span> New invoices</div>
+                  <div class="val">134</div>
+                  <div class="sub">From QBO Schedule · $211,440 added</div>
+                  <div class="pop-hint">click to see all 134 →</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl"><span class="ico green">✓</span> Paid off</div>
+                  <div class="val">201</div>
+                  <div class="sub">From QBO Collection · $172,895 cleared</div>
+                  <div class="pop-hint">click to see all 201 →</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl"><span class="ico purple">Δ</span> Amount adjustments</div>
+                  <div class="val">13</div>
+                  <div class="sub">From TMS · 13 invoices changed amount</div>
+                  <div class="pop-hint">click to see all 13 →</div>
+                </div>
+                <div class="kpi alert">
+                  <div class="lbl"><span class="ico red">!</span> Suspense / exceptions</div>
+                  <div class="val">3</div>
+                  <div class="sub">Need your attention before saving</div>
+                  <div class="pop-hint">click to triage →</div>
+                </div>
+              </div>
+
+            </div>
+            <div class="modal-footer">
+              <span class="footer-note">Save to <span class="path-pill">C:\Users\Joseph\Documents\NGL\AR Outputs\</span> · <a style="color:#0369a1; cursor:pointer; text-decoration:underline">change folder</a></span>
+              <button class="ngl-btn ngl-btn-secondary">Back</button>
+              <button class="ngl-btn ngl-btn-primary">Save &amp; open dashboard →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Scene B — "New invoices" tile clicked, inline table expanded
+============================================================ -->
+<div>
+  <div class="scene-label b">B — One tile expanded: the 134 new invoices, inline</div>
+  <div class="scene-caption">Active tile glows orange. The inline detail panel appears below — quick search, scroll, footer total. Read-only in M2 (M4 turns the cells editable, Scene D).</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+        <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+        <div class="nav-item"><span class="ico">👥</span>Customers</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span class="right">v2.76.x</span>
+        </div>
+        <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+        <div class="ngl-tabs-row">
+          <button class="ngl-tab active">Summary</button>
+          <button class="ngl-tab">Collections</button>
+          <button class="ngl-tab">Overdue</button>
+        </div>
+
+        <div class="modal-overlay">
+          <div class="modal">
+            <div class="modal-header">
+              <h4>Today's workbook is ready</h4>
+              <span class="date-sub">· Tuesday, May 19, 2026</span>
+              <span class="build-ms">Built in 0.6s</span>
+              <span class="close-x" style="margin-left:8px">×</span>
+            </div>
+            <div class="modal-body">
+
+              <div class="headline">
+                <div class="stat"><div class="lbl">Yesterday's AR</div><div class="val">$1,847,210</div></div>
+                <div class="arrow">→</div>
+                <div class="stat"><div class="lbl">Today's AR</div><div class="val">$1,885,755</div></div>
+                <div class="delta up"><span class="d-label">Net change</span><span class="d-val">+$38,545</span></div>
+              </div>
+
+              <div class="kpi-grid">
+                <div class="kpi active">
+                  <div class="lbl"><span class="ico blue">+</span> New invoices</div>
+                  <div class="val">134</div>
+                  <div class="sub">From QBO Schedule · $211,440 added</div>
+                  <div class="pop-hint">↓ shown below</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl"><span class="ico green">✓</span> Paid off</div>
+                  <div class="val">201</div>
+                  <div class="sub">From QBO Collection · $172,895 cleared</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl"><span class="ico purple">Δ</span> Amount adjustments</div>
+                  <div class="val">13</div>
+                  <div class="sub">From TMS · 13 invoices changed amount</div>
+                </div>
+                <div class="kpi alert">
+                  <div class="lbl"><span class="ico red">!</span> Suspense / exceptions</div>
+                  <div class="val">3</div>
+                  <div class="sub">Need your attention before saving</div>
+                </div>
+              </div>
+
+              <div class="detail-panel">
+                <div class="dp-head">
+                  <div class="dp-title">New invoices today</div>
+                  <div class="dp-sub">134 rows · $211,440 total · sourced from QBO Daily Schedule</div>
+                  <div class="dp-tools">
+                    <input class="search" placeholder="Search INV# or customer…" />
+                    <button class="ngl-btn ngl-btn-secondary small">Copy list</button>
+                  </div>
+                </div>
+                <table class="dp-table">
+                  <thead>
+                    <tr>
+                      <th>NGL INV #</th>
+                      <th>Customer</th>
+                      <th>Container / Chassis</th>
+                      <th>REF NO</th>
+                      <th>MBL</th>
+                      <th class="num">Amount</th>
+                      <th>WO #</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td class="mono">LM26050332F</td><td>SAMSUNG SDS</td><td>MSCU7714319 / IEPZ502851</td><td>SDS-2605-117</td><td>MEDU3K2618455</td><td class="num">$1,840.00</td><td class="mono muted">LM2605190018</td></tr>
+                    <tr><td class="mono">LM26050333F</td><td>SAMSUNG SDS</td><td>MSCU8841302 / IEPZ503994</td><td>SDS-2605-118</td><td>MEDU3K2618455</td><td class="num">$1,934.80</td><td class="mono muted">LM2605190019</td></tr>
+                    <tr><td class="mono">PM26050241F</td><td>AMNEX</td><td>MRKU8294420 / —</td><td>PM-26-0241</td><td>MAEU251983420</td><td class="num">$2,528.00</td><td class="mono muted">PM2605190007</td></tr>
+                    <tr><td class="mono">PM26050242F</td><td>AMNEX</td><td>HMMU9384217 / —</td><td>PM-26-0242</td><td>HLCU IND260543</td><td class="num">$2,568.00</td><td class="mono muted">PM2605190008</td></tr>
+                    <tr><td class="mono">XM26050019F</td><td>NORTH AMERICAN MARINE</td><td>—</td><td>—</td><td>NAM-260519-A</td><td class="num">$3,210.00</td><td class="mono muted">XM2605190001</td></tr>
+                    <tr><td class="mono">LM26050334F</td><td>IDEA NUOVA</td><td>TCNU3471201 / FBLU428831</td><td>IN-2605-44</td><td>MAEU251983420</td><td class="num">$1,760.00</td><td class="mono muted">LM2605190020</td></tr>
+                    <tr><td class="mono">LM26050335F</td><td>IDEA NUOVA</td><td>TCNU3490038 / FBLU428831</td><td>IN-2605-45</td><td>MAEU251983420</td><td class="num">$1,760.00</td><td class="mono muted">LM2605190021</td></tr>
+                    <tr><td class="mono">LM26050336F</td><td>FRONTIER LOGISTICS</td><td>EGHU3801225 / —</td><td>FL-26-0095</td><td>EGLV142800110</td><td class="num">$2,120.00</td><td class="mono muted">LM2605190022</td></tr>
+                    <tr><td colspan="7" style="text-align:center; padding:10px; color:#64748b; font-size:0.74rem; background:#f8fafc">… 126 more rows · scroll to see all 134</td></tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="5" style="text-align:right">134 rows total</td>
+                      <td class="num">$211,440.00</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+            </div>
+            <div class="modal-footer">
+              <span class="footer-note">Save to <span class="path-pill">C:\Users\Joseph\Documents\NGL\AR Outputs\</span> · <a style="color:#0369a1; cursor:pointer; text-decoration:underline">change folder</a></span>
+              <button class="ngl-btn ngl-btn-secondary">Back</button>
+              <button class="ngl-btn ngl-btn-primary">Save &amp; open dashboard →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Scene C — Suspense tile clicked, exceptions list
+============================================================ -->
+<div>
+  <div class="scene-label c">C — Suspense tile expanded: 3 exceptions to triage</div>
+  <div class="scene-caption">The most important state. Each exception names what's wrong, the dollar impact, and the actions that resolve it. Save button stays enabled — Jihyun can ship the workbook with exceptions; they just flow to the Suspense tab for the worklist.</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span class="right">v2.76.x</span>
+        </div>
+        <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+        <div class="ngl-tabs-row"><button class="ngl-tab active">Summary</button><button class="ngl-tab">Collections</button><button class="ngl-tab">Overdue</button></div>
+
+        <div class="modal-overlay">
+          <div class="modal">
+            <div class="modal-header">
+              <h4>Today's workbook is ready</h4>
+              <span class="date-sub">· Tuesday, May 19, 2026</span>
+              <span class="build-ms">Built in 0.6s</span>
+              <span class="close-x" style="margin-left:8px">×</span>
+            </div>
+            <div class="modal-body">
+
+              <div class="headline">
+                <div class="stat"><div class="lbl">Yesterday's AR</div><div class="val">$1,847,210</div></div>
+                <div class="arrow">→</div>
+                <div class="stat"><div class="lbl">Today's AR</div><div class="val">$1,885,755</div></div>
+                <div class="delta up"><span class="d-label">Net change</span><span class="d-val">+$38,545</span></div>
+              </div>
+
+              <div class="kpi-grid">
+                <div class="kpi">
+                  <div class="lbl"><span class="ico blue">+</span> New invoices</div>
+                  <div class="val">134</div>
+                  <div class="sub">From QBO Schedule · $211,440 added</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl"><span class="ico green">✓</span> Paid off</div>
+                  <div class="val">201</div>
+                  <div class="sub">From QBO Collection · $172,895 cleared</div>
+                </div>
+                <div class="kpi">
+                  <div class="lbl"><span class="ico purple">Δ</span> Amount adjustments</div>
+                  <div class="val">13</div>
+                  <div class="sub">From TMS · 13 invoices changed amount</div>
+                </div>
+                <div class="kpi alert active">
+                  <div class="lbl"><span class="ico red">!</span> Suspense / exceptions</div>
+                  <div class="val">3</div>
+                  <div class="sub">Need your attention before saving</div>
+                  <div class="pop-hint">↓ shown below</div>
+                </div>
+              </div>
+
+              <div class="detail-panel">
+                <div class="dp-head">
+                  <div class="dp-title">Suspense items to triage</div>
+                  <div class="dp-sub">3 issues · $8,420 in dollars affected · all will appear in the Suspense tab after save</div>
+                  <div class="dp-tools">
+                    <button class="ngl-btn ngl-btn-secondary small">Open Suspense tab →</button>
+                  </div>
+                </div>
+
+                <div class="susp-list">
+
+                  <div class="susp-row">
+                    <div class="badge">1</div>
+                    <div class="body">
+                      <div class="title">TAB BANK check applied to wrong invoice — <span class="mono">CHK 65282</span></div>
+                      <div class="why">TAB BANK posted $3,820 to <b>LM26030418F</b> but that invoice was already paid in full on 5/15. Looks like a reassignment from CHK 65252.</div>
+                    </div>
+                    <div class="amt">$3,820.00</div>
+                    <div class="actions">
+                      <button class="ngl-btn ngl-btn-primary small">Fix in TAB BANK</button>
+                      <button class="ngl-btn ngl-btn-secondary small">Skip</button>
+                    </div>
+                  </div>
+
+                  <div class="susp-row warn">
+                    <div class="badge">2</div>
+                    <div class="body">
+                      <div class="title">Same check on 3 customer rows — <span class="mono">CHK 65252</span> for <b>IDEA NUOVA</b></div>
+                      <div class="why">Posted as Payment + UC + Overpay across 3 TAB BANK rows. Engine flagged it as conflicting status; needs human read of the remittance.</div>
+                    </div>
+                    <div class="amt">$2,180.00</div>
+                    <div class="actions">
+                      <button class="ngl-btn ngl-btn-primary small">Review check</button>
+                      <button class="ngl-btn ngl-btn-secondary small">Skip</button>
+                    </div>
+                  </div>
+
+                  <div class="susp-row warn">
+                    <div class="badge">3</div>
+                    <div class="body">
+                      <div class="title">Amount disagreement — <span class="mono">PM26050159F</span></div>
+                      <div class="why">QBO Schedule says $2,520. TMS says $2,360. Default = use TMS amount; verify with sender (per Q1 to Jihyun).</div>
+                    </div>
+                    <div class="amt">$2,420.00</div>
+                    <div class="actions">
+                      <button class="ngl-btn ngl-btn-primary small">Use TMS ($2,360)</button>
+                      <button class="ngl-btn ngl-btn-secondary small">Use QBO ($2,520)</button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+            <div class="modal-footer">
+              <span class="footer-note">Save to <span class="path-pill">C:\Users\Joseph\Documents\NGL\AR Outputs\</span></span>
+              <button class="ngl-btn ngl-btn-secondary">Back</button>
+              <button class="ngl-btn ngl-btn-primary">Save &amp; open dashboard →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Scene D — M4 preview: edit-in-place on the Amount Adjustments table
+============================================================ -->
+<div>
+  <div class="scene-label d">D — M4 (next sprint): edit-in-place on the preview</div>
+  <div class="scene-caption">M2 ships as read-only. M4 adds inline editing on the detail tables — click any cell, type new value, hit ✓. Edited rows get an orange pip. Footer shows "2 edits pending"; they're baked into the workbook when she clicks Save. Bottom add-row bar lets her add manual rows (credit memos, warehouse invoices).</div>
+  <div class="ngl-app">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">NGL <span class="accent">Accounting</span></div>
+        <div class="nav-section-label">Tools</div>
+        <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+      </div>
+      <div class="main">
+        <div class="top-banner">
+          <span class="health">Agent connected</span>
+          <span class="right">v2.78.x · preview build</span>
+        </div>
+        <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+        <div class="ngl-tabs-row"><button class="ngl-tab active">Summary</button><button class="ngl-tab">Collections</button></div>
+
+        <div class="modal-overlay">
+          <div class="modal">
+            <div class="modal-header">
+              <h4>Today's workbook — review &amp; edit</h4>
+              <span class="date-sub">· Tuesday, May 19, 2026</span>
+              <span class="build-ms" style="background:#ffedd5; color:#9a3412">2 unsaved edits</span>
+              <span class="close-x" style="margin-left:8px">×</span>
+            </div>
+            <div class="modal-body">
+
+              <div class="kpi-grid">
+                <div class="kpi"><div class="lbl"><span class="ico blue">+</span> New invoices</div><div class="val">134</div><div class="sub">+$211,440</div></div>
+                <div class="kpi"><div class="lbl"><span class="ico green">✓</span> Paid off</div><div class="val">201</div><div class="sub">−$172,895</div></div>
+                <div class="kpi active"><div class="lbl"><span class="ico purple">Δ</span> Amount adjustments</div><div class="val">13</div><div class="sub">2 edited by you</div><div class="pop-hint">↓ shown below</div></div>
+                <div class="kpi alert"><div class="lbl"><span class="ico red">!</span> Suspense</div><div class="val">3</div><div class="sub">Unresolved</div></div>
+              </div>
+
+              <div class="detail-panel">
+                <div class="dp-head">
+                  <div class="dp-title">Amount adjustments</div>
+                  <div class="dp-sub">13 rows · from TMS · <b style="color:#ea580c">2 edited</b></div>
+                  <div class="dp-tools">
+                    <button class="ngl-btn ngl-btn-secondary small">Reset edits</button>
+                  </div>
+                </div>
+                <table class="dp-table">
+                  <thead>
+                    <tr>
+                      <th>INV #</th>
+                      <th>Customer</th>
+                      <th class="num">Yest amount</th>
+                      <th class="num">New amount</th>
+                      <th class="num">Δ</th>
+                      <th>Memo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="mono">LM26050214F</td>
+                      <td>WALMART INBOUND</td>
+                      <td class="num muted">$1,865.50</td>
+                      <td class="num">$2,473.00 <span class="edited-pip" title="edited"></span></td>
+                      <td class="num pos">+$607.50</td>
+                      <td>Detention 2 days · per TMS</td>
+                    </tr>
+                    <tr>
+                      <td class="mono">PM26040307F</td>
+                      <td>AMNEX</td>
+                      <td class="num muted">$3,790.00</td>
+                      <td class="num">
+                        <span class="edit-cell">
+                          <input value="3,940.50" />
+                          <span class="save-x">
+                            <span class="ok" title="save">✓</span>
+                            <span class="cancel" title="cancel">×</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td class="num pos">+$150.50</td>
+                      <td>—</td>
+                    </tr>
+                    <tr>
+                      <td class="mono">LM26050348F</td>
+                      <td>FRONTIER LOGISTICS</td>
+                      <td class="num muted">$963.00</td>
+                      <td class="num">$1,983.00 <span class="edited-pip" title="edited"></span></td>
+                      <td class="num pos">+$1,020.00</td>
+                      <td>Chassis split-bill</td>
+                    </tr>
+                    <tr>
+                      <td class="mono">W2592947-CR</td>
+                      <td>SAMSUNG SDS</td>
+                      <td class="num muted">−$420.50</td>
+                      <td class="num">−$390.50</td>
+                      <td class="num neg">+$30.00</td>
+                      <td>Credit applied · CR memo</td>
+                    </tr>
+                    <tr><td colspan="6" style="text-align:center; padding:8px; color:#64748b; font-size:0.72rem; background:#f8fafc">… 9 more rows</td></tr>
+                  </tbody>
+                </table>
+                <div class="add-row-bar">
+                  <span><b>Need to add a manual row?</b> Credit memos and warehouse invoices missing from QBO Schedule go here.</span>
+                  <button class="ngl-btn small">+ Add row</button>
+                </div>
+              </div>
+
+              <div class="help-pop">💡 <span>Edits stay in this preview only — nothing is saved until you click "Save &amp; open dashboard". Edited rows carry forward to tomorrow's workbook automatically.</span></div>
+
+            </div>
+            <div class="modal-footer">
+              <span class="footer-note"><b style="color:#9a3412">2 unsaved edits</b> · will be baked into the workbook on save</span>
+              <button class="ngl-btn ngl-btn-secondary">Discard &amp; close</button>
+              <button class="ngl-btn ngl-btn-primary">Save &amp; open dashboard →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

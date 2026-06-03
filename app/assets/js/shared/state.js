@@ -87,4 +87,16 @@ export const arState = {
   exceptions: [],                // flat list of detected exceptions
   manualEntries: [],             // user-added rows (credit memos, warehouse, etc.)
   resolvedExceptions: new Set(), // exception IDs marked resolved in this session
+  // R2 M2 — build flow state
+  buildModalOpen: false,
+  buildInputs: {                 // each slot: null OR { file, buf, parsed, error }
+    yesterday: null,
+    qbo_collection: null,
+    qbo_schedule: null,
+    tab_bank: null,
+    tms_reconcile: null,
+  },
+  buildResult: null,             // the built model produced by arBuildToday()
+  buildOpenKpi: null,            // which preview KPI is expanded ('new' | 'paid' | 'adjust' | 'exception')
+  buildSaveFolder: null,         // remembered save folder (also persisted to localStorage)
 };

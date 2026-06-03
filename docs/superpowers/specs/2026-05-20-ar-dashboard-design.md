@@ -249,12 +249,12 @@ Release 1 ships with Today + Week only. Month/Quarter/Year defer to Release 3 on
 | 2 | Short pays | Open Balance > 0 after posting | Call/email customer · write-off · keep open · edit memo |
 | 3 | Over pays | Open Balance < 0 after posting | **Open Overpayment Workflow modal** (4-step guided process — see §6.1) |
 | 4 | Posting gaps | TAB BANK has check# but QBO has nothing posted for it (or vice versa) | Post in QBO · un-apply · hold |
-| 5 | Amount disagreements | TMS amount ≠ QBO Schedule amount (new); OR TMS amount ≠ yesterday's AR (old) | Show both, default to TMS, confirm or override |
+| 5 | Amount disagreements | TMS amount ≠ QBO Schedule amount (new); OR TMS amount ≠ yesterday's AR (old). Only fires when TMS has the row — warehouse-only invoices (QBO-only) can't disagree. | Default to TMS (confirmed Jihyun 2026-06-02 — "TMS is generally the standard since rate is usually adjusted in TMS"). Confirm or override |
 | 6 | Customer name mismatches | TAB BANK debtor name ≠ QBO customer for same check# | Confirm correct customer |
-| 7 | Missing TMS records | Invoice in QBO Schedule but not in TMS (warehouse?) | Add manually with custom amount · confirm warehouse |
+| 7 | Missing TMS records | Invoice in QBO Schedule but not in TMS. **Warehouse invoices are normal here** — they only ever come through QBO (no TMS work orders exist for warehouse). Confirmed Jihyun 2026-06-02. | If warehouse customer: auto-accept QBO amount, no action. If not warehouse: surface for manual review |
 | 8 | NON-FACTORED informational | TAB BANK SUSPENSE/NON-FACTORED tag | Collapsed by default; no action needed |
 | **9** | **TAB BANK posting error** (NEW) | Same check# on multiple TAB BANK rows with conflicting status, OR check# applied to wrong invoice (deposit amount ≠ AR balance) | **Email TAB BANK to correct** (paste-ready) · mark "awaiting TAB BANK correction" · exclude from posting until cleared |
-| **10** | **UC awaiting reclassification** (NEW) | Prior-day UC row that hasn't been reposted yet — Jihyun is awaiting customer remittance confirmation | Informational; collapsed by default; auto-clears when matching Payment row appears (link by check# + customer + amount) |
+| **10** | **UC awaiting reclassification** (NEW) | Prior-day UC row that hasn't been reposted yet — Jihyun is awaiting customer remittance confirmation | Informational; collapsed by default; auto-clears when matching Payment row appears (link by check# + customer + amount). **Display:** small visible pill on the resolving Payment row (e.g. `↩ from UC 4/30`) — NOT memo text. Confirmed Jihyun 2026-06-02. |
 
 ### 5.5 Two-pane split (list tabs)
 
@@ -325,22 +325,29 @@ The dashboard provides a guided modal that walks the associate through her actua
 
 **Trigger:** Exception category 3 (Over pays) row clicked, OR a manually-detected overpayment from any AR row.
 
-**The 4 steps:**
+**The 4 steps** (locked with Jihyun 2026-06-02 — fully manual in TMS + QBO, dashboard guides):
 
 1. **Confirm overpayment.** Modal shows: TAB BANK deposit amount, AR balance, computed overpayment (= deposit − balance), source check#/ACH#, customer, and the original invoice. User confirms amount or adjusts.
 
-2. **Push to source invoice in TMS (or QBO).**
-   - For TMS-tracked invoices (import / export / van / brokerage): deep-link to TMS detail page (`/bc-detail/billing-info/{type}/{woNo}`); user adds the overpayment as a positive amount on the invoice.
-   - For **warehouse invoices**: deep-link to QBO invoice instead; same adjustment in QBO. (Jihyun explicitly called out warehouse cases use QBO, not TMS.)
-   - Dashboard tracks the push as a checkbox; user marks complete when done.
+2. **Bump the original invoice in TMS, reissue, sync.**
+   - For TMS-tracked invoices: deep-link to TMS billing page (`/bc-detail/billing-info/{type}/{woNo}`). User adds the overpaid amount as a positive line to the original invoice, reissues, syncs with QuickBooks.
+   - For **warehouse invoices** (no TMS work order): deep-link to QBO invoice; user makes the adjustment in QBO directly.
+   - Dashboard tracks completion via a "done" checkbox.
 
-3. **Create credit memo row.** Modal generates a new credit memo: amount = overpayment, customer = same, date = payment date. **Memo populated automatically** with: `Overpayment from [original invoice] · CHK# or ACH# [number] · [payment date]`. User can edit before confirm.
+3. **Create a new credit invoice in TMS as a negative value, issue, sync.**
+   - Deep-link to TMS "new invoice" form (or warehouse: deep-link to QBO new invoice).
+   - User enters the same overpaid amount as a NEGATIVE value, issues, syncs with QuickBooks.
+   - This is the credit invoice that will land as a negative-balance row in tomorrow's AR.
+   - Dashboard tracks completion via a "done" checkbox.
 
-4. **Persist to AR.** On confirm, the credit memo lands in `ar_manual_entries` (Supabase). Appears in tomorrow's AR Register as a negative-balance row, ready to be applied to a future invoice.
+4. **Memo ready to paste + persist locally.**
+   - Modal displays the memo text auto-formatted as: `Overpaid MM/DD/YYYY #{check_or_ach} for {original_invoice}` (e.g. `Overpaid 06/01/2026 #A0906015834 for LM26030031F`). Locked format per Jihyun 2026-06-02.
+   - Copy-to-clipboard button — user pastes into the new credit invoice's memo field in TMS/QBO.
+   - Dashboard writes the credit memo row into `ar_manual_entries` (so tomorrow's build doesn't double-count it).
 
 **Real-world example referenced by Jihyun:** container MRKU8294420 / invoice PM25080065F (2026-08 cycle).
 
-**Cross-tool integration:** Step 2 uses existing TMS deep-link infrastructure (same as Invoice Sender → TMS Document tab). Step 4 writes to Supabase. No QBO API call required from the dashboard — the QBO update in step 2 happens via the deep-link (user does it in QBO directly).
+**Cross-tool integration:** Steps 2 + 3 use existing TMS deep-link infrastructure (same as Invoice Sender → TMS Document tab). Step 4 writes to Supabase. No QBO API call required from the dashboard — the QBO sync in steps 2 + 3 happens via TMS's existing QuickBooks sync, or (for warehouse) the user does it in QBO directly.
 
 ---
 
@@ -426,18 +433,22 @@ Sat/Sun **and public holidays**: no build (rolls into next business day's pull).
 - ✅ **Overpayment workflow.** Documented as 4-step guided modal (§6.1).
 - ✅ **Manual edits requirement.** Inline editing on every AR row with day-over-day persistence (§5.8).
 
+### Resolved 2026-06-02 (Jihyun's follow-up answers)
+
+- ✅ **Q1 — TMS vs QBO amount disagreement.** "I use the most recently updated amount as the reference. Since rate is usually adjusted in TMS, TMS is generally the standard (except for warehouses)." → Default = TMS. Warehouse invoices have no TMS work orders (QBO-only), so the disagreement category never fires for them. (§5.4 cat 5 + cat 7 updated.)
+- ✅ **Q2 — Write-offs.** "This decision is made by the manager Elly. I usually just receive the final result from Elly and then update the AR accordingly." → No dedicated workflow needed. M4 inline edit on `ar_status` field is sufficient; `WRITE_OFF` rows hide from active worklists but remain in the workbook for audit.
+- ✅ **Q3 — Overpayment process** is FULLY MANUAL: Jihyun adds the overpaid amount to the original invoice in TMS, reissues, syncs to QBO. THEN creates a new credit invoice in TMS with the same amount as a negative value, issues, syncs to QBO. Dashboard guides via 4-step checklist with deep-links — no automation. (§6.1 rewritten.)
+- ✅ **Q4 — Overpayment memo format.** `Overpaid MM/DD/YYYY #{check} for {inv}` (e.g. `Overpaid 06/01/2026 #A0906015834 for LM26030031F`). Note the original "OVER PAY · CHK#..." sample was incorrect. (§6.1 Step 4 updated.)
+- ✅ **Q5 — UC reclassification display.** Small visible pill on the new Payment row showing where it came from (e.g. `↩ from UC 4/30`), NOT text in the memo column. (§5.4 cat 10 updated.)
+
 ### Dropped 2026-06-01
 
 - ~~"Copy TAB BANK report" cross-tool action~~ — was a phantom feature from the original brainstorm. Confirmed there is no daily summary report Jihyun sends back to TAB BANK. The "TAB BANK report" they receive each morning IS the Collection_Payment.xlsx remittance file, which is an INPUT we already handle (Phase 5 reconciliation + TAB BANK source drop).
 
 ### Still open
 
-1. **TMS data error workflow specifics** — when TMS `TOTAL_AMT` differs from QBO Schedule, what determines the "real" amount? Customer's usual rate? Manual gut-check? Pending co-worker.
-2. **"Unaccounted for" rows.** Partially answered. Confirmed she wants flag + edit. The specific `PM26050241F` case is per-customer memo (resolved by §5.8). But should the dashboard *automatically* flag rows that don't appear in any source file (vs leaving them silent under "manual entry")? Pending co-worker preference.
-3. **Manual write-off workflow.** Implied possible via §5.8 inline editing — change `ar_status` to `WRITE_OFF`. But explicit lifecycle (when does she decide, how does it leave the AR, audit trail expectations) not yet confirmed. Pending co-worker.
-4. **Management Q&A use cases** — what specific questions does management actually want to ask? Pending management input before R4.
-5. **Overpayment step 2 verification (NEW).** Should the dashboard track the TMS/QBO push with a verifying re-fetch, or trust the user's "I've done it" checkbox? Tradeoff between automation rigor and modal complexity.
-6. **UC reclassification confidence (NEW).** Auto-link UC row to matching Payment by exact match on check# + customer + amount? Or require human confirm before clearing the original UC?
+1. **"Unaccounted for" rows.** Partially answered. Confirmed she wants flag + edit. The specific `PM26050241F` case is per-customer memo (resolved by §5.8). But should the dashboard *automatically* flag rows that don't appear in any source file (vs leaving them silent under "manual entry")? Defer until a real case surfaces in production.
+2. **Management Q&A use cases** — what specific questions does management actually want to ask? Pending management input before R4.
 
 ---
 

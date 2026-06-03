@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Build modal (drop state)</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem }
+  .scene-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; padding:4px 10px; border-radius:4px; margin-bottom:8px; background:#0369a1 }
+  .scene-caption { color:#475569; font-size:0.83rem; margin-bottom:10px }
+
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.04); position:relative }
+  .shell { display:grid; grid-template-columns: 184px 1fr; min-height:580px }
+  .sidebar { background:#0f172a; color:#cbd5e1; padding:16px 0 }
+  .sidebar .brand { color:#fff; font-weight:800; font-size:0.95rem; padding:0 16px 14px; border-bottom:1px solid #1e293b; margin-bottom:10px; letter-spacing:0.02em }
+  .sidebar .brand .accent { color:#ea580c }
+  .sidebar .nav-section-label { font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase; color:#64748b; font-weight:700; padding:6px 16px 2px }
+  .sidebar .nav-item { display:flex; align-items:center; gap:8px; padding:8px 16px; font-size:0.82rem; color:#cbd5e1; cursor:pointer; border-left:3px solid transparent }
+  .sidebar .nav-item.active { color:#fff; background:#1e293b; border-left-color:#ea580c; font-weight:700 }
+  .sidebar .nav-item .ico { width:14px; text-align:center; opacity:0.8 }
+
+  .main { background:#f8fafc; padding:18px 22px; position:relative; overflow:hidden }
+  .top-banner { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:9px 13px; display:flex; align-items:center; gap:12px; margin-bottom:12px; font-size:0.76rem; color:#475569 }
+  .top-banner .health { display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#15803d }
+  .top-banner .health::before { content:''; display:inline-block; width:8px; height:8px; background:#22c55e; border-radius:50% }
+  .top-banner .right { margin-left:auto; color:#94a3b8 }
+  .page-h { display:flex; align-items:flex-end; gap:10px; margin-bottom:12px }
+  .page-h h3 { font-size:1.05rem; font-weight:800; color:#0f172a }
+  .page-h .date { color:#64748b; font-size:0.78rem; font-weight:600 }
+  .ngl-tabs-row { display:flex; border-bottom:2px solid #e2e8f0; background:transparent; margin-bottom:14px }
+  .ngl-tab { padding:8px 11px; background:none; border:none; border-bottom:3px solid transparent; margin-bottom:-2px; font-size:0.78rem; font-weight:600; color:#94a3b8; cursor:default }
+  .ngl-tab.active { color:#ea580c; border-bottom-color:#ea580c }
+
+  /* modal */
+  .modal-overlay { position:absolute; inset:0; background:rgba(15,23,42,0.45); display:flex; align-items:flex-start; justify-content:center; padding:32px 24px; backdrop-filter:blur(2px) }
+  .modal { background:#fff; border-radius:12px; width:100%; max-width:620px; max-height:100%; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.16) }
+  .modal-header { padding:14px 18px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:10px }
+  .modal-header h4 { font-size:1rem; font-weight:800; color:#0f172a }
+  .modal-header .date-sub { font-size:0.74rem; color:#64748b; font-weight:600 }
+  .modal-header .close-x { margin-left:auto; color:#94a3b8; font-size:1.3rem; cursor:pointer; line-height:1 }
+  .modal-body { padding:14px 18px; overflow-y:auto; background:#f8fafc }
+  .modal-intro { font-size:0.78rem; color:#475569; padding:0 0 12px; line-height:1.45 }
+  .modal-intro b { color:#0f172a }
+  .modal-footer { padding:11px 18px; border-top:1px solid #e2e8f0; display:flex; gap:10px; align-items:center; background:#fff }
+  .modal-footer .footer-note { font-size:0.72rem; color:#64748b; margin-right:auto }
+  .modal-footer .progress-pill { background:#fff7ed; color:#9a3412; padding:3px 9px; border-radius:999px; font-size:0.7rem; font-weight:700 }
+
+  /* buttons */
+  .ngl-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; font-size:0.8rem; font-weight:700; cursor:pointer; border:1px solid; white-space:nowrap }
+  .ngl-btn-secondary { background:#fff; border-color:#e2e8f0; color:#475569 }
+  .ngl-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff }
+  .ngl-btn-primary.disabled { background:#fde6d3; border-color:#fde6d3; color:#c2410c; cursor:not-allowed; opacity:0.7 }
+  .ngl-btn.small { padding:5px 10px; font-size:0.72rem }
+
+  /* drop list */
+  .drop-list { display:flex; flex-direction:column; gap:8px }
+  .drop-row { display:flex; align-items:stretch; gap:0; border:1px solid #e2e8f0; border-radius:8px; background:#fff; overflow:hidden }
+  .drop-row.done { border-color:#bbf7d0 }
+  .drop-row .step-num { width:36px; flex-shrink:0; background:#f1f5f9; color:#64748b; display:flex; align-items:center; justify-content:center; font-size:0.78rem; font-weight:800 }
+  .drop-row.done .step-num { background:#22c55e; color:#fff }
+  .drop-row .step-body { padding:10px 14px; flex:1; min-width:0 }
+  .drop-row .step-title { font-size:0.84rem; font-weight:800; color:#0f172a; display:flex; align-items:baseline; gap:8px }
+  .drop-row .step-hint { font-size:0.7rem; color:#94a3b8; font-weight:500; font-family:'Consolas',monospace }
+  .drop-row .step-body p { font-size:0.74rem; color:#64748b; margin-top:2px }
+  .drop-row .step-body .done-line { font-size:0.74rem; color:#15803d; margin-top:3px; font-weight:600 }
+  .drop-row .step-body .done-line .filename { font-family:'Consolas',monospace; color:#0f172a; font-weight:700 }
+  .drop-row .step-zone { width:170px; flex-shrink:0; background:#fafbff; border-left:1px dashed #e2e8f0; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:6px 8px; color:#94a3b8; font-size:0.74rem; text-align:center; gap:2px; cursor:pointer }
+  .drop-row .step-zone .icon { font-size:1rem; color:#cbd5e1 }
+  .drop-row .step-zone .label { font-weight:700; color:#64748b }
+  .drop-row .step-zone .sub { font-size:0.66rem; color:#94a3b8 }
+  .drop-row .step-zone:hover { background:#fff7ed; color:#ea580c }
+  .drop-row .step-zone:hover .label { color:#ea580c }
+  .drop-row .step-zone:hover .icon { color:#ea580c }
+  .drop-row .step-done-action { width:170px; flex-shrink:0; background:#f0fdf4; border-left:1px solid #bbf7d0; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:6px 8px; gap:3px }
+  .drop-row .step-done-action .change-link { font-size:0.7rem; color:#0369a1; cursor:pointer; text-decoration:underline; font-weight:600 }
+
+  .hint-strip { font-size:0.72rem; color:#64748b; margin-top:10px; padding:9px 12px; background:#fff; border:1px dashed #e2e8f0; border-radius:6px; display:flex; align-items:center; gap:8px }
+  .hint-strip b { color:#0f172a }
+</style>
+</head>
+<body>
+
+<h2>AR Dashboard — Build modal (drop state)</h2>
+<div class="subtitle">Anchor: she just clicked "Build today's workbook". Yesterday's workbook auto-found from the saved folder; the other 4 still need to be dropped. Once all 5 are green, "Run build" becomes the primary action.</div>
+
+<div class="scene-label">Anchor — modal just opened</div>
+<div class="scene-caption">One row per input. Each row: number + name + filename hint on the left, drop zone on the right. Done rows go green; pending rows show a soft drop zone.</div>
+
+<div class="ngl-app">
+  <div class="shell">
+    <div class="sidebar">
+      <div class="brand">NGL <span class="accent">Accounting</span></div>
+      <div class="nav-section-label">Tools</div>
+      <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+      <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+      <div class="nav-item"><span class="ico">👥</span>Customers</div>
+      <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+      <div class="nav-section-label" style="margin-top:14px">Account</div>
+      <div class="nav-item"><span class="ico">⚙️</span>Settings</div>
+      <div class="nav-item"><span class="ico">📜</span>History</div>
+    </div>
+    <div class="main">
+      <div class="top-banner">
+        <span class="health">Agent connected</span>
+        <span>QBO ✓</span><span>TMS ✓</span>
+        <span class="right">v2.76.x</span>
+      </div>
+      <div class="page-h"><h3>AR Dashboard</h3><span class="date">· Tuesday, May 19, 2026</span></div>
+      <div class="ngl-tabs-row">
+        <button class="ngl-tab active">Summary</button>
+        <button class="ngl-tab">Collections</button>
+        <button class="ngl-tab">Overdue</button>
+        <button class="ngl-tab">Partial Pays</button>
+        <button class="ngl-tab">New Invoices</button>
+        <button class="ngl-tab">TMS</button>
+      </div>
+
+      <div class="modal-overlay">
+        <div class="modal">
+          <div class="modal-header">
+            <h4>Build today's workbook</h4>
+            <span class="date-sub">· Tuesday, May 19, 2026</span>
+            <span class="close-x">×</span>
+          </div>
+          <div class="modal-body">
+
+            <div class="modal-intro">
+              Drop the <b>4 daily files</b> from QBO, TAB BANK, and TMS. The engine will reconcile them against yesterday's workbook and produce today's AR aging.
+            </div>
+
+            <div class="drop-list">
+
+              <div class="drop-row done">
+                <div class="step-num">✓</div>
+                <div class="step-body">
+                  <div class="step-title">Yesterday's workbook <span class="step-hint">AR_AGING_*.xlsx</span></div>
+                  <div class="done-line">Auto-located · <span class="filename">AR_AGING_05_18_2026.xlsx</span> · 867 rows</div>
+                </div>
+                <div class="step-done-action">
+                  <span class="change-link">Use a different file</span>
+                </div>
+              </div>
+
+              <div class="drop-row">
+                <div class="step-num">2</div>
+                <div class="step-body">
+                  <div class="step-title">QBO Daily Collection <span class="step-hint">NGL Transportation, Inc._Daily Collection Report.xlsx</span></div>
+                  <p>Yesterday's payments — Invoice + Payment lines per customer</p>
+                </div>
+                <div class="step-zone">
+                  <div class="icon">📂</div>
+                  <div class="label">Drop file</div>
+                  <div class="sub">or click to browse</div>
+                </div>
+              </div>
+
+              <div class="drop-row">
+                <div class="step-num">3</div>
+                <div class="step-body">
+                  <div class="step-title">QBO Daily Schedule <span class="step-hint">NGL Transportation, Inc._Daily Schedule List.xlsx</span></div>
+                  <p>Today's new invoices created in QBO</p>
+                </div>
+                <div class="step-zone">
+                  <div class="icon">📂</div>
+                  <div class="label">Drop file</div>
+                  <div class="sub">or click to browse</div>
+                </div>
+              </div>
+
+              <div class="drop-row">
+                <div class="step-num">4</div>
+                <div class="step-body">
+                  <div class="step-title">TAB BANK Remittance <span class="step-hint">Collection_Payment.xlsx</span></div>
+                  <p>Yesterday's TAB BANK posting — for catching posting errors</p>
+                </div>
+                <div class="step-zone">
+                  <div class="icon">📂</div>
+                  <div class="label">Drop file</div>
+                  <div class="sub">or click to browse</div>
+                </div>
+              </div>
+
+              <div class="drop-row">
+                <div class="step-num">5</div>
+                <div class="step-body">
+                  <div class="step-title">TMS Reconcile <span class="step-hint">APAR RECONCILE_*.xlsx</span></div>
+                  <p>TMS-side AR rows — amount reconciliation + new-invoice settling</p>
+                </div>
+                <div class="step-zone">
+                  <div class="icon">📂</div>
+                  <div class="label">Drop file</div>
+                  <div class="sub">or click to browse</div>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="hint-strip">
+              💡 <span><b>Tip:</b> you can drop all 4 files at once — the modal will sort them into the right slot by filename.</span>
+            </div>
+
+          </div>
+          <div class="modal-footer">
+            <span class="footer-note"><span class="progress-pill">1 of 5 ready</span> · drop the other 4 to enable Build</span>
+            <button class="ngl-btn ngl-btn-secondary">Cancel</button>
+            <button class="ngl-btn ngl-btn-primary disabled">Run build</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

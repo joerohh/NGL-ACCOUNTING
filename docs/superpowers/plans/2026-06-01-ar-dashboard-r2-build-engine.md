@@ -268,8 +268,8 @@ These were used to verify the Python pipeline at 93.76–99.95% match. JS port m
   - Yesterday's UC row gets a `linked_to_payment` field
   - Build engine clears the original UC row from today's register (it's been resolved)
 
-- [ ] **Step 7.3: Display strategy waits for Jihyun's Q5 answer**
-  Stub for now: tag the Payment row with `(linked from UC 4/30)` text in the memo. Refine after Jihyun replies.
+- [ ] **Step 7.3: Display = small visible pill on the Payment row (locked 2026-06-02)**
+  Render a small chip next to the Payment row (e.g. `↩ from UC 4/30`). NOT text in the memo column. Tooltip on hover shows the original UC row's full detail (date, check#, amount). Yesterday's UC row stays in the workbook but is marked resolved so it drops out of the Suspense worklist.
 
 ### Task 8: Overpayment workflow modal (cat 3)
 
@@ -277,18 +277,24 @@ These were used to verify the Python pipeline at 93.76–99.95% match. JS port m
 - Create: `app/assets/js/tools/ar-dashboard/ar-dashboard-overpayment.js`
 - Modify: `app/assets/js/tools/ar-dashboard/ar-dashboard-views.js`
 
+Per Jihyun's Q3 answer, this is a **guided checklist** for a fully manual process — no automation. She does both invoice updates in TMS herself; the dashboard just routes her, holds her place, and prepares the memo for paste.
+
 - [ ] **Step 8.1: Modal with 4 guided steps**
-  - Step 1: Confirm overpayment amount (computed from deposit vs AR balance)
-  - Step 2: Push to TMS or QBO (deep-link button + checkbox; verification approach pending Jihyun's Q3)
-  - Step 3: Create credit memo row (auto-fill memo text per Jihyun's Q4 format)
-  - Step 4: Persist — write credit memo into AR register; appears next morning as negative balance
+  - **Step 1 — Confirm overpayment.** Show deposit amount, AR balance, computed overpayment, check#/ACH#, customer, original invoice. User confirms.
+  - **Step 2 — Bump original invoice in TMS.** Deep-link to TMS billing page; user adds overpaid amount as positive line, reissues, syncs to QBO. Warehouse path: deep-link to QBO invoice instead (no TMS work order). Done checkbox.
+  - **Step 3 — Create new credit invoice in TMS.** Deep-link to TMS new-invoice form; user enters same amount as NEGATIVE value, issues, syncs to QBO. Warehouse path: deep-link to QBO new invoice. Done checkbox.
+  - **Step 4 — Memo ready + persist locally.** Display auto-formatted memo, copy-to-clipboard button. Write credit memo row into AR register so tomorrow's build doesn't double-count.
 
 - [ ] **Step 8.2: Wire trigger from Overpays exception in Summary worklist + Over Pays detail pane**
 
-- [ ] **Step 8.3: Memo format**
-  Default format: `OVER PAY · CHK# {check} · from {source_inv} · {payment_date}` (per Jihyun's Q4 — adjust if she picks a different format).
+- [ ] **Step 8.3: Memo format (locked 2026-06-02)**
+  Format: `Overpaid MM/DD/YYYY #{check_or_ach} for {original_inv}`
+  Example: `Overpaid 06/01/2026 #A0906015834 for LM26030031F`
 
-- [ ] **Step 8.4: Test against the AMNEX example**
+- [ ] **Step 8.4: Warehouse routing**
+  Detect warehouse case by absence of TMS work order for the invoice. When warehouse, Step 2 + Step 3 deep-links go to QBO (not TMS).
+
+- [ ] **Step 8.5: Test against the AMNEX example**
   Use PM25080065F → PM25100383F as a test case. Verify the 4 steps produce the same output structure.
 
 ### Task 9: Build aborts on malformed input
@@ -427,19 +433,17 @@ These were used to verify the Python pipeline at 93.76–99.95% match. JS port m
 
 ---
 
-## Dependencies on Jihyun's open questions
+## Jihyun's answers (locked 2026-06-02)
 
-These can be coded with reasonable defaults and refined when she replies:
+All 5 follow-up questions answered. No more pending defaults — these are the real rules:
 
-| Question | Default if she doesn't reply by milestone gate | Affects |
+| Q | Locked answer | Affects |
 |---|---|---|
-| Q1 TMS vs QBO amount | Default to TMS, flag for review in worklist | M3 Task 6, M5 Task 13 |
-| Q2 Write-off process | No dedicated flow; she uses inline edit to set status to `WRITE_OFF` | M4 Task 10 |
-| Q3 AMNEX TMS auto-create | Default to "TMS auto-creates credit invoice" (matches screenshot evidence) | M3 Task 8 |
-| Q4 Overpayment memo format | `OVER PAY · CHK# {x} · from {y} · {date}` | M3 Task 8 Step 8.3 |
-| Q5 UC reclass display | Tag in memo column `(linked from UC MM/DD)` | M3 Task 7 Step 7.3 |
-
-None block starting work. Each is a small surgical update if her answer differs.
+| Q1 TMS vs QBO amount | TMS wins when TMS has the row. Warehouses have no TMS work orders (QBO-only) so the comparison never fires for them. | Engine already correct — no change needed |
+| Q2 Write-off process | No dedicated workflow. Elly decides; Jihyun manually updates `ar_status` to `WRITE_OFF` via inline edit. Rows hide from active worklists, stay for audit. | M4 Task 10 + filter rule |
+| Q3 Overpayment process | FULLY MANUAL: bump original invoice in TMS → reissue → QBO sync; then create new credit invoice in TMS as negative → issue → QBO sync. Dashboard guides via 4-step checklist, no automation. | M3 Task 8 — see updated steps below |
+| Q4 Overpayment memo | `Overpaid MM/DD/YYYY #{check} for {inv}` (e.g. `Overpaid 06/01/2026 #A0906015834 for LM26030031F`). Note: the original "OVER PAY · CHK#..." sample was wrong. | M3 Task 8 Step 8.3 |
+| Q5 UC reclass display | Small visible pill on the Payment row (e.g. `↩ from UC 4/30`), NOT memo text. | M3 Task 7 Step 7.3 |
 
 ---
 
