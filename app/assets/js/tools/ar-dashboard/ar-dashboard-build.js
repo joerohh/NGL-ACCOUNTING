@@ -171,11 +171,14 @@ export function arBuildToday(inputs) {
     const inv = t.inv_no;
     if (!inv) continue;
     if (newInvs.has(inv)) {
-      // NEW invoice: TMS TOTAL_AMT is the settled amount
+      // NEW invoice. Per Jihyun 2026-06-02: "the most recently updated TMS
+      // amount is the reference" → use t.inv_amt (current/revised), not
+      // t.total_amt (original). They're equal for invoices with no
+      // mid-creation adjustment; they diverge when TMS adjusts the rate.
       const row = todayAr.get(inv);
       if (row) {
-        row.amount = t.total_amt;
-        row.balance = num(t.total_amt) - num(row.paid);
+        row.amount = t.inv_amt;
+        row.balance = num(t.inv_amt) - num(row.paid);
         row.wo = t.wo_no;
       }
       tmsSheetRows.push(t);

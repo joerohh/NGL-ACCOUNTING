@@ -5,21 +5,13 @@
 // State: arState (see shared/state.js)
 // Spec:  docs/superpowers/specs/2026-05-20-ar-dashboard-design.md
 
-import { state, arState } from '../../shared/state.js';
+import { arState } from '../../shared/state.js';
 import './ar-dashboard-model.js';
 import './ar-dashboard-exceptions.js';
 import './ar-dashboard-loader.js';
 import './ar-dashboard-build-writer.js';
 import './ar-dashboard-build-ui.js';
 import { arRenderLoaded } from './ar-dashboard-views.js';
-
-// R2 M2 build engine is hidden from all users except the owner while it's being
-// soaked. Remove this gate once M2 is signed off.
-const M2_OWNER_USERNAME = 'joe.r@ngltrans.net';
-function canSeeBuildEngine() {
-  const u = state.currentUser && state.currentUser.username;
-  return !!u && u.toLowerCase() === M2_OWNER_USERNAME;
-}
 
 export function initArDashboard() {
   const view = document.getElementById('arDashboardView');
@@ -47,10 +39,9 @@ function renderEmptyState(view) {
         <div class="drop-help">Pre-built daily workbook with AR Register, Collections, Schedule, TMS, ADJUSTMENT sheets.</div>
         <div class="drop-types">.xlsx · .xls</div>
       </div>
-      ${canSeeBuildEngine() ? `
       <div class="ar-or-build">
         Or <a id="arOpenBuildLink">build today's workbook from scratch →</a>
-      </div>` : ''}
+      </div>
       <input type="file" id="arFileInput" accept=".xlsx,.xls" style="display:none" />
     </div>
   `;
