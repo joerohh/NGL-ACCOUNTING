@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AR Dashboard — Redesign (Today's worklist scene)</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:#f5f5f7; color:#1d1d1f; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif; padding:24px; line-height:1.5 }
+  h2 { font-size:1.4rem; font-weight:600; margin-bottom:4px }
+  .subtitle { color:#86868b; margin-bottom:20px; font-size:0.9rem; max-width:780px }
+  .scene-label { display:inline-block; font-size:0.7rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#fff; background:#0f172a; padding:4px 10px; border-radius:4px; margin-bottom:8px }
+  .scene-caption { color:#475569; font-size:0.83rem; margin-bottom:10px; max-width:780px }
+
+  /* App shell */
+  .ngl-app { background:#f8fafc; color:#1e293b; font-family:'Segoe UI',-apple-system,sans-serif; font-size:14px; line-height:1.45; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.04) }
+  .shell { display:grid; grid-template-columns:184px 1fr; min-height:780px }
+  .sidebar { background:#0f172a; color:#cbd5e1; padding:16px 0 }
+  .sidebar .brand { color:#fff; font-weight:800; font-size:0.95rem; padding:0 16px 14px; border-bottom:1px solid #1e293b; margin-bottom:10px; letter-spacing:0.02em }
+  .sidebar .brand .accent { color:#ea580c }
+  .sidebar .nav-section-label { font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase; color:#64748b; font-weight:700; padding:6px 16px 2px }
+  .sidebar .nav-item { display:flex; align-items:center; gap:8px; padding:8px 16px; font-size:0.82rem; color:#cbd5e1; cursor:pointer; border-left:3px solid transparent }
+  .sidebar .nav-item.active { color:#fff; background:#1e293b; border-left-color:#ea580c; font-weight:700 }
+  .sidebar .nav-item .ico { width:14px; text-align:center; opacity:0.8 }
+
+  .main { background:#f8fafc; padding:16px 22px 22px; }
+
+  /* Top banner (existing pattern) */
+  .top-banner { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:9px 13px; display:flex; align-items:center; gap:12px; margin-bottom:12px; font-size:0.76rem; color:#475569 }
+  .top-banner .health { display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#15803d }
+  .top-banner .health::before { content:''; display:inline-block; width:8px; height:8px; background:#22c55e; border-radius:50% }
+  .top-banner .right { margin-left:auto; color:#94a3b8 }
+
+  .page-h { display:flex; align-items:flex-end; gap:10px; margin-bottom:10px }
+  .page-h h3 { font-size:1.05rem; font-weight:800; color:#0f172a }
+  .page-h .date { color:#64748b; font-size:0.78rem; font-weight:600 }
+  .page-h .right-actions { margin-left:auto; display:flex; gap:6px }
+  .pill-btn { background:#fff; border:1px solid #e2e8f0; color:#475569; padding:5px 10px; border-radius:6px; font-size:0.74rem; font-weight:600; cursor:pointer }
+  .pill-btn.active { background:#0f172a; color:#fff; border-color:#0f172a }
+
+  /* Period tabs */
+  .period-row { display:flex; gap:6px; margin-bottom:10px }
+
+  /* Search bar */
+  .search-bar { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; display:flex; align-items:center; gap:8px; margin-bottom:12px }
+  .search-bar .ico { color:#94a3b8 }
+  .search-bar input { flex:1; border:none; outline:none; font-size:0.84rem; color:#1e293b; background:transparent; font-family:inherit }
+  .search-bar .kbd { background:#f1f5f9; color:#64748b; padding:2px 7px; border-radius:4px; font-size:0.66rem; font-weight:700; font-family:'Consolas',monospace }
+
+  /* Worklist header */
+  .wl-header { display:flex; align-items:center; gap:18px; padding:9px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px }
+  .wl-header .progress { font-size:0.74rem; color:#475569 }
+  .wl-header .progress b { color:#0f172a; font-weight:800; font-variant-numeric:tabular-nums }
+  .wl-header .progress .bar { display:inline-block; vertical-align:middle; width:120px; height:6px; background:#f1f5f9; border-radius:3px; overflow:hidden; margin:0 8px }
+  .wl-header .progress .bar > span { display:block; height:100%; background:#22c55e; width:17% }
+  .wl-header .stat { display:flex; flex-direction:column; gap:1px; padding-left:18px; border-left:1px solid #e2e8f0 }
+  .wl-header .stat .lbl { font-size:0.62rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:700 }
+  .wl-header .stat .val { font-size:0.92rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+  .wl-header .stat.alert .val { color:#9a3412 }
+
+  /* Section header (orange left-bar) */
+  .section-h { display:flex; align-items:center; gap:10px; font-size:0.86rem; font-weight:800; color:#0f172a; padding:7px 12px; margin:14px 0 8px; background:#fff; border-left:4px solid #ea580c; border-radius:0 6px 6px 0; border-top:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0 }
+  .section-h .sub { font-size:0.72rem; color:#64748b; font-weight:500; margin-left:auto }
+  .section-h.red { border-left-color:#dc2626; color:#7f1d1d }
+
+  /* HERO card — big, loud, the "look at me" exceptions */
+  .hero-cards { display:flex; flex-direction:column; gap:9px; margin-bottom:14px }
+  .hero { background:#fff; border:1px solid #fed7aa; border-left:4px solid #ea580c; border-radius:8px; padding:11px 14px; display:grid; grid-template-columns: 28px 1fr auto; gap:11px; align-items:flex-start }
+  .hero.danger { border-color:#fecaca; border-left-color:#dc2626 }
+  .hero.money { border-color:#fed7aa; border-left-color:#ea580c }
+  .hero .num { background:#0f172a; color:#fff; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.78rem; font-weight:800 }
+  .hero.danger .num { background:#dc2626 }
+  .hero .body { min-width:0 }
+  .hero .h-title { font-size:0.92rem; font-weight:800; color:#0f172a; margin-bottom:3px; display:flex; align-items:center; gap:8px }
+  .hero .h-title .tag { background:#fee2e2; color:#b91c1c; padding:1px 7px; border-radius:4px; font-size:0.62rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase }
+  .hero.money .h-title .tag { background:#fff7ed; color:#9a3412 }
+  .hero .h-desc { font-size:0.78rem; color:#475569; line-height:1.45 }
+  .hero .h-desc b { color:#0f172a; font-weight:700 }
+  .hero .h-context { display:flex; gap:10px; margin-top:7px; font-size:0.72rem }
+  .hero .ctx-pill { background:#f8fafc; border:1px solid #e2e8f0; padding:3px 8px; border-radius:4px; color:#475569; display:inline-flex; align-items:center; gap:5px }
+  .hero .ctx-pill b { color:#0f172a; font-weight:700; font-family:'Consolas',monospace }
+  .hero .ctx-pill.match::before { content:'✓'; color:#15803d; font-weight:800 }
+  .hero .ctx-pill.mismatch::before { content:'✕'; color:#b91c1c; font-weight:800 }
+  .hero .h-amt { font-size:1.15rem; font-weight:800; color:#9a3412; font-variant-numeric:tabular-nums; text-align:right; padding-left:8px; white-space:nowrap }
+  .hero.danger .h-amt { color:#991b1b }
+  .hero-actions { grid-column: 2 / 4; display:flex; gap:6px; margin-top:9px; flex-wrap:wrap }
+  .h-act { background:#fff; border:1px solid #e2e8f0; color:#0f172a; padding:5px 10px; border-radius:5px; font-size:0.72rem; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:5px }
+  .h-act.primary { background:#ea580c; color:#fff; border-color:#ea580c }
+  .h-act:hover { background:#f8fafc }
+  .h-act.primary:hover { background:#c2410c }
+
+  /* Everything else — collapsed groups */
+  .groups { display:flex; flex-direction:column; gap:6px }
+  .group-row { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:10px; cursor:pointer; font-size:0.82rem; transition:border-color 0.12s }
+  .group-row:hover { border-color:#cbd5e1 }
+  .group-row .chev { color:#94a3b8; width:14px; text-align:center; font-size:0.66rem }
+  .group-row .g-label { font-weight:700; color:#0f172a }
+  .group-row .g-count { background:#f1f5f9; color:#475569; padding:1px 7px; border-radius:999px; font-size:0.68rem; font-weight:700 }
+  .group-row .g-count.warn { background:#fef3c7; color:#92400e }
+  .group-row .g-count.info { background:#dbeafe; color:#1d4ed8 }
+  .group-row .g-count.ok { background:#dcfce7; color:#166534 }
+  .group-row .g-desc { color:#64748b; font-size:0.74rem }
+  .group-row .g-total { margin-left:auto; font-size:0.78rem; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums }
+
+  /* Secondary nav row at bottom */
+  .secondary-nav { margin-top:18px; padding-top:14px; border-top:1px dashed #e2e8f0; display:flex; gap:8px; font-size:0.74rem; color:#64748b }
+  .secondary-nav .sn-link { background:#fff; border:1px solid #e2e8f0; padding:5px 11px; border-radius:6px; font-weight:600; color:#475569; cursor:pointer }
+  .secondary-nav .sn-link:hover { border-color:#94a3b8; color:#0f172a }
+  .secondary-nav .label { color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; font-size:0.66rem; padding:5px 6px 5px 0 }
+
+  /* Captions in the mockup */
+  .caption-row { display:flex; gap:8px; align-items:center; margin:6px 0 14px; font-size:0.72rem; color:#64748b }
+  .caption-row .badge { background:#fee2e2; color:#b91c1c; padding:2px 7px; border-radius:4px; font-weight:800; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em }
+  .caption-row .badge.note { background:#fff7ed; color:#9a3412 }
+</style>
+</head>
+<body>
+
+<h2>AR Dashboard — Redesign concept (Today's worklist)</h2>
+<div class="subtitle">
+  Anchor scene: Jihyun opens the dashboard Tuesday morning, June 2. The workbook just finished building. Three things demand her attention at the top; everything else is grouped and collapsed below.
+  <br><br>
+  Goals: cut hunting (one screen, prioritized), kill app-tabbing (inline QBO/TMS context on every row), preserve her decider role (she always clicks the action, dashboard never auto-resolves).
+</div>
+
+<div class="scene-label">Anchor — Today's worklist on a representative morning</div>
+<div class="scene-caption">23 items on the queue. 3 hero cards are the high-stakes ones she should not miss. The rest collapse into 7 category rows she can expand at her own pace.</div>
+
+<div class="ngl-app">
+  <div class="shell">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="brand">NGL <span class="accent">Accounting</span></div>
+      <div class="nav-section-label">Tools</div>
+      <div class="nav-item"><span class="ico">📁</span>Merge Tool</div>
+      <div class="nav-item"><span class="ico">📤</span>Invoice Sender</div>
+      <div class="nav-item"><span class="ico">👥</span>Customers</div>
+      <div class="nav-item active"><span class="ico">📊</span>AR Dashboard</div>
+      <div class="nav-section-label" style="margin-top:14px">Account</div>
+      <div class="nav-item"><span class="ico">⚙️</span>Settings</div>
+      <div class="nav-item"><span class="ico">📜</span>History</div>
+    </div>
+
+    <!-- Main -->
+    <div class="main">
+
+      <!-- Top connection banner (unchanged from current shell) -->
+      <div class="top-banner">
+        <span class="health">Agent connected</span>
+        <span>QBO ✓</span>
+        <span>TMS ✓</span>
+        <span style="color:#94a3b8">·</span>
+        <span>Workbook built 7:18am · <b style="color:#0f172a">AR_AGING_06_02_2026.xlsx</b></span>
+        <span class="right">v2.78.8</span>
+      </div>
+
+      <!-- Page header + period selector -->
+      <div class="page-h">
+        <h3>AR Dashboard</h3>
+        <span class="date">· Tuesday, June 2, 2026</span>
+        <div class="right-actions">
+          <button class="pill-btn">📂 Open workbook</button>
+          <button class="pill-btn">⟳ Rebuild from sources</button>
+        </div>
+      </div>
+      <div class="period-row">
+        <button class="pill-btn active">Today</button>
+        <button class="pill-btn">Week</button>
+        <button class="pill-btn">Month</button>
+        <button class="pill-btn">Quarter</button>
+        <button class="pill-btn">Year</button>
+      </div>
+
+      <!-- Search bar (Cmd+K) -->
+      <div class="search-bar">
+        <span class="ico">🔍</span>
+        <input placeholder="Search invoice #, customer, check#, container#..." />
+        <span class="kbd">⌘ K</span>
+      </div>
+
+      <!-- Worklist progress strip -->
+      <div class="wl-header">
+        <span class="progress">
+          <b>4</b> of <b>23</b> resolved
+          <span class="bar"><span></span></span>
+        </span>
+        <span class="stat">
+          <span class="lbl">AR at risk today</span>
+          <span class="val">$147,250</span>
+        </span>
+        <span class="stat alert">
+          <span class="lbl">In suspense / unresolved</span>
+          <span class="val">$32,847</span>
+        </span>
+        <span class="stat">
+          <span class="lbl">Posted cleanly</span>
+          <span class="val">$214,580</span>
+        </span>
+      </div>
+
+      <!-- HERO — needs attention -->
+      <div class="section-h red">
+        🔴 Needs your attention <span class="sub">3 high-stakes items · click any card for full detail</span>
+      </div>
+      <div class="hero-cards">
+
+        <!-- Hero #1: posting error -->
+        <div class="hero danger">
+          <div class="num">1</div>
+          <div class="body">
+            <div class="h-title">
+              Posting error · wrong customer
+              <span class="tag">cleanup hours at stake</span>
+            </div>
+            <div class="h-desc">
+              TAB BANK posted check <b>A0906026987</b> ($12,442) to <b>CMACGM02</b>, but QBO shows it landed on <b>CMASGM02</b> (different customer — 1 character off).
+            </div>
+            <div class="h-context">
+              <span class="ctx-pill mismatch"><b>QBO:</b> CMASGM02 / $12,442</span>
+              <span class="ctx-pill mismatch"><b>TAB:</b> CMACGM02 / $12,442</span>
+              <span class="ctx-pill"><b>TMS:</b> not applicable</span>
+            </div>
+            <div class="hero-actions">
+              <button class="h-act primary">📧 Email TAB BANK to correct</button>
+              <button class="h-act">📝 Mark as awaiting correction</button>
+              <button class="h-act">🔗 Open in QBO</button>
+            </div>
+          </div>
+          <div class="h-amt">$12,442</div>
+        </div>
+
+        <!-- Hero #2: overpay -->
+        <div class="hero money">
+          <div class="num">2</div>
+          <div class="body">
+            <div class="h-title">
+              Overpay · credit memo needed
+              <span class="tag">money on the table</span>
+            </div>
+            <div class="h-desc">
+              <b>AMNEX Solutions Corp</b> paid $1,631 on ACH <b>A0906015834</b>, but only owed $815.60 on <b>LM26030031F</b>. Needs the standard 4-step credit memo workflow.
+            </div>
+            <div class="h-context">
+              <span class="ctx-pill"><b>QBO inv:</b> LM26030031F / $815.60</span>
+              <span class="ctx-pill"><b>TAB:</b> ACH $1,631.20</span>
+              <span class="ctx-pill mismatch"><b>Overpaid:</b> $815.60</span>
+            </div>
+            <div class="hero-actions">
+              <button class="h-act primary">📋 Open overpayment workflow</button>
+              <button class="h-act">🔗 Open WO in TMS</button>
+              <button class="h-act">📝 Add note</button>
+            </div>
+          </div>
+          <div class="h-amt">$815.60</div>
+        </div>
+
+        <!-- Hero #3: amount disagreement -->
+        <div class="hero money">
+          <div class="num">3</div>
+          <div class="body">
+            <div class="h-title">
+              Amount disagreement · TMS vs QBO
+              <span class="tag">decide before posting</span>
+            </div>
+            <div class="h-desc">
+              <b>LM26060123F</b> (FORWARD AIR) — QBO Schedule has $1,844.56, TMS Reconcile has $1,767.56. Per the policy, the more-recent TMS value wins by default.
+            </div>
+            <div class="h-context">
+              <span class="ctx-pill mismatch"><b>QBO:</b> $1,844.56</span>
+              <span class="ctx-pill mismatch"><b>TMS:</b> $1,767.56</span>
+              <span class="ctx-pill"><b>Δ:</b> $77.00</span>
+            </div>
+            <div class="hero-actions">
+              <button class="h-act primary">✓ Use TMS amount ($1,767.56)</button>
+              <button class="h-act">Use QBO ($1,844.56)</button>
+              <button class="h-act">🔗 Open WO in TMS</button>
+            </div>
+          </div>
+          <div class="h-amt">Δ $77</div>
+        </div>
+      </div>
+
+      <!-- Everything else — collapsed groups -->
+      <div class="section-h">
+        ▾ Everything else <span class="sub">grouped by type · click to expand</span>
+      </div>
+      <div class="groups">
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">Partial pays</span>
+          <span class="g-count warn">8</span>
+          <span class="g-desc">customers paid less than invoiced; needs follow-up</span>
+          <span class="g-total">$4,230 outstanding</span>
+        </div>
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">TAB BANK suspense</span>
+          <span class="g-count warn">3</span>
+          <span class="g-desc">unapplied cash awaiting customer match</span>
+          <span class="g-total">$2,847</span>
+        </div>
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">Overdue calls / emails</span>
+          <span class="g-count warn">12</span>
+          <span class="g-desc">customers in B / C / D / E aging buckets, balance &gt; 0</span>
+          <span class="g-total">$84,200</span>
+        </div>
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">UC awaiting reclassification</span>
+          <span class="g-count info">5</span>
+          <span class="g-desc">prior-day UC rows; auto-clears when matching Payment arrives</span>
+          <span class="g-total">informational</span>
+        </div>
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">Customer name mismatches</span>
+          <span class="g-count info">2</span>
+          <span class="g-desc">TAB BANK debtor name doesn't match QBO customer</span>
+          <span class="g-total">$1,433</span>
+        </div>
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">New invoices today</span>
+          <span class="g-count ok">47</span>
+          <span class="g-desc">added via QBO Schedule; reconciled cleanly with TMS</span>
+          <span class="g-total">$96,500 new</span>
+        </div>
+        <div class="group-row">
+          <span class="chev">▶</span>
+          <span class="g-label">Posted cleanly yesterday</span>
+          <span class="g-count ok">15 ✓</span>
+          <span class="g-desc">no action needed — confirmation row only</span>
+          <span class="g-total">$214,580 cleared</span>
+        </div>
+      </div>
+
+      <!-- Secondary navigation for power-users -->
+      <div class="secondary-nav">
+        <span class="label">Power view</span>
+        <a class="sn-link">⌄ All AR rows</a>
+        <a class="sn-link">⌄ Collections</a>
+        <a class="sn-link">⌄ Adjustments</a>
+        <a class="sn-link">⌄ TMS reconciled</a>
+        <a class="sn-link">⌄ Customers</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="caption-row">
+  <span class="badge">key change</span>
+  Three loud hero cards always live at the top — money-loss or process-break exceptions never get buried.
+</div>
+<div class="caption-row">
+  <span class="badge note">key change</span>
+  Every row shows QBO + TAB + TMS context inline. Jihyun stops tabbing apps to answer "what does the source actually say?".
+</div>
+<div class="caption-row">
+  <span class="badge note">key change</span>
+  The 7 collapsed groups are the rest of her day — clean, scannable, expandable. On a 100+ item day, density stays low until she opens a group.
+</div>
+
+</body>
+</html>
