@@ -550,7 +550,7 @@ async function saveWorkbook() {
     return;
   }
 
-  const { bytes, filename } = window.arBuildWriteWorkbook(
+  const { bytes, filename } = await window.arBuildWriteWorkbook(
     arState.buildResult,
     arState.buildInputs,
   );

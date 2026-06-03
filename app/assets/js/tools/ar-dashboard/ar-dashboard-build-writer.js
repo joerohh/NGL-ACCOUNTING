@@ -1,27 +1,28 @@
-// AR Dashboard — output workbook writer.
+// AR Dashboard — output workbook writer (ExcelJS edition).
 //
-// Given a build result from arBuildToday() + the parsed input buffers,
-// produce an .xlsx file matching the shape of Jihyun's hand-built workbook.
-// The R1 loader (ar-dashboard-loader.js) re-reads the same shape.
+// Produces an .xlsx file that matches Jihyun's hand-built workbook
+// pixel-for-pixel: fonts, borders, centering, hidden-row filter views,
+// frozen panes, auto-filter, number formats, column widths.
 //
-// Sheets, in order (matches Jihyun's tab order — AR_yesterday goes LAST):
+// Sheet order (matches her tab order — AR_yesterday goes LAST):
 //   1. AR_<today>     — today's reconciled register, 15 cols (col O blank)
-//   2. COL            — QBO Daily Collection with QBO report header preserved
-//   3. COL (INV)      — same as COL but filtered to Invoice rows only
-//   4. Schedule       — QBO Daily Schedule with QBO report header preserved
+//   2. COL            — all QBO Daily Collection rows; Invoice rows hidden
+//                       (the "payments" view she uses)
+//   3. COL (INV)      — all QBO Daily Collection rows; Payment rows hidden
+//                       (the "invoices" view she uses)
+//   4. Schedule       — QBO Daily Schedule with report header
 //   5. TMS            — TMS rows the engine settled
 //   6. ADJUSTMENT     — TMS rows whose amount changed (deltas)
 //   7. AR_<yesterday> — yesterday's register, carried forward for diffing
 
-const X = () => {
-  const x = globalThis.XLSX;
-  if (!x) throw new Error('SheetJS (XLSX) not loaded');
-  return x;
+const E = () => {
+  const lib = window.ExcelJS;
+  if (!lib) throw new Error('ExcelJS not loaded');
+  return lib;
 };
 
 // ───────────────────────────────────────────────────────────────────────
-// Sheet header strings — match Jihyun's exact text (verified against her
-// 06/02/2026 and 05/18/2026 workbooks).
+// Header strings — verified against Jihyun's 06/02/2026 + 05/18/2026
 // ───────────────────────────────────────────────────────────────────────
 const AR_HEADERS = [
   'NEW ID', 'COMPANY', 'NGL INV #', 'EQUIPMENT#', 'DATE', 'AGING',
@@ -46,48 +47,38 @@ const ADJUSTMENT_HEADERS = [
   'REF #', 'MBL/BOOKING #', 'Revised Invoice Amount', 'PAID/RECEIVED', 'QB DATE',
 ];
 
-// ───────────────────────────────────────────────────────────────────────
-// Column widths — measured from Jihyun's hand-built workbooks
-// ───────────────────────────────────────────────────────────────────────
-const AR_WIDTHS = [
-  13.7, 42.2, 18.3, 15.8, 12.2, 10.3,
-  33.7, 25.3, 14.0, 13.1, 13.7, 55.2, 12.8, 14.2, 12.4,  // 15th = blank col O
-];
+// Column widths measured from Jihyun's reference workbook
+const AR_WIDTHS = [13.7, 42.2, 18.3, 15.8, 12.2, 10.3, 33.7, 25.3, 14.0, 13.1, 13.7, 55.2, 12.8, 14.2, 12.4];
 const COL_WIDTHS = [19.4, 14.1, 16.9, 33.5, 21.1, 15.9, 11.7, 17.9];
 const COL_INV_WIDTHS = [19.4, 14.1, 16.9, 37.4, 21.1, 13.4, 11.7, 17.9];
 const SCHEDULE_WIDTHS = [15.7, 11.0, 44.1, 17.0, 31.0, 25.1, 19.3, 14.8, 12.9];
-const TMS_WIDTHS = [
-  8.6, 7.5, 10.7, 24.6, 9.6, 11.8,
-  15.0, 13.9, 10.7, 12.9, 16.8, 7.5,
-  24.6, 18.3, 12.9, 10.2, 11.8, 11.4,
-];
-const ADJUSTMENT_WIDTHS = [
-  8.8, 10.6, 12.7, 26.4, 13.4, 10.9,
-  16.2, 17.1, 9.7, 13.6, 17.9, 11.0,
-  13.9, 21.3, 19.2, 16.2, 14.4,
-];
+const TMS_WIDTHS = [8.6, 7.5, 10.7, 24.6, 9.6, 11.8, 15.0, 13.9, 10.7, 12.9, 16.8, 7.5, 24.6, 18.3, 12.9, 10.2, 11.8, 11.4];
+const ADJUSTMENT_WIDTHS = [8.8, 10.6, 12.7, 26.4, 13.4, 10.9, 16.2, 17.1, 9.7, 13.6, 17.9, 11.0, 13.9, 21.3, 19.2, 16.2, 14.4];
+
+// ───────────────────────────────────────────────────────────────────────
+// Style constants
+// ───────────────────────────────────────────────────────────────────────
+const FONT_BODY = { name: 'Calibri', size: 10 };
+const FONT_BODY_BOLD = { name: 'Calibri', size: 10, bold: true };
+const FONT_TITLE = { name: 'Calibri', size: 14, bold: true };
+const FONT_QBO_HEADER = { name: 'Arial', size: 14, bold: true };
+const ALIGN_CENTER = { horizontal: 'center', vertical: 'center' };
+const ALIGN_LEFT = { horizontal: 'left', vertical: 'center' };
+const ALIGN_RIGHT = { horizontal: 'right', vertical: 'center' };
+const BORDER_ALL = {
+  top:    { style: 'thin' },
+  left:   { style: 'thin' },
+  right:  { style: 'thin' },
+  bottom: { style: 'thin' },
+};
+const NF_MONEY = '"$"#,##0.00;[Red]-"$"#,##0.00';
+const NF_DATE  = 'm/d/yyyy';
 
 // ───────────────────────────────────────────────────────────────────────
 // Helpers
 // ───────────────────────────────────────────────────────────────────────
 
-function setColWidths(sheet, widths) {
-  sheet['!cols'] = widths.map(w => ({ wch: w }));
-}
-
-function freezeRow(sheet, ySplit) {
-  // Lock rows 1..ySplit so headers stay visible when scrolling.
-  sheet['!views'] = [{ state: 'frozen', ySplit }];
-}
-
-function setAutoFilter(sheet, headerRow, ncols, lastRow) {
-  // Excel auto-filter dropdowns on the header row across ncols columns.
-  const lastCol = X().utils.encode_col(ncols - 1);
-  sheet['!autofilter'] = { ref: `A${headerRow}:${lastCol}${lastRow}` };
-}
-
 function asDate(v) {
-  // Convert MM/DD/YYYY string to a real Date so Excel recognizes it.
   if (v == null || v === '') return null;
   if (v instanceof Date) return v;
   if (typeof v === 'string') {
@@ -103,16 +94,10 @@ function asDate(v) {
 function fmtSheetDate(d) {
   if (!d) {
     const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const yy = String(now.getFullYear()).slice(-2);
-    return `AR_${mm}_${dd}_${yy}`;
+    return `AR_${pad(now.getMonth()+1)}_${pad(now.getDate())}_${String(now.getFullYear()).slice(-2)}`;
   }
   if (d instanceof Date) {
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const yy = String(d.getFullYear()).slice(-2);
-    return `AR_${mm}_${dd}_${yy}`;
+    return `AR_${pad(d.getMonth()+1)}_${pad(d.getDate())}_${String(d.getFullYear()).slice(-2)}`;
   }
   const [y, m, day] = d.split('-');
   return `AR_${m}_${day}_${y.slice(-2)}`;
@@ -123,183 +108,251 @@ function fmtFilenameDate(d) {
     const [y, m, day] = (d || '').split('-');
     return new Date(+y, +m - 1, +day);
   })();
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `AR_AGING_${mm}_${dd}_${dt.getFullYear()}.xlsx`;
+  return `AR_AGING_${pad(dt.getMonth()+1)}_${pad(dt.getDate())}_${dt.getFullYear()}.xlsx`;
 }
 
 function fmtLongDate(d) {
-  // "June 2, 2026" for the QBO report header line
   const dt = d instanceof Date ? d : new Date(d);
-  return dt.toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
+  return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+function pad(n) { return String(n).padStart(2, '0'); }
+
 function arStatusFormula(rowNum) {
-  // Live formula — auto-updates when AGING column F is edited.
   return `IF(F${rowNum}="", "", CHOOSE(1+(F${rowNum}>=30)+(F${rowNum}>=60)+(F${rowNum}>=90)+(F${rowNum}>=120), "A.0~29", "B.30~59", "C.60~89", "D.90~119", "E.120+"))`;
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// AR sheet builder
-// ───────────────────────────────────────────────────────────────────────
+function setColWidths(ws, widths) {
+  widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+}
 
-function buildArSheet(arRows) {
-  const xlsx = X();
-  // Build 2D array: header row + one row per invoice + a trailing blank col O.
-  const aoa = [
-    [...AR_HEADERS, null],
-    ...arRows.map(r => [
-      r.new_id, r.company, r.inv, r.equipment, asDate(r.date), r.aging,
-      r.ref_no, r.mbl_no, r.amount, r.paid, r.balance, r.memo,
-      r.ar_status,  // placeholder — overwritten by formula below
-      r.wo, null,   // null = blank col O
-    ]),
-  ];
-  const sheet = xlsx.utils.aoa_to_sheet(aoa, { cellDates: true });
-
-  // Replace col M (AR STATUS) with the live formula for every data row.
-  for (let i = 0; i < arRows.length; i++) {
-    const rowNum = i + 2;
-    const addr = xlsx.utils.encode_cell({ c: 12, r: i + 1 });
-    sheet[addr] = { t: 's', f: arStatusFormula(rowNum) };
+function styleRowAll(row, ncols, font, align, border) {
+  for (let c = 1; c <= ncols; c++) {
+    const cell = row.getCell(c);
+    if (font) cell.font = font;
+    if (align) cell.alignment = align;
+    if (border) cell.border = border;
   }
-
-  setColWidths(sheet, AR_WIDTHS);
-  freezeRow(sheet, 1);
-  setAutoFilter(sheet, 1, 14, arRows.length + 1);
-  return sheet;
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// COL / COL (INV) — preserve the QBO Daily Collection report header
-// (3 title rows + blank + headers + data + blank + grand-total SUBTOTAL).
+// AR sheet (used for AR_today and AR_yesterday — same shape)
 // ───────────────────────────────────────────────────────────────────────
 
-function buildCollectionsSheet(rows, targetDate, invoiceOnly) {
-  const xlsx = X();
-  const filtered = invoiceOnly ? rows.filter(r => r.txn_type === 'Invoice') : rows;
-  const aoa = [
-    ['NGL Transportation, Inc.'],
-    ['Daily Collection Report'],
-    [fmtLongDate(targetDate)],
-    [],                                                    // row 4 blank
-    COL_HEADERS,                                           // row 5 headers
-    [],                                                    // row 6 blank
-  ];
-  // Data rows start at row 7.
-  for (const r of filtered) {
-    aoa.push([
+function buildArWorksheet(wb, name, arRows) {
+  const ws = wb.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 1 }] });
+  setColWidths(ws, AR_WIDTHS);
+
+  // Header row
+  const header = ws.addRow([...AR_HEADERS, null]);
+  styleRowAll(header, 15, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
+  ws.getRow(1).height = 14;
+
+  // Data rows
+  for (let i = 0; i < arRows.length; i++) {
+    const r = arRows[i];
+    const rowNum = i + 2;
+    const row = ws.addRow([
+      r.new_id, r.company, r.inv, r.equipment, asDate(r.date), r.aging,
+      r.ref_no, r.mbl_no, r.amount, r.paid, r.balance, r.memo,
+      null, r.wo, null,
+    ]);
+    // AR STATUS formula
+    row.getCell(13).value = { formula: arStatusFormula(rowNum) };
+    // Styling
+    styleRowAll(row, 15, FONT_BODY, ALIGN_CENTER, BORDER_ALL);
+    // Money columns
+    row.getCell(9).numFmt = NF_MONEY;   // AMOUNT
+    row.getCell(10).numFmt = NF_MONEY;  // PAID
+    row.getCell(11).numFmt = NF_MONEY;  // BALANCE
+    // DATE column
+    if (row.getCell(5).value instanceof Date) row.getCell(5).numFmt = NF_DATE;
+    // COMPANY and MEMO read better left-aligned
+    row.getCell(2).alignment = ALIGN_LEFT;
+    row.getCell(12).alignment = ALIGN_LEFT;
+  }
+
+  // Auto-filter on the 14 real columns (skip blank O)
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: arRows.length + 1, column: 14 } };
+  return ws;
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// COL / COL (INV) — same data, different rows hidden (Jihyun's view trick)
+// ───────────────────────────────────────────────────────────────────────
+
+function buildCollectionsWorksheet(wb, name, rows, targetDate, hideType) {
+  // hideType: 'Invoice' → COL (payments view); 'Payment' → COL (INV) (invoices view)
+  const ws = wb.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 5 }] });
+  setColWidths(ws, hideType === 'Payment' ? COL_INV_WIDTHS : COL_WIDTHS);
+
+  // QBO report header (rows 1-4)
+  ws.addRow(['NGL Transportation, Inc.']);
+  ws.addRow(['Daily Collection Report']);
+  ws.addRow([fmtLongDate(targetDate)]);
+  ws.addRow([]);
+  ws.getCell('A1').font = FONT_QBO_HEADER;
+  ws.getCell('A2').font = FONT_BODY_BOLD;
+  ws.getCell('A3').font = FONT_BODY_BOLD;
+
+  // Header row (row 5)
+  const header = ws.addRow(COL_HEADERS);
+  styleRowAll(header, 8, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
+  // Blank row 6 (matches QBO export)
+  ws.addRow([]);
+
+  // Data rows from row 7
+  const firstDataRow = 7;
+  let rowIdx = firstDataRow;
+  for (const r of rows) {
+    const row = ws.addRow([
       asDate(r.payment_date), r.txn_type, r.txn_number, r.customer,
       r.invoice_or_ref, r.amount, r.open_balance, r.account,
     ]);
+    styleRowAll(row, 8, FONT_BODY, ALIGN_CENTER, null);
+    row.getCell(4).alignment = ALIGN_LEFT;  // Customer (long text)
+    row.getCell(6).numFmt = NF_MONEY;
+    row.getCell(7).numFmt = NF_MONEY;
+    if (row.getCell(1).value instanceof Date) row.getCell(1).numFmt = NF_DATE;
+    // Hide rows of the off-type for this view
+    if (r.txn_type === hideType) row.hidden = true;
+    rowIdx++;
   }
-  // Blank + grand-total + blank.
-  const lastDataRow = 6 + filtered.length;  // 7..lastDataRow inclusive
-  aoa.push([]);                              // blank
-  aoa.push([null, null, null, null, null, { f: `SUBTOTAL(9,F7:F${lastDataRow})` }]);
-  aoa.push([]);                              // trailing blank
+  const lastDataRow = rowIdx - 1;
 
-  const sheet = xlsx.utils.aoa_to_sheet(aoa, { cellDates: true });
-  setColWidths(sheet, invoiceOnly ? COL_INV_WIDTHS : COL_WIDTHS);
-  freezeRow(sheet, 5);                       // keep title + header in view
-  setAutoFilter(sheet, 5, 8, lastDataRow);
-  return sheet;
+  // Blank + grand-total + blank
+  ws.addRow([]);
+  const totalRow = ws.addRow([null, null, null, null, null,
+    { formula: `SUBTOTAL(9,F${firstDataRow}:F${lastDataRow})` }]);
+  totalRow.getCell(6).font = FONT_BODY_BOLD;
+  totalRow.getCell(6).numFmt = NF_MONEY;
+  totalRow.getCell(6).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
+  ws.addRow([]);
+
+  // Auto-filter
+  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: lastDataRow, column: 8 } };
+  return ws;
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Schedule — preserve the QBO Daily Schedule List report header
+// Schedule — QBO Daily Schedule report header preserved
 // ───────────────────────────────────────────────────────────────────────
 
-function buildScheduleSheet(rows, targetDate) {
-  const xlsx = X();
-  const aoa = [
-    ['NGL Transportation, Inc.'],
-    ['Daily Schedule List'],
-    [fmtLongDate(targetDate)],
-    [],
-    SCHEDULE_HEADERS,
-    [],
-  ];
+function buildScheduleWorksheet(wb, rows, targetDate) {
+  const ws = wb.addWorksheet('Schedule', { views: [{ state: 'frozen', ySplit: 5 }] });
+  setColWidths(ws, SCHEDULE_WIDTHS);
+
+  ws.addRow(['NGL Transportation, Inc.']);
+  ws.addRow(['Daily Schedule List']);
+  ws.addRow([fmtLongDate(targetDate)]);
+  ws.addRow([]);
+  ws.getCell('A1').font = FONT_QBO_HEADER;
+  ws.getCell('A2').font = FONT_BODY_BOLD;
+  ws.getCell('A3').font = FONT_BODY_BOLD;
+
+  const header = ws.addRow(SCHEDULE_HEADERS);
+  styleRowAll(header, 8, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
+  ws.addRow([]);
+
+  const firstDataRow = 7;
   for (const r of rows) {
-    aoa.push([
+    const row = ws.addRow([
       asDate(r.date), r.txn_type, r.customer, r.inv, r.ref,
       r.cntr_chassis, r.bl, r.amount,
     ]);
+    styleRowAll(row, 8, FONT_BODY, ALIGN_CENTER, null);
+    row.getCell(3).alignment = ALIGN_LEFT;  // Customer
+    row.getCell(8).numFmt = NF_MONEY;
+    if (row.getCell(1).value instanceof Date) row.getCell(1).numFmt = NF_DATE;
   }
-  const lastDataRow = 6 + rows.length;
-  aoa.push([]);
-  aoa.push([null, null, null, null, null, null, null, { f: `SUBTOTAL(9,H7:H${lastDataRow})` }]);
-  aoa.push([]);
+  const lastDataRow = firstDataRow + rows.length - 1;
 
-  const sheet = xlsx.utils.aoa_to_sheet(aoa, { cellDates: true });
-  setColWidths(sheet, SCHEDULE_WIDTHS);
-  freezeRow(sheet, 5);
-  setAutoFilter(sheet, 5, 8, lastDataRow);
-  return sheet;
+  ws.addRow([]);
+  const totalRow = ws.addRow([null, null, null, null, null, null, null,
+    { formula: `SUBTOTAL(9,H${firstDataRow}:H${lastDataRow})` }]);
+  totalRow.getCell(8).font = FONT_BODY_BOLD;
+  totalRow.getCell(8).numFmt = NF_MONEY;
+  totalRow.getCell(8).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
+  ws.addRow([]);
+
+  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: lastDataRow, column: 8 } };
+  return ws;
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// TMS / ADJUSTMENT — simple header + data layout (no QBO title rows)
+// TMS / ADJUSTMENT — simple header + data layout, no QBO title rows
 // ───────────────────────────────────────────────────────────────────────
 
-function buildTmsSheet(rows) {
-  const xlsx = X();
-  const aoa = [
-    TMS_HEADERS,
-    ...rows.map(r => [
+function buildTmsWorksheet(wb, rows) {
+  const ws = wb.addWorksheet('TMS', { views: [{ state: 'frozen', ySplit: 1 }] });
+  setColWidths(ws, TMS_WIDTHS);
+  const header = ws.addRow(TMS_HEADERS);
+  styleRowAll(header, 17, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
+  for (const r of rows) {
+    const row = ws.addRow([
       r.wo_div, r.type, r.id, r.name, r.status, asDate(r.date),
       r.wo_no, r.equipment, r.cat, r.total_amt, r.inv_no, r.qb_id,
       r.ref_no, r.mbl_booking, r.inv_amt, r.paid_received, asDate(r.qb_date),
-    ]),
-  ];
-  const sheet = xlsx.utils.aoa_to_sheet(aoa, { cellDates: true });
-  setColWidths(sheet, TMS_WIDTHS);
-  freezeRow(sheet, 1);
-  setAutoFilter(sheet, 1, 17, rows.length + 1);
-  return sheet;
+    ]);
+    styleRowAll(row, 17, FONT_BODY, ALIGN_CENTER, null);
+    row.getCell(4).alignment = ALIGN_LEFT;  // NAME
+    row.getCell(10).numFmt = NF_MONEY;  // TOTAL AMT
+    row.getCell(15).numFmt = NF_MONEY;  // INV AMT
+    row.getCell(16).numFmt = NF_MONEY;  // PAID/RECEIVED
+    if (row.getCell(6).value instanceof Date) row.getCell(6).numFmt = NF_DATE;
+    if (row.getCell(17).value instanceof Date) row.getCell(17).numFmt = NF_DATE;
+  }
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: rows.length + 1, column: 17 } };
+  return ws;
 }
 
-function buildAdjustmentSheet(rows) {
-  const xlsx = X();
-  const aoa = [
-    ADJUSTMENT_HEADERS,
-    ...rows.map(r => [
+function buildAdjustmentWorksheet(wb, rows) {
+  const ws = wb.addWorksheet('ADJUSTMENT', { views: [{ state: 'frozen', ySplit: 1 }] });
+  setColWidths(ws, ADJUSTMENT_WIDTHS);
+  const header = ws.addRow(ADJUSTMENT_HEADERS);
+  styleRowAll(header, 17, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
+  for (const r of rows) {
+    const row = ws.addRow([
       r.wo_div, r.type, r.id, r.name, r.status, asDate(r.date),
       r.wo_no, r.equipment, r.cat, r.amount_difference, r.inv_no, r.qb_id,
       r.ref_no, r.mbl_booking, r.inv_amt, r.paid_received, asDate(r.qb_date),
-    ]),
-  ];
-  const sheet = xlsx.utils.aoa_to_sheet(aoa, { cellDates: true });
-  setColWidths(sheet, ADJUSTMENT_WIDTHS);
-  freezeRow(sheet, 1);
-  setAutoFilter(sheet, 1, 17, rows.length + 1);
-  return sheet;
+    ]);
+    styleRowAll(row, 17, FONT_BODY, ALIGN_CENTER, null);
+    row.getCell(4).alignment = ALIGN_LEFT;
+    row.getCell(10).numFmt = NF_MONEY;
+    row.getCell(15).numFmt = NF_MONEY;
+    row.getCell(16).numFmt = NF_MONEY;
+    if (row.getCell(6).value instanceof Date) row.getCell(6).numFmt = NF_DATE;
+    if (row.getCell(17).value instanceof Date) row.getCell(17).numFmt = NF_DATE;
+  }
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: rows.length + 1, column: 17 } };
+  return ws;
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Public entry — assemble the workbook in Jihyun's tab order
+// Public entry — returns a Promise<{bytes, filename, sheets}>
 // ───────────────────────────────────────────────────────────────────────
 
-export function arBuildWriteWorkbook(buildResult, buildInputs) {
-  const xlsx = X();
-  const wb = xlsx.utils.book_new();
+export async function arBuildWriteWorkbook(buildResult, buildInputs) {
+  const ExcelJS = E();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'NGL Accounting';
+  wb.created = new Date();
 
   const targetDate = buildResult.__targetDate || buildResult.target_date || new Date();
   const todaySheetName = fmtSheetDate(targetDate);
   const yestSheetName = fmtSheetDate(buildResult.yest_date);
 
-  // Tab order: AR_today, COL, COL (INV), Schedule, TMS, ADJUSTMENT, AR_yesterday.
-  xlsx.utils.book_append_sheet(wb, buildArSheet(buildResult.today_ar), todaySheetName);
-  xlsx.utils.book_append_sheet(wb, buildCollectionsSheet(buildInputs.qbo_collection.parsed.rows, targetDate, false), 'COL');
-  xlsx.utils.book_append_sheet(wb, buildCollectionsSheet(buildInputs.qbo_collection.parsed.rows, targetDate, true), 'COL (INV)');
-  xlsx.utils.book_append_sheet(wb, buildScheduleSheet(buildInputs.qbo_schedule.parsed.rows, targetDate), 'Schedule');
-  xlsx.utils.book_append_sheet(wb, buildTmsSheet(buildResult.tms_rows), 'TMS');
-  xlsx.utils.book_append_sheet(wb, buildAdjustmentSheet(buildResult.adjustment_rows), 'ADJUSTMENT');
-  xlsx.utils.book_append_sheet(wb, buildArSheet(buildInputs.yesterday.parsed.ar_register), yestSheetName);
+  buildArWorksheet(wb, todaySheetName, buildResult.today_ar);
+  buildCollectionsWorksheet(wb, 'COL', buildInputs.qbo_collection.parsed.rows, targetDate, 'Invoice');
+  buildCollectionsWorksheet(wb, 'COL (INV)', buildInputs.qbo_collection.parsed.rows, targetDate, 'Payment');
+  buildScheduleWorksheet(wb, buildInputs.qbo_schedule.parsed.rows, targetDate);
+  buildTmsWorksheet(wb, buildResult.tms_rows);
+  buildAdjustmentWorksheet(wb, buildResult.adjustment_rows);
+  buildArWorksheet(wb, yestSheetName, buildInputs.yesterday.parsed.ar_register);
 
-  const bytes = new Uint8Array(xlsx.write(wb, { bookType: 'xlsx', type: 'array', cellDates: true }));
+  const arrayBuffer = await wb.xlsx.writeBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
   const filename = fmtFilenameDate(targetDate);
   return {
     bytes,
