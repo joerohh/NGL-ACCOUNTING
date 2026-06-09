@@ -32,6 +32,24 @@ function num(v) {
   return typeof v === 'number' ? v : 0;
 }
 
+// Conservative customer-name normalizer for TAB BANK ↔ QBO comparison.
+// Strips id-prefix, entity suffixes, punctuation; uppercases; collapses ws.
+// See spec §4.3 — prefers false negatives over false positives.
+function normalizeCustomerName(name) {
+  if (!name || typeof name !== 'string') return '';
+  let s = name.toUpperCase();
+  // Strip leading "1234-" id prefix (QBO customer field format)
+  s = s.replace(/^\d+\s*-\s*/, '');
+  // Strip trailing entity suffix tokens — repeat once for ", INC." patterns
+  const suffixRe = /[,.\s]+(INC|LLC|LTD|CO|CORP|CORPORATION)\.?$/i;
+  s = s.replace(suffixRe, '');
+  s = s.replace(suffixRe, '');
+  // Strip non-alphanumeric chars except spaces, collapse whitespace
+  s = s.replace(/[^A-Z0-9 ]+/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+
 // Calendar-days delta between two BUILD days (the day Jihyun runs the build
 // for a given workbook date). Build day = workbook date + 1, except Friday
 // workbooks are built on Monday (+3). Mirrors verify_ar_build.py main().
@@ -238,9 +256,123 @@ export function arBuildTodayFromBuffers(buffers) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// TAB BANK exception detection (spec 2026-06-09)
+// ---------------------------------------------------------------------------
+
+export function detectTabBankExceptions(tab_bank, qbo_collection) {
+  const out = [];
+  if (!tab_bank || !tab_bank.rows || !qbo_collection || !qbo_collection.rows) {
+    return out;
+  }
+
+  // ---- Pre-filter TAB BANK rows ----
+  const tbRows = tab_bank.rows.filter(r =>
+    r && r.check != null && r.check !== '' && r.desc !== 'NON-FACTORED'
+  );
+  const nonFactoredCount = tab_bank.rows.filter(r => r && r.desc === 'NON-FACTORED').length;
+
+  // ---- Build indexes keyed by check# (stringified for safe Map keys) ----
+  const tbIndex = new Map();
+  for (const r of tbRows) tbIndex.set(String(r.check), r);
+
+  const qboIndex = new Map();
+  for (const line of qbo_collection.rows) {
+    if (!line || line.txn_type !== 'Invoice') continue;
+    if (line.txn_number == null || line.txn_number === '') continue;
+    const key = String(line.txn_number);
+    if (!qboIndex.has(key)) qboIndex.set(key, []);
+    qboIndex.get(key).push(line);
+  }
+
+  // ---- All-NON-FACTORED guardrail (spec §8 risk mitigation) ----
+  // Only triggers when there's actual false-positive risk: TAB BANK had only
+  // NON-FACTORED rows AND QBO has Invoice payments that would otherwise be
+  // wrongly flagged as posting_gap_tab_missing.
+  if (tbIndex.size === 0 && nonFactoredCount > 0 && qboIndex.size > 0) {
+    out.push({
+      kind: 'info_all_non_factored',
+      check_no: '',
+      message: 'TAB BANK file appears to contain only NON-FACTORED rows — gap detection skipped',
+      amount: null,
+      tab_bank_row: null,
+      qbo_row: null,
+      tab_bank_customer: null,
+      qbo_customer: null,
+    });
+    return out;
+  }
+
+  // ---- Posting gap: TAB BANK has check# but QBO does not ----
+  for (const [checkNo, tbRow] of tbIndex) {
+    if (qboIndex.has(checkNo)) continue;
+    out.push({
+      kind: 'posting_gap_qbo_missing',
+      check_no: checkNo,
+      message: `Bank received $${num(tbRow.amount).toFixed(2)} on check# ${checkNo} from ${tbRow.debtor_name || '(no customer)'} but no QBO payment recorded`,
+      amount: num(tbRow.amount),
+      tab_bank_row: tbRow,
+      qbo_row: null,
+      tab_bank_customer: tbRow.debtor_name || null,
+      qbo_customer: null,
+    });
+  }
+
+  // ---- Posting gap: QBO has check# but TAB BANK does not ----
+  for (const [checkNo, qboLines] of qboIndex) {
+    if (tbIndex.has(checkNo)) continue;
+    const firstLine = qboLines[0];
+    const total = qboLines.reduce((s, l) => s + num(l.amount), 0);
+    out.push({
+      kind: 'posting_gap_tab_missing',
+      check_no: checkNo,
+      message: `QBO has a $${total.toFixed(2)} payment on check# ${checkNo} but TAB BANK has no record`,
+      amount: total,
+      tab_bank_row: null,
+      qbo_row: firstLine,
+      tab_bank_customer: null,
+      qbo_customer: firstLine.customer || null,
+    });
+  }
+
+  // ---- Customer name mismatch: check# in both, names differ after normalization ----
+  for (const [checkNo, tbRow] of tbIndex) {
+    const qboLines = qboIndex.get(checkNo);
+    if (!qboLines || qboLines.length === 0) continue;
+    const tbName = tbRow.debtor_name || '';
+    const qboName = qboLines[0].customer || '';
+    const nTb = normalizeCustomerName(tbName);
+    const nQbo = normalizeCustomerName(qboName);
+    if (nTb && nQbo && nTb !== nQbo) {
+      out.push({
+        kind: 'customer_mismatch',
+        check_no: checkNo,
+        message: `Check# ${checkNo} — TAB BANK says ${tbName}, QBO says ${qboName}`,
+        amount: num(tbRow.amount),
+        tab_bank_row: tbRow,
+        qbo_row: qboLines[0],
+        tab_bank_customer: tbName,
+        qbo_customer: qboName,
+      });
+    }
+  }
+
+  // ---- Sort: qbo_missing → tab_missing → customer_mismatch (most urgent first) ----
+  const kindOrder = {
+    info_all_non_factored: -1,
+    posting_gap_qbo_missing: 0,
+    posting_gap_tab_missing: 1,
+    customer_mismatch: 2,
+  };
+  out.sort((a, b) => (kindOrder[a.kind] ?? 99) - (kindOrder[b.kind] ?? 99));
+
+  return out;
+}
+
 // Browser console hook
 if (typeof window !== 'undefined') {
   window.arBuildToday = arBuildToday;
   window.arBuildTodayFromBuffers = arBuildTodayFromBuffers;
   window.arComputeAgeDelta = computeAgeDelta;
+  window.detectTabBankExceptions = detectTabBankExceptions;
 }
