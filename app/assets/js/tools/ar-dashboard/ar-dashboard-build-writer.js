@@ -56,9 +56,10 @@ const SCHEDULE_WIDTHS = [15.7, 11.0, 44.1, 17.0, 31.0, 25.1, 19.3, 14.8, 12.9];
 const TMS_WIDTHS = [8.6, 7.5, 10.7, 24.6, 9.6, 11.8, 15.0, 13.9, 10.7, 12.9, 16.8, 7.5, 24.6, 18.3, 12.9, 10.2, 11.8, 11.4];
 const ADJUSTMENT_WIDTHS = [8.8, 10.6, 12.7, 26.4, 13.4, 10.9, 16.2, 17.1, 9.7, 13.6, 17.9, 11.0, 13.9, 21.3, 19.2, 16.2, 14.4];
 const EXCEPTIONS_HEADERS = [
-  'Kind', 'Check #', 'Amount', 'TAB BANK Customer', 'QBO Customer', 'Detected Issue', 'Notes',
+  'Kind', 'Check #', 'Amount', 'TAB BANK $', 'Owed', 'Affected INV#',
+  'TAB BANK Customer', 'QBO Customer', 'Detected Issue', 'Notes',
 ];
-const EXCEPTIONS_WIDTHS = [28, 12, 12, 28, 28, 60, 30];
+const EXCEPTIONS_WIDTHS = [32, 14, 14, 14, 14, 30, 28, 28, 60, 30];
 
 // ───────────────────────────────────────────────────────────────────────
 // Style constants
@@ -341,8 +342,11 @@ function buildExceptionsWorksheet(wb, exceptions) {
   styleRowAll(header, 17, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
   const kindLabel = (kind) => {
     switch (kind) {
+      case 'short_pay':               return 'Short pay (bank deposit < owed)';
+      case 'overpay':                 return 'Overpay (bank deposit > owed)';
       case 'posting_gap_qbo_missing': return 'Bank deposit, no QBO post';
       case 'posting_gap_tab_missing': return 'QBO post, no bank record';
+      case 'tab_bank_suspense_row':   return 'TAB BANK SUSPENSE (unidentified customer)';
       case 'customer_mismatch':       return 'Customer name mismatch';
       case 'info_all_non_factored':   return 'TAB BANK file all NON-FACTORED';
       default: return kind;
@@ -353,21 +357,27 @@ function buildExceptionsWorksheet(wb, exceptions) {
       kindLabel(e.kind),
       e.check_no || '',
       e.amount,
+      e.tb_collected != null ? e.tb_collected : '',
+      e.ar_balance_owed != null ? e.ar_balance_owed : '',
+      (e.affected_invs && e.affected_invs.length > 0) ? e.affected_invs.join(', ') : '',
       e.tab_bank_customer || '',
       e.qbo_customer || '',
       e.message || '',
       '', // Notes — Jihyun fills this in
     ]);
     styleRowAll(row, 17, FONT_BODY, ALIGN_CENTER, null);
-    row.getCell(4).alignment = ALIGN_LEFT;  // TAB BANK Customer
-    row.getCell(5).alignment = ALIGN_LEFT;  // QBO Customer
-    row.getCell(6).alignment = ALIGN_LEFT;  // Detected Issue
-    row.getCell(7).alignment = ALIGN_LEFT;  // Notes
+    row.getCell(6).alignment = ALIGN_LEFT;  // Affected INV#
+    row.getCell(7).alignment = ALIGN_LEFT;  // TAB BANK Customer
+    row.getCell(8).alignment = ALIGN_LEFT;  // QBO Customer
+    row.getCell(9).alignment = ALIGN_LEFT;  // Detected Issue
+    row.getCell(10).alignment = ALIGN_LEFT; // Notes
     row.getCell(3).numFmt = NF_MONEY;       // Amount
+    row.getCell(4).numFmt = NF_MONEY;       // TAB BANK $
+    row.getCell(5).numFmt = NF_MONEY;       // Owed
   }
   ws.autoFilter = {
     from: { row: 1, column: 1 },
-    to: { row: Math.max(exceptions.length, 0) + 1, column: 7 },
+    to: { row: Math.max(exceptions.length, 0) + 1, column: 10 },
   };
   return ws;
 }
