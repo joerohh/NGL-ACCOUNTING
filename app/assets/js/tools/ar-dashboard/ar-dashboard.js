@@ -10,7 +10,7 @@ import './ar-dashboard-model.js';
 import './ar-dashboard-exceptions.js';
 import './ar-dashboard-loader.js';
 import './ar-dashboard-build-writer.js';
-import './ar-dashboard-build-ui.js';
+import { arRenderBuildPage } from './ar-dashboard-build-ui.js';
 import { arRenderLoaded } from './ar-dashboard-views.js';
 
 export function initArDashboard() {
@@ -25,27 +25,37 @@ export function initArDashboard() {
 }
 
 function renderEmptyState(view) {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
   view.innerHTML = `
-    <div class="centered-stage">
-      <h1>Load today's AR aging workbook</h1>
-      <p class="subtitle">Drop or pick an <code>AR_AGING_MM_DD_YYYY.xlsx</code>. We'll parse the sheets and surface today's reconciliation exceptions.</p>
-      <div class="big-drop kind-excel" id="arDropZone">
-        <div class="drop-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
-          </svg>
+    <div class="ar-empty-shell">
+      <div class="ar-empty-header">
+        <h1>Build today's AR workbook</h1>
+        <p class="subtitle">Drop the daily files; the engine reconciles them against yesterday's workbook.</p>
+        <p class="date-line">${today}</p>
+      </div>
+      <div id="arBuildPageHost"></div>
+      <div class="ar-empty-divider">
+        <span>or</span>
+      </div>
+      <div class="ar-empty-secondary">
+        <h2>Already have a pre-built workbook?</h2>
+        <div class="ar-secondary-drop" id="arPrebuiltDropZone">
+          <div class="drop-icon">📄</div>
+          <div class="drop-title">Drop AR_AGING_MM_DD_YYYY.xlsx</div>
+          <div class="drop-help">or click to browse · accepts .xlsx · .xls</div>
         </div>
-        <div class="drop-title">Drop AR aging workbook</div>
-        <div class="drop-help">Pre-built daily workbook with AR Register, Collections, Schedule, TMS, ADJUSTMENT sheets.</div>
-        <div class="drop-types">.xlsx · .xls</div>
+        <input type="file" id="arFileInput" accept=".xlsx,.xls" style="display:none" />
       </div>
-      <div class="ar-or-build">
-        Or <a id="arOpenBuildLink">build today's workbook from scratch →</a>
-      </div>
-      <input type="file" id="arFileInput" accept=".xlsx,.xls" style="display:none" />
     </div>
   `;
-  const dz = view.querySelector('#arDropZone');
+  // Mount the build flow into its host
+  const host = view.querySelector('#arBuildPageHost');
+  arRenderBuildPage(host);
+
+  // Secondary pre-built drop zone — keep the existing behavior
+  const dz = view.querySelector('#arPrebuiltDropZone');
   const fi = view.querySelector('#arFileInput');
   dz.addEventListener('click', () => fi.click());
   fi.addEventListener('change', handleFileSelected);
@@ -55,15 +65,9 @@ function renderEmptyState(view) {
     e.preventDefault();
     dz.classList.remove('drop-hover');
     const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) {
-      if (typeof window.arLoadWorkbook === 'function') window.arLoadWorkbook(file);
-      else console.warn('AR loader not yet implemented');
+    if (file && typeof window.arLoadWorkbook === 'function') {
+      window.arLoadWorkbook(file);
     }
-  });
-  const buildLink = view.querySelector('#arOpenBuildLink');
-  if (buildLink) buildLink.addEventListener('click', e => {
-    e.preventDefault();
-    if (typeof window.arOpenBuildModal === 'function') window.arOpenBuildModal();
   });
 }
 
