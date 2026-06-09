@@ -39,7 +39,7 @@ export function arRenderLoaded(view) {
         <span>Today: ${m.today_date}</span>
         <span class="sep">|</span>
         <span>Yesterday: ${m.yesterday_date ?? '(none)'}</span>
-        <a class="right-link" id="arUnloadBtn">Load different workbook →</a>
+        <a class="right-link" id="arUnloadBtn">Build different day →</a>
       </div>
       <div class="ar-tabs" id="arTabs">
         ${TABS.map(t => renderTabButton(t, m)).join('')}
