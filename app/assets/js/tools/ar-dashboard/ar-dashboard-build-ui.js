@@ -329,8 +329,11 @@ function previewModalHtml() {
 
 function tabBankExceptionLabel(kind) {
   switch (kind) {
+    case 'short_pay':               return 'Short pay (bank deposit < owed)';
+    case 'overpay':                 return 'Overpay (bank deposit > owed)';
     case 'posting_gap_qbo_missing': return 'Bank deposit, no QBO post';
     case 'posting_gap_tab_missing': return 'QBO post, no bank record';
+    case 'tab_bank_suspense_row':   return 'TAB BANK SUSPENSE (unidentified customer)';
     case 'customer_mismatch':       return 'Customer name mismatch';
     case 'info_all_non_factored':   return 'TAB BANK file all NON-FACTORED';
     default: return kind;
@@ -399,13 +402,21 @@ function renderKpiDetail(kpiKey, data) {
           <div class="dp-title">TAB BANK mismatches</div>
           <div class="dp-sub">${data.exceptions.length} rows · sorted by urgency · review before saving</div>
         </div>
-        ${rowsTable(['Issue', 'Check #', 'Amount', 'TAB BANK Customer', 'QBO Customer'], rows.map(e => [
-          tabBankExceptionLabel(e.kind),
-          e.check_no,
-          e.amount != null ? fmtMoney(e.amount) : '—',
-          e.tab_bank_customer || '—',
-          e.qbo_customer || '—',
-        ]), data.exceptions.length, ['', 'mono', 'num', '', ''])}
+        ${rowsTable(
+          ['Issue', 'Check #', 'Amount', 'TAB BANK $', 'Owed', 'Affected INV#', 'TAB BANK Customer', 'QBO Customer'],
+          rows.map(e => [
+            tabBankExceptionLabel(e.kind),
+            e.check_no,
+            e.amount != null ? fmtMoney(e.amount) : '—',
+            e.tb_collected != null ? fmtMoney(e.tb_collected) : '—',
+            e.ar_balance_owed != null ? fmtMoney(e.ar_balance_owed) : '—',
+            (e.affected_invs && e.affected_invs.length > 0) ? e.affected_invs.join(', ') : '—',
+            e.tab_bank_customer || '—',
+            e.qbo_customer || '—',
+          ]),
+          data.exceptions.length,
+          ['', 'mono', 'num', 'num', 'num', 'mono', '', ''],
+        )}
       </div>`;
   }
   return '';
