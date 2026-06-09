@@ -249,7 +249,7 @@ function previewModalHtml() {
   const adjustments = r.adjustment_rows || [];
   const adjustmentAmount = adjustments.reduce((a, x) => a + Math.abs(Number(x.amount_difference) || 0), 0);
 
-  const exceptions = []; // M3 will populate this
+  const exceptions = r.tab_bank_exceptions || [];
 
   const netClass = netChange > 0 ? 'up' : netChange < 0 ? 'down' : 'flat';
   const netSign = netChange > 0 ? '+' : '';
@@ -270,7 +270,7 @@ function previewModalHtml() {
     { key: 'new',       label: 'New invoices',         icoClass: 'blue',   val: newInvs.length,      sub: `From QBO Schedule · ${fmtMoneyShort(newAmount)} added` },
     { key: 'paid',      label: 'Paid off',             icoClass: 'green',  val: paidOffInvs.length,  sub: `From QBO Collection · ${fmtMoneyShort(paidAmount)} cleared` },
     { key: 'adjust',    label: 'Amount adjustments',   icoClass: 'purple', val: adjustments.length,  sub: `From TMS · ${fmtMoneyShort(adjustmentAmount)} net change` },
-    { key: 'exception', label: 'Suspense / exceptions', icoClass: 'red',   val: exceptions.length,   sub: exceptions.length ? 'Need your attention before saving' : 'None detected (M3 will add detectors)', alert: true },
+    { key: 'exception', label: 'Suspense / exceptions', icoClass: 'red',   val: exceptions.length,   sub: exceptions.length ? 'Bank / QBO mismatches need review before saving' : 'No TAB BANK mismatches detected', alert: true },
   ];
 
   const kpisHtml = kpis.map(k => `
@@ -327,6 +327,16 @@ function previewModalHtml() {
     </div>`;
 }
 
+function tabBankExceptionLabel(kind) {
+  switch (kind) {
+    case 'posting_gap_qbo_missing': return 'Bank deposit, no QBO post';
+    case 'posting_gap_tab_missing': return 'QBO post, no bank record';
+    case 'customer_mismatch':       return 'Customer name mismatch';
+    case 'info_all_non_factored':   return 'TAB BANK file all NON-FACTORED';
+    default: return kind;
+  }
+}
+
 function renderKpiDetail(kpiKey, data) {
   if (kpiKey === 'new') {
     const rows = data.newInvs.slice(0, 50);
@@ -374,15 +384,29 @@ function renderKpiDetail(kpiKey, data) {
       return `
         <div class="ar-detail-panel">
           <div class="dp-head">
-            <div class="dp-title">Suspense items to triage</div>
+            <div class="dp-title">TAB BANK mismatches</div>
             <div class="dp-sub">No exceptions detected in this build</div>
           </div>
           <div style="padding:24px; text-align:center; color:#64748b; font-size:0.78rem">
-            Detectors for TAB BANK posting errors + UC reclassification land in M3.
+            Every TAB BANK check# matches a QBO payment with the same customer.
           </div>
         </div>`;
     }
-    return '<div class="ar-detail-panel"><!-- M3 exception list --></div>';
+    const rows = data.exceptions.slice(0, 50);
+    return `
+      <div class="ar-detail-panel">
+        <div class="dp-head">
+          <div class="dp-title">TAB BANK mismatches</div>
+          <div class="dp-sub">${data.exceptions.length} rows · sorted by urgency · review before saving</div>
+        </div>
+        ${rowsTable(['Issue', 'Check #', 'Amount', 'TAB BANK Customer', 'QBO Customer'], rows.map(e => [
+          tabBankExceptionLabel(e.kind),
+          e.check_no,
+          e.amount != null ? fmtMoney(e.amount) : '—',
+          e.tab_bank_customer || '—',
+          e.qbo_customer || '—',
+        ]), data.exceptions.length, ['', 'mono', 'num', '', ''])}
+      </div>`;
   }
   return '';
 }
