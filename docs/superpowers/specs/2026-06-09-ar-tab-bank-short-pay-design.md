@@ -1,7 +1,7 @@
 # AR Dashboard — TAB BANK Short-Pay Detection (R2 M3b)
 
 **Date:** 2026-06-09
-**Status:** draft — awaits user review
+**Status:** approved (open questions resolved by user 2026-06-09)
 **Owner:** Joseph Roh
 **Related:**
 - `docs/superpowers/specs/2026-05-20-ar-dashboard-design.md` — original R1/R2 spec (§4.3 locked rule, §5.4 cat #9 TAB BANK posting errors, §5.5 Overpayment Workflow)
@@ -40,18 +40,14 @@ For every check# shared between TAB BANK and QBO Collection, compare the actual 
 
 ### In scope
 
-- **SUSPENSE filter:** TAB BANK rows where `debtor_name` is exactly `SUSPENSE` (case-insensitive) are excluded from the check# index. They go into a new `tab_bank_suspense_row` exception so Jihyun sees them.
-- **Per-check#-amount comparison:** for each check# in both `tbIndex` and `qboIndex`:
-  - `tbTotal = sum of TAB BANK amount column across rows with this check# (post-filter)`
-  - `qboTotal = sum of QBO Collection amount across Invoice lines with this check#`
-  - If `qboTotal − tbTotal > 0.01` → **short pay** → emit `short_pay` exception + leave the invoices on AR with adjusted balance.
-  - If `tbTotal − qboTotal > 0.01` → **overpay** → emit `overpay` exception (handled by future Overpayment Workflow; we only DETECT, no auto-credit).
-- **Phase 2 engine change:** when a short pay is detected, do NOT drop the invoice. Recompute balance using TAB BANK as truth. Generate the `Short paid MM/DD/YYYY #checkno` memo.
-- **Allocation strategy:** for a single-invoice short pay, the math is trivial (one balance, one shortage). For a multi-invoice short pay (one check covering N invoices), distribute the shortage **evenly across the N invoices** as the v1 default. See §4.4.
+- **SUSPENSE handling:** TAB BANK rows where `debtor_name` is exactly `SUSPENSE` (case-insensitive) cannot be applied to any AR invoice (the customer is unidentified). They get listed as `tab_bank_suspense_row` exceptions in the EXCEPTIONS sheet so Jihyun can manually identify the customer and apply the deposit. **They are NOT silently ignored — the `amount` they carry is real money.** They just can't be auto-matched until Jihyun resolves the customer.
+- **Per-invoice direct match:** for each invoice on AR, look in TAB BANK for rows where the `invoice` column matches this invoice's INV#, and sum the **`collected_amount`** column. That sum is the actual deposit applied to this invoice (Jihyun's locked workflow per 2026-06-09: "she takes the amount per invoice"). Per-check# totals are computed by summing across rows but NOT used for allocation — the per-invoice numbers come straight from TAB BANK's per-row data.
+- **Short pay detection:** if `invoice_amount_owed − (yesterday's paid + TAB BANK collected_amount) > $0.01` → emit `short_pay` exception AND keep the invoice on AR with adjusted balance + `Short paid MM/DD/YYYY #checkno` memo.
+- **Overpay detection:** if the same calculation gives `< −$0.01` → emit `overpay` exception (handled by future Overpayment Workflow; we only DETECT, no auto-credit).
+- **Phase 2 engine change:** Phase 2 currently uses only QBO Collection arithmetic. After this change, Phase 2 uses **TAB BANK `collected_amount` as the per-invoice source of truth** when present, falling back to QBO Collection only when an invoice has no matching TAB BANK row.
 
 ### Out of scope
 
-- **Auto-allocation by TAB BANK chargeback column:** TAB BANK has `chargeback_amount` and `collected_amount` columns per row. We do NOT use these in v1 because the locked rule (spec §4.3) says TAB BANK's amount columns are unreliable. Future revision once we have data showing they're trustworthy for this specific case.
 - **Overpayment auto-credit creation:** the 2 negative-balance "overpaid" rows Jihyun creates by hand today (LM26060374F = −$35, LM26060375F = −$30) stay manual. The Overpayment Workflow modal is a separate spec.
 - **Cross-day TAB BANK reapplication tracking:** the email's 5/18 → 6/4 reposting case requires comparing TAB BANK files across days. Out of scope. The SUSPENSE filter catches the *symptom* (SUSPENSE rows excluded); the cause needs its own design.
 - **Customer-DB-backed SUSPENSE matching:** if a SUSPENSE row has a real check# that matches QBO, we just flag it. We do not try to figure out which customer it belongs to. That's cat #1 territory.
@@ -60,102 +56,144 @@ For every check# shared between TAB BANK and QBO Collection, compare the actual 
 
 ### 4.1 New filters and helpers
 
-**SUSPENSE filter:** extend the pre-filter in `detectTabBankExceptions`:
+**SUSPENSE handling:** extend the pre-filter in `detectTabBankExceptions`:
 
 ```js
+// Filter out from per-invoice auto-matching, but DO emit each as an exception
 const tbRows = tab_bank.rows.filter(r =>
   r &&
   r.check != null && r.check !== '' &&
   r.desc !== 'NON-FACTORED' &&
   (r.debtor_name || '').toString().trim().toUpperCase() !== 'SUSPENSE'
 );
-const suspenseCount = tab_bank.rows.filter(r =>
+const suspenseRows = tab_bank.rows.filter(r =>
   r && (r.debtor_name || '').toString().trim().toUpperCase() === 'SUSPENSE'
-).length;
+);
 ```
 
-If `suspenseCount > 0`, emit ONE info-level exception per check# that appears in the SUSPENSE rows (deduped by check#) so Jihyun can audit them.
+Every SUSPENSE row generates a `tab_bank_suspense_row` exception carrying the deposit `amount`, `check`, the (likely fake) `invoice` field, the `desc`, and the `pmt_type`. These are the unidentified deposits Jihyun must reconcile by hand. They are NOT included in any per-check# or per-invoice totals.
 
-### 4.2 Check# index change — multi-row support
+### 4.2 Two indexes — check# and INV#
 
-The existing MVP indexes TAB BANK as `Map<check_no, single_row>`. That breaks for the email's pattern (same check# on 6+ rows). Change to:
+The existing MVP indexes TAB BANK as `Map<check_no, single_row>`. We need both check#-level (for posting-gap and customer-mismatch detection from MVP) AND per-invoice (for short-pay detection). Change to:
 
 ```js
-const tbIndex = new Map(); // check_no → array of rows
+// check# → array of TAB BANK rows (for MVP detections)
+const tbByCheck = new Map();
 for (const r of tbRows) {
   const key = String(r.check);
-  if (!tbIndex.has(key)) tbIndex.set(key, []);
-  tbIndex.get(key).push(r);
+  if (!tbByCheck.has(key)) tbByCheck.set(key, []);
+  tbByCheck.get(key).push(r);
+}
+
+// invoice → array of TAB BANK rows (for short-pay detection)
+const tbByInvoice = new Map();
+for (const r of tbRows) {
+  const inv = r.invoice;
+  if (inv == null || inv === '') continue;
+  const key = String(inv).trim();
+  if (!tbByInvoice.has(key)) tbByInvoice.set(key, []);
+  tbByInvoice.get(key).push(r);
 }
 ```
 
-`qboIndex` already groups multi-line.
+For the existing MVP customer_mismatch detection: when there are multiple TAB BANK rows for the same check#, use the **first non-empty `debtor_name`** as the canonical name for comparison.
 
-For the existing MVP customer_mismatch detection: when there are multiple TAB BANK rows for the same check#, use the **first non-empty `debtor_name`** as the canonical name for comparison. (The email shows 6 of 7 SUSPENSE-row checks have `debtor_name = SUSPENSE`, so they'd be pre-filtered anyway.)
+**MVP correction:** the existing MVP's posting-gap detection sums `amount` per check#. That's wrong per the 06/04 SUSPENSE example, where the `amount` column inflates because the same deposit is repeated across multiple SUSPENSE rows. Posting-gap detection should sum **`collected_amount`** instead — that net-balances correctly. Apply this fix as part of this slice.
 
-### 4.3 Short-pay / overpay detection
+### 4.3 Short-pay / overpay detection — per invoice
 
-After the existing posting-gap and customer-mismatch passes, add a new pass:
+Per-invoice direct match using TAB BANK's `collected_amount` column. For each invoice currently on AR (cloned from yesterday in Phase 1):
 
 ```js
-for (const [checkNo, tbRows_] of tbIndex) {
-  const qboLines = qboIndex.get(checkNo);
-  if (!qboLines || qboLines.length === 0) continue; // posting gap, already emitted
+const tbAppliedByInv = new Map(); // inv → { sum_collected, check_nos, rows }
+for (const [inv, rows] of tbByInvoice) {
+  const sumCollected = rows.reduce((s, r) => s + num(r.collected_amount), 0);
+  const checkNos = [...new Set(rows.map(r => r.check).filter(Boolean).map(String))];
+  tbAppliedByInv.set(inv, { sum_collected: sumCollected, check_nos: checkNos, rows });
+}
 
-  const tbTotal  = tbRows_.reduce((s, r) => s + num(r.amount), 0);
-  const qboTotal = qboLines.reduce((s, l) => s + num(l.amount), 0);
-  const diff = qboTotal - tbTotal;
+for (const [inv, arRow] of todayAr) {
+  const tb = tbAppliedByInv.get(inv);
+  if (!tb || tb.sum_collected === 0) continue; // no TAB BANK activity on this invoice
+
+  const owed = num(arRow.amount) - num(arRow.paid); // expected to be paid (carry-forward balance)
+  const collected = tb.sum_collected;
+  const diff = owed - collected; // positive = short; negative = over
 
   if (diff > 0.01) {
-    // Short pay — emit exception + flag invoices for Phase 2 to keep on AR
     out.push({
       kind: 'short_pay',
-      check_no: checkNo,
-      message: `Check# ${checkNo} short-paid $${diff.toFixed(2)} — TAB BANK $${tbTotal.toFixed(2)}, QBO $${qboTotal.toFixed(2)} (${qboLines.length} invoice${qboLines.length === 1 ? '' : 's'})`,
+      check_no: tb.check_nos.join(', '),
+      message: `${inv} short-paid by $${diff.toFixed(2)} — TAB BANK applied $${collected.toFixed(2)}, balance owed $${owed.toFixed(2)}`,
       amount: diff,
       shortage: diff,
-      tb_deposit: tbTotal,
-      qbo_applied: qboTotal,
-      affected_invs: qboLines.map(l => l.invoice_or_ref).filter(Boolean),
-      tab_bank_row: tbRows_[0],
-      qbo_row: qboLines[0],
-      tab_bank_customer: tbRows_[0].debtor_name || null,
-      qbo_customer: qboLines[0].customer || null,
+      tb_collected: collected,
+      ar_balance_owed: owed,
+      affected_invs: [inv],
+      tab_bank_row: tb.rows[0],
+      qbo_row: null,
+      tab_bank_customer: tb.rows[0].debtor_name || null,
+      qbo_customer: arRow.company || null,
     });
   } else if (diff < -0.01) {
-    // Overpay — detect only; Overpayment Workflow handles fix
     out.push({
       kind: 'overpay',
-      check_no: checkNo,
-      message: `Check# ${checkNo} OVERPAID by $${(-diff).toFixed(2)} — TAB BANK $${tbTotal.toFixed(2)}, QBO $${qboTotal.toFixed(2)}`,
+      check_no: tb.check_nos.join(', '),
+      message: `${inv} OVERPAID by $${(-diff).toFixed(2)} — TAB BANK applied $${collected.toFixed(2)}, balance owed $${owed.toFixed(2)}`,
       amount: -diff,
       overage: -diff,
-      tb_deposit: tbTotal,
-      qbo_applied: qboTotal,
-      affected_invs: qboLines.map(l => l.invoice_or_ref).filter(Boolean),
-      tab_bank_row: tbRows_[0],
-      qbo_row: qboLines[0],
-      tab_bank_customer: tbRows_[0].debtor_name || null,
-      qbo_customer: qboLines[0].customer || null,
+      tb_collected: collected,
+      ar_balance_owed: owed,
+      affected_invs: [inv],
+      tab_bank_row: tb.rows[0],
+      qbo_row: null,
+      tab_bank_customer: tb.rows[0].debtor_name || null,
+      qbo_customer: arRow.company || null,
     });
   }
 }
 ```
 
-### 4.4 Allocation strategy (default: even split)
+After this pass, emit one exception per SUSPENSE row in `suspenseRows`:
 
-For a `short_pay` exception with N affected invoices, distribute the shortage **evenly**: `per_invoice_shortage = round(diff / N, 2)`, with the last invoice absorbing rounding remainder (so totals reconcile exactly).
+```js
+for (const r of suspenseRows) {
+  out.push({
+    kind: 'tab_bank_suspense_row',
+    check_no: String(r.check || ''),
+    message: `Check# ${r.check} for $${num(r.amount).toFixed(2)} marked SUSPENSE in TAB BANK — customer not identified by bank. Investigate which customer/invoice this belongs to.`,
+    amount: num(r.amount),
+    tb_collected: num(r.collected_amount),
+    affected_invs: r.invoice ? [r.invoice] : [],
+    tab_bank_row: r,
+    qbo_row: null,
+    tab_bank_customer: 'SUSPENSE',
+    qbo_customer: null,
+  });
+}
+```
 
-**Why even split as default:** Jihyun's 06/08 workbook shows exactly this pattern for check# 208064 — 7 invoices, $105 short EACH (flat per-invoice). For check# A0906038795 single invoice (LM26040200F, $35 short). For check# 18813 single invoice (PE26050012F, $40 short). The flat-per-invoice convention is consistent for the visible cases.
+### 4.4 No allocation needed — per-row TAB BANK data is the truth
 
-**Open question for Jihyun (§7):** is this her actual convention, or is she using TAB BANK's per-row `chargeback_amount` column? If the latter, we need to switch the allocation strategy.
+Per Jihyun's locked workflow (2026-06-09): "she takes the amount per invoice". TAB BANK records each application as a separate row tied to a specific invoice via the `invoice` column. The `collected_amount` field on that row IS the per-invoice amount.
+
+For the 06/08/2026 check# 208064 case (7 invoices), TAB BANK has 7 rows, each tied to one of LM26040682F / 683F / 684F / 685F / 686F / 688F / one more, with `collected_amount` ≈ $336 (or $402.50 for the $507.50 invoice). The engine doesn't need to split a check total — it reads the per-row applied amount directly.
+
+For check# A0906038795 (single invoice LM26040200F): one TAB BANK row, `collected_amount` = $1,767.56, `chargeback_amount` = $35, leaving balance $35.
+
+For check# 18813 (single invoice PE26050012F): one TAB BANK row, `collected_amount` = $925, balance $40.
+
+**No even split, no per-row chargeback math. Just read the row that matches the invoice.**
+
+The `chargeback_amount` column is informational only in this design — we compute the shortage as `owed − collected` instead of trusting TAB BANK's recorded chargeback. (This makes the engine self-consistent: shortage on the AR row is derived from the AR row's own balance, not from TAB BANK's record of what it thinks the invoice was for, which is stale per the locked rule.)
 
 ### 4.5 Phase 2 engine integration
 
-The current engine Phase 2 has this branch:
+The current Phase 2 uses QBO Collection arithmetic only:
 
 ```js
-const newPaid = num(row.paid) + totalApplied;
+const newPaid = num(row.paid) + totalApplied;  // totalApplied from QBO Collection
 const newBalance = num(row.amount) - newPaid;
 if (Math.abs(newBalance) < AMT_EPS || newBalance < -AMT_EPS) {
   todayAr.delete(inv);
@@ -163,12 +201,27 @@ if (Math.abs(newBalance) < AMT_EPS || newBalance < -AMT_EPS) {
 }
 ```
 
-The engine needs to know about short pays BEFORE running Phase 2 so it can keep the invoice on AR. Cleanest approach:
+After this change:
 
-1. **Run `detectTabBankExceptions` BEFORE Phase 2** (move it from Phase 5b to Phase 1b, between cloning yesterday and applying collections).
-2. Build a map `shortPayByInvoice: Map<inv_no, per_invoice_shortage>` from the exceptions.
-3. In Phase 2: when about to delete an invoice because `Math.abs(newBalance) < AMT_EPS`, check `shortPayByInvoice`. If a shortage is recorded for this invoice → **keep it on AR with `balance = shortage`, `paid = amount − shortage`, memo = `Short paid MM/DD/YYYY #checkno`**.
-4. The TAB BANK exceptions still attach to the build return at the end.
+1. **Run `detectTabBankExceptions` BEFORE Phase 2** (move it from Phase 5b to Phase 1b, between cloning yesterday and applying collections). It builds `tbByInvoice` and computes `tbAppliedByInv` as a side-effect that Phase 2 consumes.
+
+2. **Phase 2 prefers TAB BANK collected_amount over QBO Collection amount.** For each invoice in `collectionByInvoice` (which is keyed off QBO Collection):
+
+   ```js
+   const tb = tbAppliedByInv.get(inv);
+   const totalApplied = tb && tb.sum_collected > 0
+     ? tb.sum_collected
+     : lines.reduce((s, l) => s + num(l.amount), 0); // fallback to QBO
+   const checkNo = tb && tb.check_nos.length > 0
+     ? tb.check_nos[0]
+     : lines[0].txn_number;
+   ```
+
+3. The rest of the Phase 2 logic (compute newBalance, drop if ≈ 0, keep with memo if > 0) stays the same. The crucial difference: when QBO posted "full payment" but TAB BANK only collected partial, `totalApplied` reflects the TAB BANK number, `newBalance` ends up > 0, and the invoice stays on AR with the short-pay memo automatically.
+
+4. **Phase 2 also processes invoices that have TAB BANK rows but no QBO Collection lines.** This is the "QBO didn't post but money came in" case — surfaced as `posting_gap_qbo_missing` by the MVP, and now also applied to the AR balance (so the next day's AR reflects the deposit even though QBO is behind). We extend the Phase 2 loop to walk `tbAppliedByInv.keys()` in addition to `collectionByInvoice.keys()`, applying any invoice that has TAB BANK activity but no QBO match.
+
+5. The TAB BANK exceptions still attach to the build return at the end (Phase 5b becomes Phase 5c — same return shape).
 
 ### 4.6 New exception kinds
 
@@ -253,18 +306,20 @@ When this ships, re-run the 06/08/2026 program build against the same inputs Jih
 
 ## 7. Open questions
 
-| # | Question | Why it matters |
+All resolved by user 2026-06-09.
+
+| # | Question | Resolution |
 |---|---|---|
-| Q1 | Is the per-invoice short-pay allocation **flat (equal split)** or **proportional (chargeback per row from TAB BANK)**? | Determines whether we trust TAB BANK's `chargeback_amount` column or compute even split. Jihyun's 06/08 data shows flat — but that may be incidental. |
-| Q2 | When TAB BANK shows a check# applied to **SUSPENSE** with a non-zero `amount`, should the engine ALSO apply that amount to whatever invoice QBO has it on? Or treat the SUSPENSE row as zero-collected until corrected? | Affects how the 5/18 → 6/4 reapplication pattern surfaces. Current spec: ignore SUSPENSE entirely, treat as zero. |
-| Q3 | Should the `Short paid` memo include the per-invoice shortage amount (`Short paid 06/08/2026 #208064 -$105`) or just the check# (`Short paid 06/08/2026 #208064`)? | Jihyun's workbook uses the bare `#checkno` form. Spec defaults to matching her format. |
+| Q1 | Allocation strategy? | **TAB BANK per-row `collected_amount`** — no allocation math, just read the per-row value. Jihyun's workflow: "she takes the amount per invoice". |
+| Q2 | SUSPENSE handling? | **Real money but unknown customer.** Surface each SUSPENSE row as a `tab_bank_suspense_row` exception with full data (check#, amount, fake invoice, desc, pmt_type) so Jihyun can identify and apply manually. Do NOT auto-apply, do NOT include in totals. |
+| Q3 | Memo format? | **Match Jihyun's exact format:** `Short paid MM/DD/YYYY #checkno`. No dollar amount appended. |
 
 ## 8. Risks
 
-- **Even-split allocation is wrong for some real cases.** If a TAB BANK chargeback applies $735 to one specific invoice (not split), even-split gives every invoice the wrong balance. Mitigation: surface `affected_invs` in the EXCEPTIONS sheet so Jihyun can audit; on Q1 resolution, switch to per-row strategy if needed.
-- **Phase 2 engine change touches the most-tested code path.** Existing 99.71% real-world correctness baseline relies on Phase 2's existing arithmetic. Adding the `shortPayByInvoice` lookup is additive (only changes the delete-branch), but any regression here costs real money. Mitigation: keep the existing `Math.abs(newBalance) < AMT_EPS` test, only intercept when shortage is recorded for that specific invoice.
-- **SUSPENSE filter could mask real check#s that Jihyun reconciles by hand.** If a SUSPENSE row's check# is in QBO and the deposit IS real, we'd skip its short-pay check. Mitigation: surface every SUSPENSE check# as `tab_bank_suspense_row` so Jihyun reviews it even when filtered.
-- **Performance.** Adding a third pass over tbIndex × qboIndex is still O(n + m). No risk.
+- **Phase 2 engine change touches the most-tested code path.** Existing 99.71% real-world correctness baseline relies on Phase 2's existing arithmetic. Switching from QBO-only to TAB-BANK-preferred-with-QBO-fallback is the biggest change in this slice. Mitigation: the fallback to QBO when no TAB BANK row exists for an invoice preserves the existing behavior for the ~95% of invoices that have no TAB BANK row this build day. Regression testing on the 6 baseline build days catches drift.
+- **TAB BANK `collected_amount` is wrong for some real cases.** If a TAB BANK row records `collected_amount` differently from how Jihyun reads it (e.g. includes chargeback, or is signed differently), we'd compute the wrong balance. Mitigation: the §6 verification approach explicitly compares the 8 missing-invoice balances against Jihyun's hand-built values. Discrepancy here triggers a switch to using `amount − chargeback_amount` or another formula.
+- **Phase 2 processing TAB-BANK-only invoices is new behavior.** Today's engine only walks `collectionByInvoice`. After this change, Phase 2 also walks `tbAppliedByInv.keys()` to catch invoices that have TAB BANK activity but no QBO post. If a TAB BANK row was misapplied to a fake invoice number (equipment number, etc.), we'd try to apply it to an AR row that doesn't exist — `todayAr.get(inv)` returns undefined and we'd correctly skip. Safe.
+- **Performance.** Adding two indexes (tbByCheck, tbByInvoice) and one extra Phase 2 walk is still O(n + m). No risk.
 
 ## 9. Ship discipline
 
