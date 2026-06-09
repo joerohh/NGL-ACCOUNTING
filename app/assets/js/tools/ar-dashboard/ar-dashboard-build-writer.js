@@ -13,7 +13,8 @@
 //   4. Schedule       — QBO Daily Schedule with report header
 //   5. TMS            — TMS rows the engine settled
 //   6. ADJUSTMENT     — TMS rows whose amount changed (deltas)
-//   7. AR_<yesterday> — yesterday's register, carried forward for diffing
+//   7. EXCEPTIONS     — TAB BANK ↔ QBO mismatches (posting gaps + name mismatch)
+//   8. AR_<yesterday> — yesterday's register, carried forward for diffing
 
 const E = () => {
   const lib = window.ExcelJS;
@@ -54,6 +55,10 @@ const COL_INV_WIDTHS = [19.4, 14.1, 16.9, 37.4, 21.1, 13.4, 11.7, 17.9];
 const SCHEDULE_WIDTHS = [15.7, 11.0, 44.1, 17.0, 31.0, 25.1, 19.3, 14.8, 12.9];
 const TMS_WIDTHS = [8.6, 7.5, 10.7, 24.6, 9.6, 11.8, 15.0, 13.9, 10.7, 12.9, 16.8, 7.5, 24.6, 18.3, 12.9, 10.2, 11.8, 11.4];
 const ADJUSTMENT_WIDTHS = [8.8, 10.6, 12.7, 26.4, 13.4, 10.9, 16.2, 17.1, 9.7, 13.6, 17.9, 11.0, 13.9, 21.3, 19.2, 16.2, 14.4];
+const EXCEPTIONS_HEADERS = [
+  'Kind', 'Check #', 'Amount', 'TAB BANK Customer', 'QBO Customer', 'Detected Issue', 'Notes',
+];
+const EXCEPTIONS_WIDTHS = [28, 12, 12, 28, 28, 60, 30];
 
 // ───────────────────────────────────────────────────────────────────────
 // Style constants
@@ -329,6 +334,44 @@ function buildAdjustmentWorksheet(wb, rows) {
   return ws;
 }
 
+function buildExceptionsWorksheet(wb, exceptions) {
+  const ws = wb.addWorksheet('EXCEPTIONS', { views: [{ state: 'frozen', ySplit: 1 }] });
+  setColWidths(ws, EXCEPTIONS_WIDTHS);
+  const header = ws.addRow(EXCEPTIONS_HEADERS);
+  styleRowAll(header, 17, FONT_BODY_BOLD, ALIGN_CENTER, BORDER_ALL);
+  const kindLabel = (kind) => {
+    switch (kind) {
+      case 'posting_gap_qbo_missing': return 'Bank deposit, no QBO post';
+      case 'posting_gap_tab_missing': return 'QBO post, no bank record';
+      case 'customer_mismatch':       return 'Customer name mismatch';
+      case 'info_all_non_factored':   return 'TAB BANK file all NON-FACTORED';
+      default: return kind;
+    }
+  };
+  for (const e of exceptions) {
+    const row = ws.addRow([
+      kindLabel(e.kind),
+      e.check_no || '',
+      e.amount,
+      e.tab_bank_customer || '',
+      e.qbo_customer || '',
+      e.message || '',
+      '', // Notes — Jihyun fills this in
+    ]);
+    styleRowAll(row, 17, FONT_BODY, ALIGN_CENTER, null);
+    row.getCell(4).alignment = ALIGN_LEFT;  // TAB BANK Customer
+    row.getCell(5).alignment = ALIGN_LEFT;  // QBO Customer
+    row.getCell(6).alignment = ALIGN_LEFT;  // Detected Issue
+    row.getCell(7).alignment = ALIGN_LEFT;  // Notes
+    row.getCell(3).numFmt = NF_MONEY;       // Amount
+  }
+  ws.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(exceptions.length, 0) + 1, column: 7 },
+  };
+  return ws;
+}
+
 // ───────────────────────────────────────────────────────────────────────
 // Public entry — returns a Promise<{bytes, filename, sheets}>
 // ───────────────────────────────────────────────────────────────────────
@@ -349,6 +392,7 @@ export async function arBuildWriteWorkbook(buildResult, buildInputs) {
   buildScheduleWorksheet(wb, buildInputs.qbo_schedule.parsed.rows, targetDate);
   buildTmsWorksheet(wb, buildResult.tms_rows);
   buildAdjustmentWorksheet(wb, buildResult.adjustment_rows);
+  buildExceptionsWorksheet(wb, buildResult.tab_bank_exceptions || []);
   buildArWorksheet(wb, yestSheetName, buildInputs.yesterday.parsed.ar_register);
 
   const arrayBuffer = await wb.xlsx.writeBuffer();
@@ -357,7 +401,7 @@ export async function arBuildWriteWorkbook(buildResult, buildInputs) {
   return {
     bytes,
     filename,
-    sheets: [todaySheetName, 'COL', 'COL (INV)', 'Schedule', 'TMS', 'ADJUSTMENT', yestSheetName],
+    sheets: [todaySheetName, 'COL', 'COL (INV)', 'Schedule', 'TMS', 'ADJUSTMENT', 'EXCEPTIONS', yestSheetName],
   };
 }
 
