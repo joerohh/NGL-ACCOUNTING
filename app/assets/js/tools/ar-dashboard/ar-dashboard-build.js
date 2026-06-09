@@ -114,7 +114,16 @@ export function arBuildToday(inputs) {
     if (row.inv) todayAr.set(row.inv, { ...row });
   }
 
-  // ----- Phase 2 — apply collections (QBO arithmetic only)
+  // ----- Phase 1b — analyze TAB BANK (spec 2026-06-09 short-pay)
+  // We need tbAppliedByInv BEFORE Phase 2 so Phase 2 can prefer TAB BANK
+  // collected_amount over QBO Collection amount.
+  const tabBankAnalysis = tab_bank
+    ? detectTabBankExceptions(tab_bank, qbo_collection, yesterday.ar_register)
+    : { exceptions: [], tbAppliedByInv: new Map(), tbByCheck: new Map(), tbByInvoice: new Map() };
+  const tabBankExceptions = tabBankAnalysis.exceptions;
+  const tbAppliedByInv = tabBankAnalysis.tbAppliedByInv;
+
+  // ----- Phase 2 — apply collections (TAB BANK preferred, QBO fallback)
   const collectionByInvoice = new Map();
   for (const line of qbo_collection.rows) {
     if (line.txn_type !== 'Invoice') continue;
@@ -125,19 +134,48 @@ export function arBuildToday(inputs) {
   }
 
   const todayStr = fmtTodayStr(target_date);
+  const processedInvoices = new Set();
 
+  // Pass 1: walk QBO-keyed invoices; prefer TAB BANK collected_amount when present.
   for (const [inv, lines] of collectionByInvoice) {
     const row = todayAr.get(inv);
     if (!row) continue;
-    let totalApplied = 0;
-    for (const l of lines) totalApplied += num(l.amount);
+    const tb = tbAppliedByInv.get(inv);
+    const totalApplied = (tb && Math.abs(tb.sum_collected) > 0.01)
+      ? tb.sum_collected
+      : lines.reduce((s, l) => s + num(l.amount), 0);
+    const checkNo = (tb && tb.check_nos.length > 0)
+      ? tb.check_nos[0]
+      : lines[0].txn_number;
     const newPaid = num(row.paid) + totalApplied;
     const newBalance = num(row.amount) - newPaid;
+    processedInvoices.add(inv);
     if (Math.abs(newBalance) < AMT_EPS || newBalance < -AMT_EPS) {
       todayAr.delete(inv);
       continue;
     }
-    const checkNo = lines[0].txn_number;
+    row.paid = newPaid;
+    row.balance = newBalance;
+    if (!row.memo) {
+      row.memo = `Short paid ${todayStr} #${checkNo}`;
+    }
+  }
+
+  // Pass 2: walk TAB-BANK-only invoices (have TAB BANK activity but no QBO post).
+  // Without this pass, money the bank actually received but QBO hasn't logged yet
+  // would never reduce the AR balance.
+  for (const [inv, tb] of tbAppliedByInv) {
+    if (processedInvoices.has(inv)) continue;
+    const row = todayAr.get(inv);
+    if (!row) continue;
+    if (Math.abs(tb.sum_collected) < 0.01) continue;
+    const newPaid = num(row.paid) + tb.sum_collected;
+    const newBalance = num(row.amount) - newPaid;
+    const checkNo = tb.check_nos[0] || '';
+    if (Math.abs(newBalance) < AMT_EPS || newBalance < -AMT_EPS) {
+      todayAr.delete(inv);
+      continue;
+    }
     row.paid = newPaid;
     row.balance = newBalance;
     if (!row.memo) {
@@ -216,10 +254,7 @@ export function arBuildToday(inputs) {
     }
   }
 
-  // ----- Phase 5b — TAB BANK exceptions (spec 2026-06-09)
-  const tabBankExceptions = tab_bank
-    ? detectTabBankExceptions(tab_bank, qbo_collection)
-    : [];
+  // ----- Phase 5b — (moved to Phase 1b per spec 2026-06-09 short-pay)
 
   // ----- Phase 6 — package the auxiliary outputs
   // Today's AR as an array, sorted by inv for deterministic ordering
