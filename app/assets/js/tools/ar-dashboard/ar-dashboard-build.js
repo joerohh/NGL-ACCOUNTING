@@ -216,6 +216,11 @@ export function arBuildToday(inputs) {
     }
   }
 
+  // ----- Phase 5b — TAB BANK exceptions (spec 2026-06-09)
+  const tabBankExceptions = tab_bank
+    ? detectTabBankExceptions(tab_bank, qbo_collection)
+    : [];
+
   // ----- Phase 6 — package the auxiliary outputs
   // Today's AR as an array, sorted by inv for deterministic ordering
   const todayArArray = Array.from(todayAr.values());
@@ -226,6 +231,7 @@ export function arBuildToday(inputs) {
     target_date: target_date,
     tms_rows: tmsSheetRows,
     adjustment_rows: adjustmentRows,
+    tab_bank_exceptions: tabBankExceptions,
     new_invs: Array.from(newInvs),
     age_delta: delta,
     // Carry raw inputs so the M2 writer can produce COL / COL (INV) / Schedule sheets
