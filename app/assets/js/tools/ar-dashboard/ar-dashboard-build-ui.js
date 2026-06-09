@@ -1,9 +1,10 @@
-// AR Dashboard — build modal (5-drop input + summary preview + save).
+// AR Dashboard — build flow (5-drop input + summary preview + save).
 //
 // State lives on arState.buildInputs / arState.buildResult (see shared/state.js).
 // Engine + parsers come from ./ar-dashboard-build*.js (M1).
 //
-// Two visible states inside one modal: "drop" → "preview".
+// The drop UI is rendered into a page-level host (arRenderBuildPage) and the
+// preview is rendered into a body-level modal overlay (openPreview).
 
 import { arState } from '../../shared/state.js';
 import {
@@ -18,7 +19,7 @@ import { arBuildToday } from './ar-dashboard-build.js';
 const SAVE_FOLDER_KEY = 'arBuildSaveFolder';
 
 // ---------------------------------------------------------------------------
-// Slot definitions — order = visible row order in the modal
+// Slot definitions — order = visible row order
 // ---------------------------------------------------------------------------
 
 const SLOTS = [
@@ -72,41 +73,58 @@ const SLOTS = [
 
 const SLOT_BY_KEY = Object.fromEntries(SLOTS.map(s => [s.key, s]));
 
+// Page-level renderer host. Set when arRenderBuildPage() is called.
+// null when no page-level build flow is mounted (e.g., the user has loaded
+// a pre-built workbook instead).
+let pageHost = null;
+
 // ---------------------------------------------------------------------------
-// Public entry — open the build modal
+// Public entry — render the build flow into a page host element
 // ---------------------------------------------------------------------------
 
-export function arOpenBuildModal() {
-  arState.buildModalOpen = true;
+export function arRenderBuildPage(view) {
+  pageHost = view;
   arState.buildResult = null;
   arState.buildOpenKpi = null;
-  // Reset inputs but keep buildSaveFolder
   for (const s of SLOTS) arState.buildInputs[s.key] = null;
   arState.buildSaveFolder = arState.buildSaveFolder || localStorage.getItem(SAVE_FOLDER_KEY) || null;
-  render();
+  rerender();
 }
 
-function close() {
-  arState.buildModalOpen = false;
-  const node = document.getElementById('arBuildModal');
-  if (node) node.remove();
+function rerender() {
+  const preview = document.getElementById('arBuildPreview');
+  if (preview) {
+    preview.innerHTML = previewModalHtml();
+    preview.addEventListener('click', onClick);
+    return;
+  }
+  if (pageHost) {
+    pageHost.innerHTML = pageDropHtml();
+    wirePageEvents(pageHost);
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
-
-function render() {
-  let node = document.getElementById('arBuildModal');
-  if (!node) {
-    node = document.createElement('div');
-    node.id = 'arBuildModal';
+function openPreview() {
+  if (!document.getElementById('arBuildPreview')) {
+    const node = document.createElement('div');
+    node.id = 'arBuildPreview';
     node.className = 'ar-build-modal-overlay';
     document.body.appendChild(node);
   }
-  node.innerHTML = arState.buildResult ? renderPreview() : renderDrop();
-  wireEvents(node);
+  rerender();
 }
+
+function closePreview() {
+  const node = document.getElementById('arBuildPreview');
+  if (node) node.remove();
+  arState.buildResult = null;
+  arState.buildOpenKpi = null;
+  rerender();
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function todayFmt() {
   const d = new Date();
@@ -132,88 +150,85 @@ function fmtMoneyShort(n) {
   return (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString();
 }
 
-// ----- Drop state -----
+// ---------------------------------------------------------------------------
+// Page-level drop UI
+// ---------------------------------------------------------------------------
 
-function renderDrop() {
+function pageDropHtml() {
   const readyCount = SLOTS.filter(s => arState.buildInputs[s.key] && arState.buildInputs[s.key].parsed).length;
   const allReady = readyCount === SLOTS.length;
-
-  const rowsHtml = SLOTS.map((slot, idx) => {
-    const input = arState.buildInputs[slot.key];
-    const stepNum = idx + 1;
-    if (input && input.parsed) {
-      return `
-        <div class="ar-drop-row done" data-slot="${slot.key}">
-          <div class="ar-drop-num">✓</div>
-          <div class="ar-drop-body">
-            <div class="ar-drop-title">${escHtml(slot.label)} <span class="ar-drop-hint">${escHtml(slot.hint)}</span></div>
-            <div class="ar-drop-done">Parsed · <span class="filename">${escHtml(input.file.name)}</span> · ${escHtml(slot.doneSummary(input.parsed))}</div>
-          </div>
-          <div class="ar-drop-zone-done">
-            <span class="change-link" data-action="clear" data-slot="${slot.key}">Use a different file</span>
-          </div>
-        </div>`;
-    }
-    if (input && input.error) {
-      return `
-        <div class="ar-drop-row error" data-slot="${slot.key}">
-          <div class="ar-drop-num">!</div>
-          <div class="ar-drop-body">
-            <div class="ar-drop-title">${escHtml(slot.label)} <span class="ar-drop-hint">${escHtml(slot.hint)}</span></div>
-            <div class="ar-drop-error">Couldn't read <span class="filename">${escHtml(input.file.name)}</span> — ${escHtml(input.error)}</div>
-          </div>
-          <div class="ar-drop-zone" data-action="open-picker" data-slot="${slot.key}">
-            <div class="icon">📂</div>
-            <div class="label">Try again</div>
-            <div class="sub">drop or click</div>
-          </div>
-        </div>`;
-    }
-    return `
-      <div class="ar-drop-row" data-slot="${slot.key}">
-        <div class="ar-drop-num">${stepNum}</div>
-        <div class="ar-drop-body">
-          <div class="ar-drop-title">${escHtml(slot.label)} <span class="ar-drop-hint">${escHtml(slot.hint)}</span></div>
-          <p>${escHtml(slot.blurb)}</p>
-        </div>
-        <div class="ar-drop-zone" data-action="open-picker" data-slot="${slot.key}">
-          <div class="icon">📂</div>
-          <div class="label">Drop file</div>
-          <div class="sub">or click to browse</div>
-        </div>
-      </div>`;
-  }).join('');
+  const rowsHtml = SLOTS.map((slot, idx) => slotRowHtml(slot, idx + 1)).join('');
 
   return `
-    <div class="ar-build-modal" role="dialog" aria-modal="true" aria-label="Build today's workbook">
-      <div class="ar-build-header">
-        <h4>Build today's workbook</h4>
-        <span class="date-sub">· ${todayFmt()}</span>
-        <span class="close-x" data-action="close">×</span>
+    <div class="ar-build-page" role="region" aria-label="Build today's workbook">
+      <div class="ar-build-page-intro">
+        Drop the <b>4 daily files</b> from QBO, TAB BANK, and TMS. The engine reconciles them against yesterday's workbook to produce today's AR aging.
       </div>
-      <div class="ar-build-body">
-        <div class="ar-build-intro">
-          Drop the <b>4 daily files</b> from QBO, TAB BANK, and TMS. The engine reconciles them against yesterday's workbook to produce today's AR aging.
-        </div>
-        <div class="ar-drop-list">${rowsHtml}</div>
-        <div class="ar-build-hint">💡 <span><b>Tip:</b> you can drop all 4 files at once — the modal sorts them into the right slot by filename.</span></div>
-      </div>
-      <div class="ar-build-footer">
+      <div class="ar-drop-list">${rowsHtml}</div>
+      <div class="ar-build-hint">💡 <span><b>Tip:</b> you can drop all 4 files at once — the page sorts them into the right slot by filename.</span></div>
+      <div class="ar-build-page-footer">
         <span class="footer-note">
           <span class="progress-pill ${allReady ? 'ready' : ''}">${readyCount} of ${SLOTS.length} ready</span>
           ${allReady ? '· ready to build' : '· drop the rest to enable Build'}
         </span>
-        <button class="ngl-btn ngl-btn-secondary" data-action="close">Cancel</button>
-        <button class="ngl-btn ngl-btn-primary ${allReady ? '' : 'disabled'}" data-action="run-build" ${allReady ? '' : 'disabled'}>Run build</button>
+        <button class="ngl-btn ngl-btn-secondary" data-action="cancel-page">Clear all</button>
+        <button class="ngl-btn ngl-btn-primary ${allReady ? '' : 'disabled'}" data-action="run-build" ${allReady ? '' : 'disabled'}>Run build →</button>
       </div>
       <input type="file" id="arBuildFileInput" accept=".xlsx,.xls" multiple style="display:none" />
     </div>
   `;
 }
 
-// ----- Preview state -----
+function slotRowHtml(slot, stepNum) {
+  const input = arState.buildInputs[slot.key];
+  if (input && input.parsed) {
+    return `
+      <div class="ar-drop-row done" data-slot="${slot.key}">
+        <div class="ar-drop-num">✓</div>
+        <div class="ar-drop-body">
+          <div class="ar-drop-title">${escHtml(slot.label)} <span class="ar-drop-hint">${escHtml(slot.hint)}</span></div>
+          <div class="ar-drop-done">Parsed · <span class="filename">${escHtml(input.file.name)}</span> · ${escHtml(slot.doneSummary(input.parsed))}</div>
+        </div>
+        <div class="ar-drop-zone-done">
+          <span class="change-link" data-action="clear" data-slot="${slot.key}">Use a different file</span>
+        </div>
+      </div>`;
+  }
+  if (input && input.error) {
+    return `
+      <div class="ar-drop-row error" data-slot="${slot.key}">
+        <div class="ar-drop-num">!</div>
+        <div class="ar-drop-body">
+          <div class="ar-drop-title">${escHtml(slot.label)} <span class="ar-drop-hint">${escHtml(slot.hint)}</span></div>
+          <div class="ar-drop-error">Couldn't read <span class="filename">${escHtml(input.file.name)}</span> — ${escHtml(input.error)}</div>
+        </div>
+        <div class="ar-drop-zone" data-action="open-picker" data-slot="${slot.key}">
+          <div class="icon">📂</div>
+          <div class="label">Try again</div>
+          <div class="sub">drop or click</div>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="ar-drop-row" data-slot="${slot.key}">
+      <div class="ar-drop-num">${stepNum}</div>
+      <div class="ar-drop-body">
+        <div class="ar-drop-title">${escHtml(slot.label)} <span class="ar-drop-hint">${escHtml(slot.hint)}</span></div>
+        <p>${escHtml(slot.blurb)}</p>
+      </div>
+      <div class="ar-drop-zone" data-action="open-picker" data-slot="${slot.key}">
+        <div class="icon">📂</div>
+        <div class="label">Drop file</div>
+        <div class="sub">or click to browse</div>
+      </div>
+    </div>`;
+}
 
-function renderPreview() {
+// ---------------------------------------------------------------------------
+// Preview modal
+// ---------------------------------------------------------------------------
+
+function previewModalHtml() {
   const r = arState.buildResult;
   const yestAr = arState.buildInputs.yesterday.parsed.ar_register;
   const todayAr = r.today_ar;
@@ -278,7 +293,7 @@ function renderPreview() {
         <h4>Today's workbook is ready</h4>
         <span class="date-sub">· ${todayFmt()}</span>
         <span class="build-ms">Built in ${(r.__buildMs || 0).toFixed(0)} ms</span>
-        <span class="close-x" data-action="close" style="margin-left:8px">×</span>
+        <span class="close-x" data-action="close-preview" style="margin-left:8px">×</span>
       </div>
       <div class="ar-build-body">
         <div class="ar-headline">
@@ -385,13 +400,13 @@ function rowsTable(headers, rows, totalCount, colClasses = []) {
 // Events
 // ---------------------------------------------------------------------------
 
-function wireEvents(root) {
+function wirePageEvents(root) {
   root.addEventListener('click', onClick);
-  const drop = root.querySelector('.ar-build-modal');
-  if (drop) {
-    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-active'); });
-    drop.addEventListener('dragleave', e => { if (e.target === drop) drop.classList.remove('drag-active'); });
-    drop.addEventListener('drop', onDrop);
+  const dropZone = root.querySelector('.ar-build-page');
+  if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-active'); });
+    dropZone.addEventListener('dragleave', e => { if (e.target === dropZone) dropZone.classList.remove('drag-active'); });
+    dropZone.addEventListener('drop', onDrop);
   }
   const fileInput = root.querySelector('#arBuildFileInput');
   if (fileInput) fileInput.addEventListener('change', onFileInputChange);
@@ -404,11 +419,16 @@ function onClick(e) {
   if (!t) return;
   const action = t.dataset.action;
 
-  if (action === 'close') return close();
+  if (action === 'close-preview') return closePreview();
+  if (action === 'cancel-page') {
+    for (const s of SLOTS) arState.buildInputs[s.key] = null;
+    arState.buildResult = null;
+    return rerender();
+  }
   if (action === 'clear') {
     const slot = t.dataset.slot;
     arState.buildInputs[slot] = null;
-    return render();
+    return rerender();
   }
   if (action === 'open-picker') {
     pickerTargetSlot = t.dataset.slot;
@@ -417,14 +437,12 @@ function onClick(e) {
   }
   if (action === 'run-build') return runBuild();
   if (action === 'back-to-drop') {
-    arState.buildResult = null;
-    arState.buildOpenKpi = null;
-    return render();
+    return closePreview();
   }
   if (action === 'toggle-kpi') {
     const k = t.dataset.kpi;
     arState.buildOpenKpi = arState.buildOpenKpi === k ? null : k;
-    return render();
+    return rerender();
   }
   if (action === 'pick-folder') return pickFolder();
   if (action === 'save') return saveWorkbook();
@@ -477,7 +495,7 @@ async function routeFileToSlot(file, slotKey) {
   } catch (e) {
     arState.buildInputs[slotKey] = { file, buf: null, parsed: null, error: e.message || String(e) };
   }
-  render();
+  rerender();
 }
 
 // ---------------------------------------------------------------------------
@@ -508,7 +526,7 @@ function runBuild() {
   result.__targetDate = targetDate;
   arState.buildResult = result;
   arState.buildOpenKpi = null;
-  render();
+  openPreview();
 }
 
 function inferTargetDate(yesterday) {
@@ -535,7 +553,7 @@ async function pickFolder() {
   if (res && res.path) {
     arState.buildSaveFolder = res.path;
     localStorage.setItem(SAVE_FOLDER_KEY, res.path);
-    render();
+    rerender();
   }
 }
 
@@ -580,7 +598,7 @@ async function saveWorkbook() {
     const file = new File([bytes], filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     if (window.arLoadWorkbook) await window.arLoadWorkbook(file);
   }
-  close();
+  closePreview();
 }
 
 function bytesToBase64(bytes) {
@@ -597,4 +615,4 @@ function bytesToBase64(bytes) {
 // Window hooks
 // ---------------------------------------------------------------------------
 
-window.arOpenBuildModal = arOpenBuildModal;
+window.arRenderBuildPage = arRenderBuildPage;
