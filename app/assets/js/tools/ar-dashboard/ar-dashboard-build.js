@@ -266,22 +266,49 @@ export function arBuildTodayFromBuffers(buffers) {
 // TAB BANK exception detection (spec 2026-06-09)
 // ---------------------------------------------------------------------------
 
-export function detectTabBankExceptions(tab_bank, qbo_collection) {
-  const out = [];
+export function detectTabBankExceptions(tab_bank, qbo_collection, ar_register = null) {
+  const exceptions = [];
+  const tbByCheck = new Map();
+  const tbByInvoice = new Map();
+  const tbAppliedByInv = new Map();
+
   if (!tab_bank || !tab_bank.rows || !qbo_collection || !qbo_collection.rows) {
-    return out;
+    return { exceptions, tbAppliedByInv, tbByCheck, tbByInvoice };
   }
 
-  // ---- Pre-filter TAB BANK rows ----
-  const tbRows = tab_bank.rows.filter(r =>
-    r && r.check != null && r.check !== '' && r.desc !== 'NON-FACTORED'
-  );
-  const nonFactoredCount = tab_bank.rows.filter(r => r && r.desc === 'NON-FACTORED').length;
+  // ---- Partition TAB BANK rows: real | suspense | non-factored ----
+  const tbRows = [];
+  const suspenseRows = [];
+  let nonFactoredCount = 0;
+  for (const r of tab_bank.rows) {
+    if (!r || r.check == null || r.check === '') continue;
+    const debtor = (r.debtor_name || '').toString().trim().toUpperCase();
+    if (r.desc === 'NON-FACTORED') { nonFactoredCount++; continue; }
+    if (debtor === 'SUSPENSE') { suspenseRows.push(r); continue; }
+    tbRows.push(r);
+  }
 
-  // ---- Build indexes keyed by check# (stringified for safe Map keys) ----
-  const tbIndex = new Map();
-  for (const r of tbRows) tbIndex.set(String(r.check), r);
+  // ---- Build indexes from real (non-SUSPENSE, non-NON-FACTORED) rows ----
+  for (const r of tbRows) {
+    const ckey = String(r.check);
+    if (!tbByCheck.has(ckey)) tbByCheck.set(ckey, []);
+    tbByCheck.get(ckey).push(r);
 
+    if (r.invoice != null && r.invoice !== '') {
+      const ikey = String(r.invoice).trim();
+      if (!tbByInvoice.has(ikey)) tbByInvoice.set(ikey, []);
+      tbByInvoice.get(ikey).push(r);
+    }
+  }
+
+  // ---- Build tbAppliedByInv (sum collected_amount per invoice) ----
+  for (const [inv, rows] of tbByInvoice) {
+    const sum_collected = rows.reduce((s, r) => s + num(r.collected_amount), 0);
+    const check_nos = [...new Set(rows.map(r => r.check).filter(v => v != null && v !== '').map(String))];
+    tbAppliedByInv.set(inv, { sum_collected, check_nos, rows });
+  }
+
+  // ---- QBO Collection index ----
   const qboIndex = new Map();
   for (const line of qbo_collection.rows) {
     if (!line || line.txn_type !== 'Invoice') continue;
@@ -292,44 +319,42 @@ export function detectTabBankExceptions(tab_bank, qbo_collection) {
   }
 
   // ---- All-NON-FACTORED guardrail (spec §8 risk mitigation) ----
-  // Only triggers when there's actual false-positive risk: TAB BANK had only
-  // NON-FACTORED rows AND QBO has Invoice payments that would otherwise be
-  // wrongly flagged as posting_gap_tab_missing.
-  if (tbIndex.size === 0 && nonFactoredCount > 0 && qboIndex.size > 0) {
-    out.push({
+  if (tbByCheck.size === 0 && nonFactoredCount > 0 && qboIndex.size > 0) {
+    exceptions.push({
       kind: 'info_all_non_factored',
       check_no: '',
       message: 'TAB BANK file appears to contain only NON-FACTORED rows — gap detection skipped',
       amount: null,
-      tab_bank_row: null,
-      qbo_row: null,
-      tab_bank_customer: null,
-      qbo_customer: null,
+      tab_bank_row: null, qbo_row: null,
+      tab_bank_customer: null, qbo_customer: null,
     });
-    return out;
+    return { exceptions, tbAppliedByInv, tbByCheck, tbByInvoice };
   }
 
-  // ---- Posting gap: TAB BANK has check# but QBO does not ----
-  for (const [checkNo, tbRow] of tbIndex) {
+  // ---- Posting gap: TAB BANK has check# but QBO does not (sum collected_amount) ----
+  for (const [checkNo, rows] of tbByCheck) {
     if (qboIndex.has(checkNo)) continue;
-    out.push({
+    const totalCollected = rows.reduce((s, r) => s + num(r.collected_amount), 0);
+    if (Math.abs(totalCollected) < 0.01) continue; // net-zero, no real gap
+    const firstRow = rows[0];
+    exceptions.push({
       kind: 'posting_gap_qbo_missing',
       check_no: checkNo,
-      message: `Bank received $${num(tbRow.amount).toFixed(2)} on check# ${checkNo} from ${tbRow.debtor_name || '(no customer)'} but no QBO payment recorded`,
-      amount: num(tbRow.amount),
-      tab_bank_row: tbRow,
+      message: `Bank received $${totalCollected.toFixed(2)} on check# ${checkNo} from ${firstRow.debtor_name || '(no customer)'} but no QBO payment recorded`,
+      amount: totalCollected,
+      tab_bank_row: firstRow,
       qbo_row: null,
-      tab_bank_customer: tbRow.debtor_name || null,
+      tab_bank_customer: firstRow.debtor_name || null,
       qbo_customer: null,
     });
   }
 
   // ---- Posting gap: QBO has check# but TAB BANK does not ----
   for (const [checkNo, qboLines] of qboIndex) {
-    if (tbIndex.has(checkNo)) continue;
+    if (tbByCheck.has(checkNo)) continue;
     const firstLine = qboLines[0];
     const total = qboLines.reduce((s, l) => s + num(l.amount), 0);
-    out.push({
+    exceptions.push({
       kind: 'posting_gap_tab_missing',
       check_no: checkNo,
       message: `QBO has a $${total.toFixed(2)} payment on check# ${checkNo} but TAB BANK has no record`,
@@ -342,20 +367,21 @@ export function detectTabBankExceptions(tab_bank, qbo_collection) {
   }
 
   // ---- Customer name mismatch: check# in both, names differ after normalization ----
-  for (const [checkNo, tbRow] of tbIndex) {
+  for (const [checkNo, tbRowsForCheck] of tbByCheck) {
     const qboLines = qboIndex.get(checkNo);
     if (!qboLines || qboLines.length === 0) continue;
-    const tbName = tbRow.debtor_name || '';
+    const tbName = (tbRowsForCheck.find(r => r.debtor_name) || {}).debtor_name || '';
     const qboName = qboLines[0].customer || '';
     const nTb = normalizeCustomerName(tbName);
     const nQbo = normalizeCustomerName(qboName);
     if (nTb && nQbo && nTb !== nQbo) {
-      out.push({
+      const totalCollected = tbRowsForCheck.reduce((s, r) => s + num(r.collected_amount), 0);
+      exceptions.push({
         kind: 'customer_mismatch',
         check_no: checkNo,
         message: `Check# ${checkNo} — TAB BANK says ${tbName}, QBO says ${qboName}`,
-        amount: num(tbRow.amount),
-        tab_bank_row: tbRow,
+        amount: totalCollected,
+        tab_bank_row: tbRowsForCheck[0],
         qbo_row: qboLines[0],
         tab_bank_customer: tbName,
         qbo_customer: qboName,
@@ -363,16 +389,79 @@ export function detectTabBankExceptions(tab_bank, qbo_collection) {
     }
   }
 
-  // ---- Sort: qbo_missing → tab_missing → customer_mismatch (most urgent first) ----
-  const kindOrder = {
-    info_all_non_factored: -1,
-    posting_gap_qbo_missing: 0,
-    posting_gap_tab_missing: 1,
-    customer_mismatch: 2,
-  };
-  out.sort((a, b) => (kindOrder[a.kind] ?? 99) - (kindOrder[b.kind] ?? 99));
+  // ---- Per-invoice short_pay / overpay (requires ar_register) ----
+  if (ar_register) {
+    for (const arRow of ar_register) {
+      if (!arRow || !arRow.inv) continue;
+      const inv = String(arRow.inv).trim();
+      const tb = tbAppliedByInv.get(inv);
+      if (!tb || Math.abs(tb.sum_collected) < 0.01) continue;
+      const owed = num(arRow.amount) - num(arRow.paid);
+      const collected = tb.sum_collected;
+      const diff = owed - collected; // positive = short; negative = over
+      if (diff > 0.01) {
+        exceptions.push({
+          kind: 'short_pay',
+          check_no: tb.check_nos.join(', '),
+          message: `${inv} short-paid by $${diff.toFixed(2)} — TAB BANK applied $${collected.toFixed(2)}, balance owed $${owed.toFixed(2)}`,
+          amount: diff,
+          shortage: diff,
+          tb_collected: collected,
+          ar_balance_owed: owed,
+          affected_invs: [inv],
+          tab_bank_row: tb.rows[0],
+          qbo_row: null,
+          tab_bank_customer: tb.rows[0].debtor_name || null,
+          qbo_customer: arRow.company || null,
+        });
+      } else if (diff < -0.01) {
+        exceptions.push({
+          kind: 'overpay',
+          check_no: tb.check_nos.join(', '),
+          message: `${inv} OVERPAID by $${(-diff).toFixed(2)} — TAB BANK applied $${collected.toFixed(2)}, balance owed $${owed.toFixed(2)}`,
+          amount: -diff,
+          overage: -diff,
+          tb_collected: collected,
+          ar_balance_owed: owed,
+          affected_invs: [inv],
+          tab_bank_row: tb.rows[0],
+          qbo_row: null,
+          tab_bank_customer: tb.rows[0].debtor_name || null,
+          qbo_customer: arRow.company || null,
+        });
+      }
+    }
+  }
 
-  return out;
+  // ---- SUSPENSE row exceptions (one per row) ----
+  for (const r of suspenseRows) {
+    exceptions.push({
+      kind: 'tab_bank_suspense_row',
+      check_no: String(r.check || ''),
+      message: `Check# ${r.check} for $${num(r.amount).toFixed(2)} marked SUSPENSE in TAB BANK — customer not identified by bank. Investigate which customer/invoice this belongs to.`,
+      amount: num(r.amount),
+      tb_collected: num(r.collected_amount),
+      affected_invs: r.invoice ? [String(r.invoice)] : [],
+      tab_bank_row: r,
+      qbo_row: null,
+      tab_bank_customer: 'SUSPENSE',
+      qbo_customer: null,
+    });
+  }
+
+  // ---- Sort: short_pay > overpay > qbo_missing > tab_missing > suspense > customer_mismatch > info ----
+  const kindOrder = {
+    short_pay: 0,
+    overpay: 1,
+    posting_gap_qbo_missing: 2,
+    posting_gap_tab_missing: 3,
+    tab_bank_suspense_row: 4,
+    customer_mismatch: 5,
+    info_all_non_factored: 6,
+  };
+  exceptions.sort((a, b) => (kindOrder[a.kind] ?? 99) - (kindOrder[b.kind] ?? 99));
+
+  return { exceptions, tbAppliedByInv, tbByCheck, tbByInvoice };
 }
 
 // Browser console hook
