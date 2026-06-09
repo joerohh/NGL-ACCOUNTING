@@ -4084,3 +4084,82 @@ th.sortable.sort-active .sort-arrow {
 .ar-dp-table .neg { color: #b91c1c; font-weight: 700; }
 .ar-dp-table .more-row { text-align: center; color: #94a3b8; font-style: italic; padding: 8px 10px; }
 
+
+/* =========================================================================
+   AR Dashboard — Empty state (build flow primary, pre-built secondary)
+   ========================================================================= */
+
+.ar-empty-shell {
+  max-width: 760px; margin: 0 auto; padding: 24px 20px 40px;
+  font-family: 'Segoe UI', -apple-system, sans-serif; color: #1e293b;
+}
+.ar-empty-header { text-align: center; margin-bottom: 18px; }
+.ar-empty-header h1 {
+  font-size: 1.45rem; font-weight: 800; color: #0f172a; margin: 0 0 4px;
+}
+.ar-empty-header .subtitle {
+  font-size: 0.86rem; color: #475569; line-height: 1.5; margin: 0 0 6px;
+}
+.ar-empty-header .date-line {
+  font-size: 0.74rem; color: #94a3b8; font-weight: 600; margin: 0;
+}
+
+/* The build host — the 5-slot drop UI lives inside here */
+.ar-build-page {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 16px 18px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.ar-build-page.drag-active {
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.35), 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-color: #ea580c;
+}
+.ar-build-page-intro {
+  font-size: 0.8rem; color: #475569; padding: 0 0 12px; line-height: 1.5;
+}
+.ar-build-page-intro b { color: #0f172a; }
+.ar-build-page-footer {
+  padding: 12px 0 0; margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  display: flex; gap: 10px; align-items: center;
+}
+.ar-build-page-footer .footer-note {
+  font-size: 0.74rem; color: #64748b; margin-right: auto;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* "or" divider between primary build flow and secondary drop zone */
+.ar-empty-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 22px 0 18px; color: #94a3b8;
+  font-size: 0.74rem; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 700;
+}
+.ar-empty-divider::before,
+.ar-empty-divider::after {
+  content: ''; flex: 1; height: 1px; background: #e2e8f0;
+}
+
+/* Secondary pre-built drop zone */
+.ar-empty-secondary { text-align: center; }
+.ar-empty-secondary h2 {
+  font-size: 0.86rem; font-weight: 700; color: #475569;
+  margin: 0 0 8px;
+}
+.ar-secondary-drop {
+  background: #fff; border: 1px dashed #cbd5e1; border-radius: 10px;
+  padding: 18px 16px; cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.ar-secondary-drop:hover,
+.ar-secondary-drop.drop-hover {
+  border-color: #ea580c; background: #fff7ed;
+}
+.ar-secondary-drop .drop-icon {
+  font-size: 1.4rem; color: #94a3b8; margin-bottom: 4px;
+}
+.ar-secondary-drop .drop-title {
+  font-size: 0.86rem; font-weight: 700; color: #0f172a;
+}
+.ar-secondary-drop .drop-help {
+  font-size: 0.74rem; color: #64748b; margin-top: 2px;
+}
