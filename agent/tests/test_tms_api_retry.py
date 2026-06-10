@@ -24,7 +24,7 @@ async def test_get_work_order_retries_three_times_on_connect_error():
         raise httpx.ConnectError("simulated DNS blip")
 
     with patch.object(httpx.AsyncClient, "get", new=mock_get):
-        with patch("asyncio.sleep", new=AsyncMock()):
+        with patch("services.tms_api.asyncio.sleep", new=AsyncMock()):
             result = await client.get_work_order("LM2605280007")
 
     assert result is None
