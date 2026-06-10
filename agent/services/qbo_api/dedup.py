@@ -12,7 +12,17 @@ Pure: no I/O, no logging. Caller is responsible for logging the outcome.
 
 
 def dedupe_attachments(attachments: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Return (kept, skipped).
+    """DISABLED from standard email send (2026-06-10). Still used by warehouse path.
+
+    See docs/superpowers/specs/2026-06-10-tms-direct-email-design.md.
+
+    Originally used by send_qbo_api._send_qbo_api to drop TMS-008 duplicate
+    Attachable records before email. Standard email no longer reads QBO
+    attachments at all (TMS-direct), so the workaround is moot for that path.
+
+    ---
+
+    Return (kept, skipped).
 
     Two attachments are duplicates if (filename.lower().strip(), size) match.
     Tie-breaker: keep the attachment with the highest int(id) — QBO IDs are

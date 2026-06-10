@@ -23,6 +23,18 @@ _TRANSIENT_NETWORK_ERRORS = (
 _DOWNLOAD_RETRY_ATTEMPTS = 3
 _DOWNLOAD_RETRY_BACKOFF_SECONDS = (1.0, 3.0)  # before attempts 2 and 3
 
+# DISABLED from standard email send (2026-06-10). Preserved for warehouse path
+# and the dead-code cascade in send_qbo_api._tms_fetch_and_upload_missing_docs.
+# See docs/superpowers/specs/2026-06-10-tms-direct-email-design.md.
+#
+# Known inconsistency: "pod" patterns are forgiving (match anywhere `_pod`
+# appears, including TMS-style `_pod_<ms-timestamp>.pdf`), but "do" / "invoice"
+# patterns require a literal period (`_do\.`, `_it\.`). TMS-generated filenames
+# never match the period rule, so DO and IT classify as "other". This is why
+# the cascade dedup skip-list misses TMS-style files and would create duplicate
+# uploads — masked on 2026-06-08 only because the upload was also failing
+# silently. Fix BEFORE re-enabling the cascade.
+#
 # Filename patterns for document classification
 DOC_PATTERNS = {
     "pod": [r"_pod", r"proof.of.delivery", r"pod\b"],

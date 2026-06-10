@@ -52,7 +52,22 @@ class SendQBOApiMixin:
         self, job, invoice, api, invoice_id, verification, temp_dir,
         invoice_data: dict, existing_attachments: list[dict],
     ) -> list[str]:
-        """Fetch every TMS document for the WO; upload to QBO any not already attached.
+        """DISABLED from standard email send (2026-06-10). Preserved as dead code.
+
+        See docs/superpowers/specs/2026-06-10-tms-direct-email-design.md for context.
+
+        To re-enable: (1) fix DOC_PATTERNS in attachments.py so DO/IT/ITE recognize
+        TMS-style `_<type>_<ms-timestamp>.pdf` filenames; (2) add retry to
+        upload_attachment in attachments.py mirroring download_document's policy;
+        (3) persist cascade failures to the audit_log row (new column or status).
+
+        Replaced by direct TMS→email attachment in _send_qbo_api after a silent
+        upload failure on PROMAR01 LM26060242F emailed the invoice without a POD
+        on 2026-06-08.
+
+        ---
+
+        Fetch every TMS document for the WO; upload to QBO any not already attached.
 
         TMS is the source of truth for supporting documents. QBO holds only the
         invoice PDF. We compute the dedupe set up front (existing QBO docTypes +
@@ -196,6 +211,16 @@ class SendQBOApiMixin:
                 "invoiceNumber": invoice.invoice_number,
                 "note": verification["amount_note"],
             })
+
+        # OEC fork: invoice email carries the invoice PDF ONLY. The POD already
+        # went out in the preceding D/O email (see send_oec.py). Skip TMS fetch,
+        # CC the D/O sender, and reconcile status with the D/O leg's pod_status.
+        is_oec = customer.get("sendMethod") == "qbo_invoice_only_then_pod_email"
+        if is_oec:
+            await self._send_qbo_api_oec(job, invoice, customer, result, index,
+                                         api, invoice_data, invoice_id, verification,
+                                         customer_emails)
+            return
 
         # Step 3: Fetch every TMS doc with a file_url. TMS is the source of truth
         # for supporting docs in the new flow — we never upload to QBO from here.
@@ -401,3 +426,145 @@ class SendQBOApiMixin:
             })
 
         self._cleanup_temp(temp_dir)
+
+    async def _send_qbo_api_oec(self, job, invoice, customer: dict, result, index: int,
+                                 api, invoice_data: dict, invoice_id: str,
+                                 verification: dict, customer_emails: list[str]) -> None:
+        """OEC invoice-email leg: invoice PDF only, CC D/O sender, status reconciles with pod_status.
+
+        The D/O email (carrying the POD) has already run in send_oec.py before this method is
+        reached. This method sends the QBO invoice email with just the invoice PDF attached.
+        """
+        container = verification.get("found_container") or invoice.container_number or ""
+        subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
+        to_emails = customer_emails
+        cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
+        added = validate_and_append_email(
+            cc_emails, invoice.do_sender_email, label="D/O SENDER (invoice email)"
+        )
+        await self._emit_send(job, "oec_invoice_cc_built", {
+            "invoiceNumber": invoice.invoice_number,
+            "ccEmails": cc_emails,
+            "doSenderEmail": invoice.do_sender_email or "",
+            "doSenderIncluded": added,
+        })
+        bcc_emails = normalize_email_list(customer.get("bccEmails", []))
+
+        result.to_emails = to_emails
+        result.cc_emails = cc_emails
+        result.bcc_emails = bcc_emails
+        result.subject = subject
+        result.attachments_emailed = ["invoice"]
+
+        await self._emit_send(job, "filling_send_form", {
+            "invoiceNumber": invoice.invoice_number,
+            "toEmails": to_emails,
+            "subject": subject,
+        })
+
+        if job.test_mode:
+            approved = await self._wait_for_approval(
+                job, invoice, result, index,
+                to_emails, cc_emails, bcc_emails, subject,
+                attachments_display=["invoice"],
+            )
+            if not approved:
+                return
+
+        await self._emit_send(job, "downloading_attachments", {
+            "invoiceNumber": invoice.invoice_number,
+            "count": 1,
+        })
+
+        invoice_pdf = await api.download_invoice_pdf(invoice_id)
+        if not invoice_pdf:
+            result.status = "error"
+            result.error = "Failed to download invoice PDF from QBO"
+            await self._emit_send(job, "invoice_error", {
+                "invoiceNumber": invoice.invoice_number,
+                "error": result.error,
+            })
+            return
+
+        email_attachments = [{
+            "filename": f"{invoice.invoice_number}.pdf",
+            "data": invoice_pdf,
+        }]
+
+        await self._emit_send(job, "sending_invoice", {
+            "invoiceNumber": invoice.invoice_number,
+            "method": "gmail",
+        })
+
+        if not self._email_sender:
+            result.status = "error"
+            result.error = "Gmail email sender not configured"
+            await self._emit_send(job, "invoice_error", {
+                "invoiceNumber": invoice.invoice_number,
+                "error": result.error,
+            })
+            return
+
+        customer_name = invoice_data.get("CustomerRef", {}).get("name", "")
+        if "] " in customer_name:
+            customer_name = customer_name.split("] ", 1)[1]
+
+        ngl_ref = ""
+        customer_ref = ""
+        for field in invoice_data.get("CustomField", []):
+            name = field.get("Name", "").upper()
+            val = field.get("StringValue", "")
+            if "REF" in name and "/" in val:
+                parts = val.split("/", 1)
+                if not ngl_ref:
+                    ngl_ref = parts[0].strip()
+                customer_ref = parts[1].strip() if len(parts) > 1 else ""
+                break
+
+        due_date = invoice_data.get("DueDate", "")
+        amount = str(invoice_data.get("TotalAmt", ""))
+        invoice_link = await api.get_invoice_link(invoice_id)
+
+        body = build_invoice_email_html(
+            invoice_number=invoice.invoice_number,
+            container=container,
+            customer_name=customer_name,
+            amount=amount,
+            due_date=due_date,
+            ngl_ref=ngl_ref,
+            customer_ref=customer_ref,
+            invoice_link=invoice_link,
+            resend_notice=RESEND_NOTICE,
+        )
+
+        send_result = await self._email_sender.send_invoice_email(
+            to=to_emails,
+            cc=cc_emails,
+            bcc=bcc_emails,
+            subject=subject,
+            body=body,
+            attachments=email_attachments,
+        )
+
+        if send_result.get("sent"):
+            if result.pod_status in ("failed", "skipped"):
+                result.status = "sent_no_pod"
+            else:
+                result.status = "sent"
+                result.error = None
+            await self._emit_send(job, "invoice_sent", {
+                "invoiceNumber": invoice.invoice_number,
+                "containerNumber": container,
+                "toEmails": to_emails,
+                "subject": subject,
+                "method": "gmail",
+                "attachmentCount": 1,
+                "podStatus": result.pod_status or "",
+            })
+        else:
+            result.status = "error"
+            result.error = send_result.get("error", "Gmail send failed")
+            await self._emit_send(job, "invoice_error", {
+                "invoiceNumber": invoice.invoice_number,
+                "error": result.error,
+            })

@@ -16,8 +16,15 @@ function isErrored(row) {
   return row.sendStatus === 'error';
 }
 
+// 2026-06-10: new statuses surfaced by the TMS-direct send flow.
+// Both indicate the send was held (no email went out) and the row should
+// be retried once the upstream condition clears.
+function isNeedsRetry(row) {
+  return row.sendStatus === 'tms_unreachable' || row.sendStatus === 'pod_missing';
+}
+
 function isFailed(row) {
-  return isMissingDocs(row) || isErrored(row);
+  return isMissingDocs(row) || isErrored(row) || isNeedsRetry(row);
 }
 
 function badgeFor(row) {
@@ -36,6 +43,12 @@ function badgeFor(row) {
       return { cls: 'api-error', text: '⚡ QBO Error' };
     }
     return { cls: 'missing-doc', text: '⚠ Error' };
+  }
+  if (row.sendStatus === 'tms_unreachable') {
+    return { cls: 'api-error', text: '⚡ TMS unreachable — retry when connection returns' };
+  }
+  if (row.sendStatus === 'pod_missing') {
+    return { cls: 'missing-doc', text: '⚠ POD not yet on TMS — retry after checkpoint clears' };
   }
   return { cls: 'skipped', text: row.sendStatus || 'Pending' };
 }
@@ -193,6 +206,8 @@ function renderRow(r) {
       action = `<button class="v62-action-btn qbo" data-action="open-qbo" data-invoice="${escHtml(r.invoiceNumber)}">Open in QuickBooks</button>`;
     } else if (isErrored(r) && !isMissingDocs(r)) {
       action = `<button class="v62-action-btn retry" data-invoice="${escHtml(r.invoiceNumber)}">↻ Retry</button>`;
+    } else if (isNeedsRetry(r)) {
+      action = `<button class="v62-action-btn retry" data-invoice="${escHtml(r.invoiceNumber)}">↻ Retry</button>`;
     } else {
       action = `<button class="v62-action-btn attach" data-invoice="${escHtml(r.invoiceNumber)}">📎 Attach &amp; Retry</button>`;
     }
@@ -295,6 +310,37 @@ function buildDiagnostic(row) {
       ],
       nextStep: `<strong>What to do:</strong> Check the error details above. If it looks transient, hit Retry.`,
       missingSlots: [],
+    };
+  }
+
+  // 2026-06-10: TMS-direct flow held-send statuses.
+  if (row.sendStatus === 'tms_unreachable') {
+    return {
+      cls: 'v62-error-box warn',
+      title: 'TMS was unreachable',
+      explanation: `We tried 3 times to pull this invoice's supporting docs from TMS but couldn't get through. The invoice was held — no email went out. This is almost always temporary.`,
+      checks: [
+        { status: 'ok', text: 'Found invoice in QuickBooks' },
+        { status: 'ok', text: `Verified container number matches (${row.containerNumber || '—'})` },
+        { status: 'fail', text: 'TMS unreachable after 3 retries' },
+      ],
+      nextStep: `<strong>What to do:</strong> Wait a minute, then hit Retry. If it keeps failing, check whether TMS is up.`,
+      missingSlots: [],
+    };
+  }
+  if (row.sendStatus === 'pod_missing') {
+    return {
+      cls: 'v62-error-box warn',
+      title: 'POD not yet on TMS',
+      explanation: `This customer requires a POD before the invoice goes out. TMS doesn't have one for this work order yet — usually that means the load is still at a checkpoint or hasn't been signed for. The invoice was held so the customer doesn't get an incomplete email.`,
+      checks: [
+        { status: 'ok', text: 'Found invoice in QuickBooks' },
+        { status: 'ok', text: `Verified container number matches (${row.containerNumber || '—'})` },
+        { status: 'ok', text: 'Connected to TMS work order' },
+        { status: 'fail', text: 'No POD attached on the TMS work order' },
+      ],
+      nextStep: `<strong>What to do:</strong> Wait until the POD lands on TMS (usually after the load clears the checkpoint), then hit Retry.`,
+      missingSlots: ['POD'],
     };
   }
   return null;
