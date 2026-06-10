@@ -307,9 +307,9 @@ async def run_all_documents_with_reason(
 
     results = await asyncio.gather(*(_download_one(d, u) for d, u in work))
     for doc_type, path, err in results:
-        if path:
-            paths[doc_type] = path
-        elif err:
+        if err:
             per_doc_errors[doc_type] = err
+        elif path:
+            paths[doc_type] = path
 
     return paths, per_doc_errors, "ok"
