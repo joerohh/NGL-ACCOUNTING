@@ -119,7 +119,7 @@ class SendWarehouseMixin:
                 [f"invoice_{invoice.invoice_number}.pdf"]
                 + [a["fileName"] for a in successes]
             )
-            result.attachments_found = attachments_display
+            result.attachments_emailed = attachments_display
 
             # Test mode: pause for user approval before sending. Re-uses the
             # exact same hook used by send_qbo_api / send_oec so the existing

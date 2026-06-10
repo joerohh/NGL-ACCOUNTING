@@ -199,7 +199,7 @@ class SendQBOApiMixin:
         })
 
         att_check = await api.check_attachments(invoice_id, required_docs)
-        result.attachments_found = att_check.get("found", [])
+        result.attachments_emailed = att_check.get("found", [])
         result.attachments_missing = att_check.get("missing", [])
         # WORKAROUND(TMS-008): see docs/tms-workarounds.md — drop duplicate Attachable records before email
         all_attachments = await self._dedup_and_emit(
@@ -212,7 +212,7 @@ class SendQBOApiMixin:
         temp_dir = None
 
         logger.info("Attachment check for %s: found=%s, missing=%s, tms_available=%s",
-                     invoice.invoice_number, result.attachments_found,
+                     invoice.invoice_number, result.attachments_emailed,
                      result.attachments_missing, bool(self._tms_data))
         for a in all_attachments:
             logger.info("  -> '%s' classified as '%s'", a.get("fileName"), a.get("docType"))
@@ -229,7 +229,7 @@ class SendQBOApiMixin:
                 )
                 if uploaded:
                     att_check = await api.check_attachments(invoice_id, required_docs)
-                    result.attachments_found = att_check.get("found", [])
+                    result.attachments_emailed = att_check.get("found", [])
                     result.attachments_missing = att_check.get("missing", [])
                     all_attachments = await self._dedup_and_emit(
                         job, invoice.invoice_number, att_check.get("attachments", []),
@@ -266,7 +266,7 @@ class SendQBOApiMixin:
             result.error = f"Missing required docs: {', '.join(result.attachments_missing)}"
             await self._emit_send(job, "invoice_missing_docs", {
                 "invoiceNumber": invoice.invoice_number,
-                "found": result.attachments_found,
+                "found": result.attachments_emailed,
                 "missing": result.attachments_missing,
             })
             self._cleanup_temp(temp_dir)
@@ -308,7 +308,7 @@ class SendQBOApiMixin:
             # For OEC, the email will attach only the invoice PDF (POD/D-O doc
             # goes out separately). Show that accurately in the approval preview
             # instead of the QBO attachment list which would mislead the user.
-            attachments_display = ["invoice"] if is_oec else result.attachments_found
+            attachments_display = ["invoice"] if is_oec else result.attachments_emailed
             approved = await self._wait_for_approval(
                 job, invoice, result, index,
                 to_emails, cc_emails, bcc_emails, subject,

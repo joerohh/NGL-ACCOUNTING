@@ -97,12 +97,12 @@ class SendResult:
         self.invoice_number = invoice_number
         self.container_number = container_number
         self.customer_code = customer_code
-        self.status: str = "pending"  # sent, skipped, skipped_no_attachments, error, mismatch, missing_docs
+        self.status: str = "pending"  # sent, skipped, skipped_no_attachments, error, mismatch, missing_docs, tms_unreachable, pod_missing
         self.to_emails: list[str] = []
         self.cc_emails: list[str] = []
         self.bcc_emails: list[str] = []
         self.subject: str = ""
-        self.attachments_found: list[str] = []
+        self.attachments_emailed: list[str] = []
         self.attachments_missing: list[str] = []
         self.error: Optional[str] = None
         self.timestamp: str = ""
@@ -128,7 +128,7 @@ class SendResult:
             "ccEmails": self.cc_emails,
             "bccEmails": self.bcc_emails,
             "subject": self.subject,
-            "attachmentsFound": self.attachments_found,
+            "attachmentsEmailed": self.attachments_emailed,
             "attachmentsMissing": self.attachments_missing,
             "error": self.error,
             "timestamp": self.timestamp,

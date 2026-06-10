@@ -396,12 +396,12 @@ class SendJobMixin:
         """Wait for user approval in test mode. Returns True if approved, False if skipped.
 
         ``attachments_display`` lets the caller override what the approval-prompt
-        UI shows under "Attachments". Defaults to ``result.attachments_found``
+        UI shows under "Attachments". Defaults to ``result.attachments_emailed``
         (everything QBO has). For OEC, caller passes ['invoice'] since only the
         invoice PDF will actually be attached.
         """
         if attachments_display is None:
-            attachments_display = result.attachments_found
+            attachments_display = result.attachments_emailed
 
         job._approval_event = asyncio.Event()
         job._approval_decision = None
