@@ -36,14 +36,14 @@ async def export_audit():
     fieldnames = [
         "timestamp", "invoiceNumber", "containerNumber", "customerCode",
         "status", "toEmails", "ccEmails", "subject",
-        "attachmentsFound", "attachmentsMissing", "error",
+        "attachmentsEmailed", "attachmentsMissing", "error",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
 
     for entry in entries:
         row = dict(entry)
-        for key in ("toEmails", "ccEmails", "attachmentsFound", "attachmentsMissing"):
+        for key in ("toEmails", "ccEmails", "attachmentsEmailed", "attachmentsMissing"):
             if isinstance(row.get(key), list):
                 row[key] = ", ".join(row[key])
         writer.writerow(row)

@@ -71,7 +71,7 @@ def init_db() -> None:
             cc_emails TEXT NOT NULL DEFAULT '[]',
             bcc_emails TEXT NOT NULL DEFAULT '[]',
             subject TEXT NOT NULL DEFAULT '',
-            attachments_found TEXT NOT NULL DEFAULT '[]',
+            attachments_emailed TEXT NOT NULL DEFAULT '[]',
             attachments_missing TEXT NOT NULL DEFAULT '[]',
             error TEXT,
             job_id TEXT,
@@ -528,7 +528,7 @@ def _insert_audit_entry(conn: sqlite3.Connection, entry: dict, commit: bool = Tr
         INSERT INTO audit_log
         (timestamp, invoice_number, container_number, customer_code,
          status, to_emails, cc_emails, bcc_emails, subject,
-         attachments_found, attachments_missing, error,
+         attachments_emailed, attachments_missing, error,
          do_sender_email, do_sender_source, username)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
@@ -541,7 +541,7 @@ def _insert_audit_entry(conn: sqlite3.Connection, entry: dict, commit: bool = Tr
         json.dumps(entry.get("ccEmails", [])),
         json.dumps(entry.get("bccEmails", [])),
         entry.get("subject", ""),
-        json.dumps(entry.get("attachmentsFound", [])),
+        json.dumps(entry.get("attachmentsEmailed", [])),
         json.dumps(entry.get("attachmentsMissing", [])),
         entry.get("error"),
         entry.get("doSenderEmail", ""),
@@ -574,7 +574,7 @@ def _row_to_audit_entry(row: sqlite3.Row) -> dict:
         "ccEmails": json.loads(row["cc_emails"]),
         "bccEmails": json.loads(row["bcc_emails"]),
         "subject": row["subject"],
-        "attachmentsFound": json.loads(row["attachments_found"]),
+        "attachmentsEmailed": json.loads(row["attachments_emailed"]),
         "attachmentsMissing": json.loads(row["attachments_missing"]),
         "error": row["error"],
         "doSenderEmail": row["do_sender_email"],
