@@ -257,7 +257,7 @@ class SendOECFlowMixin:
                 "bccEmails": [],
                 "subject": pod_subject,
                 "emailBody": pod_body,
-                "attachmentsFound": ["POD"],
+                "attachmentsEmailed": ["POD"],
                 "podSource": pod_source,
                 "index": index,
                 "total": job.total,

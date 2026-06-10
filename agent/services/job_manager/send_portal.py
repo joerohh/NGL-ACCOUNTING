@@ -135,7 +135,7 @@ class SendPortalUploadMixin:
                 "ccEmails": [],
                 "bccEmails": [],
                 "subject": f"Portal upload: {portal_client}",
-                "attachmentsFound": ["Invoice + POD (merged)"],
+                "attachmentsEmailed": ["Invoice + POD (merged)"],
                 "index": index,
                 "total": job.total,
                 "message": "PDF merged — ready to upload to portal. Approve to proceed.",

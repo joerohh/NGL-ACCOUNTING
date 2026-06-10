@@ -414,7 +414,7 @@ class SendJobMixin:
             "ccEmails": cc_emails,
             "bccEmails": bcc_emails,
             "subject": subject,
-            "attachmentsFound": attachments_display,
+            "attachmentsEmailed": attachments_display,
             "index": index,
             "total": job.total,
             "message": "Invoice email ready — review recipients and approve or skip",

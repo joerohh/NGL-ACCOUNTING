@@ -1603,7 +1603,7 @@ function invShowInlineApproval(event) {
         : '<div style="margin-top:4px;"><strong>D/O Sender:</strong> ' + escHtml(event.doSenderEmail || '') + ' ' + invSourceBadge(event.doSenderSource, 'From') + '</div>'
       ) : ''}
       <div><strong>Subject:</strong> ${escHtml(event.subject)}</div>
-      <div><strong>Attachments:</strong> ${(event.attachmentsFound || []).length ? escHtml(event.attachmentsFound.join(', ')) : '<span style="color:#d97706;">None detected</span>'}${event.podSource ? ' ' + invSourceBadge(event.podSource, 'Found in') : ''}</div>
+      <div><strong>Attachments:</strong> ${(event.attachmentsEmailed || []).length ? escHtml(event.attachmentsEmailed.join(', ')) : '<span style="color:#d97706;">None detected</span>'}${event.podSource ? ' ' + invSourceBadge(event.podSource, 'Found in') : ''}</div>
       ${event.emailBody ? '<div style="margin-top:10px; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;"><strong style="display:block; margin-bottom:6px;">Email Body Preview:</strong><pre style="white-space:pre-wrap; word-wrap:break-word; font-family:inherit; font-size:0.78rem; color:#334155; margin:0;">' + escHtml(event.emailBody) + '</pre></div>' : ''}
     </div>
     <div style="font-size:0.75rem; color:#64748b; margin-bottom:12px; background:${hintBg}; border:1px solid ${hintBorder}; border-radius:6px; padding:8px 10px;">
