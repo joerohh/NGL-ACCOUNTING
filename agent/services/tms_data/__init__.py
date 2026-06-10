@@ -259,6 +259,54 @@ class TMSDataLayer:
 
         return paths
 
+    async def get_all_documents_with_reason(
+        self,
+        job_id: str,
+        invoice_data: dict,
+        dest_dir: Path,
+        source: Source = "api",
+        *,
+        skip_types: Optional[set[str]] = None,
+    ) -> tuple[dict[str, Path], str]:
+        """Like get_all_documents but returns (paths, reason) instead of just paths.
+
+        Reasons (see cascade.run_all_documents_with_reason):
+          - 'ok'              — work order fetched, any present file_urls downloaded
+          - 'no_wo_number'    — invoice has no WO# field on QBO
+          - 'wo_not_found'    — TMS doesn't know this WO (404)
+          - 'tms_unreachable' — TMS API call raised after retries exhausted
+        """
+        if source == "browser":
+            raise NotImplementedError(
+                "get_all_documents_with_reason only supports source='api'."
+            )
+
+        from services.tms_data.cascade import run_all_documents_with_reason
+
+        cached = self._CachedTmsApi(self._tms_api, self._wo_cache, self._in_flight, job_id)
+        paths, per_doc_errors, reason = await run_all_documents_with_reason(
+            invoice_data, dest_dir, cached, skip_types=skip_types,
+        )
+
+        for doc_type, err in per_doc_errors.items():
+            row_id = self._failed.record_failure(
+                job_id=job_id,
+                invoice_number=_invoice_label(invoice_data),
+                container_number=None,
+                operation="get_document",
+                doc_type=doc_type,
+                error_message=err,
+                source="tms_api",
+            )
+            self._retry_ctx[row_id] = {
+                "operation": "get_document",
+                "invoice_data": invoice_data,
+                "doc_type": doc_type,
+                "dest_dir": dest_dir,
+            }
+
+        return paths, reason
+
     # ── Failed-rows queries (more methods added in Tasks 11-13) ────
 
     def get_failed_rows(self, job_id: str) -> list[FailedRow]:
