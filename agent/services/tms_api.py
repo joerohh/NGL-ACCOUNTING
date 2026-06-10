@@ -67,6 +67,14 @@ class TMSApiClient:
         return self._token
 
     async def get_work_order(self, wo_no: str) -> Optional[dict]:
+        """Fetch a TMS WO record.
+
+        Retries up to 3 times with 1s/3s backoff on transient network errors
+        (DNS blip, brief connection refusal, read timeout). 4xx (incl. 404) and
+        5xx are treated as permanent — no retry. Mirrors download_document's
+        retry policy so the standard-email send path (which depends on this
+        call) has the same resilience floor as direct file downloads.
+        """
         if not wo_no:
             return None
         if not self.is_configured():
@@ -77,10 +85,13 @@ class TMSApiClient:
         except Exception as e:
             logger.warning("[TMS_API] token fetch failed: %s", e)
             return None
+
         url = f"{self._base_url}/api/v1/work-orders/{wo_no}"
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                r = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        last_error: Optional[Exception] = None
+        for attempt in range(_DOWNLOAD_RETRY_ATTEMPTS):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    r = await client.get(url, headers={"Authorization": f"Bearer {token}"})
                 if r.status_code == 404:
                     logger.info("[TMS_API] WO %s not found (404)", wo_no)
                     return None
@@ -88,10 +99,30 @@ class TMSApiClient:
                     logger.warning("[TMS_API] WO %s server error %s", wo_no, r.status_code)
                     return None
                 r.raise_for_status()
+                if attempt > 0:
+                    logger.info("[TMS_API] get_work_order recovered on attempt %d for %s",
+                                attempt + 1, wo_no)
                 return r.json()
-        except Exception as e:
-            logger.warning("[TMS_API] get_work_order(%s) failed: %s", wo_no, e)
-            return None
+            except _TRANSIENT_NETWORK_ERRORS as e:
+                last_error = e
+                if attempt < _DOWNLOAD_RETRY_ATTEMPTS - 1:
+                    backoff = _DOWNLOAD_RETRY_BACKOFF_SECONDS[attempt]
+                    logger.warning(
+                        "[TMS_API] get_work_order attempt %d/%d failed for %s (%s) — retrying in %.1fs",
+                        attempt + 1, _DOWNLOAD_RETRY_ATTEMPTS,
+                        wo_no, type(e).__name__, backoff,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+            except Exception as e:
+                logger.warning("[TMS_API] get_work_order(%s) failed: %s", wo_no, e)
+                return None
+
+        logger.error(
+            "[TMS_API] get_work_order FAILED for %s after %d attempts — supporting docs will be missing from the email. Last error: %s",
+            wo_no, _DOWNLOAD_RETRY_ATTEMPTS, last_error,
+        )
+        return None
 
     async def download_document(self, file_url: str) -> Optional[bytes]:
         """Download a TMS document. file_url points to public CloudFront/S3
