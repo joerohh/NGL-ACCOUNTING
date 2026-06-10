@@ -128,7 +128,21 @@ class SendQBOApiMixin:
 
     async def _send_qbo_api(self, job, invoice, customer: dict,
                              result, index: int) -> None:
-        """Hybrid send: QBO API (search/verify/attachments) + Gmail (email with custom subject)."""
+        """Standard email send: QBO API for the invoice PDF + TMS API for supporting docs + Gmail SMTP for delivery.
+
+        Flow (see docs/superpowers/specs/2026-06-10-tms-direct-email-design.md):
+          1. Search QBO for the invoice -> invoice_id, customer fields, ref fields
+          2. Verify invoice details (container#, amount)
+          3. Fetch every TMS doc with a file_url for the WO
+          4. If customer requires POD and TMS returned none -> status=pod_missing, hold
+          5. If TMS unreachable after retries -> status=tms_unreachable, hold
+          6. Download invoice PDF from QBO
+          7. Email = invoice PDF + every TMS doc
+          8. Audit row records attachments_emailed = [tms doc types]
+
+        OEC flow is dispatched separately by send_job.py — this method only handles
+        the non-OEC standard email path. Warehouse and portal use their own mixins.
+        """
         customer_emails = normalize_email_list(customer.get("emails", []))
         if not customer_emails:
             result.status = "skipped"
@@ -142,7 +156,7 @@ class SendQBOApiMixin:
 
         api = self._qbo_api
 
-        # Step 1: Search for invoice in QBO
+        # Step 1: Search QBO for the invoice.
         await self._emit_send(job, "searching_invoice", {
             "invoiceNumber": invoice.invoice_number,
         })
@@ -158,7 +172,7 @@ class SendQBOApiMixin:
 
         invoice_id = invoice_data["Id"]
 
-        # Step 2: Verify invoice details
+        # Step 2: Verify invoice details.
         await self._emit_send(job, "verifying_invoice", {
             "invoiceNumber": invoice.invoice_number,
             "containerNumber": invoice.container_number,
@@ -183,119 +197,80 @@ class SendQBOApiMixin:
                 "note": verification["amount_note"],
             })
 
-        # Step 3: Check attachments
-        # OEC flow: the D/O email (already sent before this step) carries the POD.
-        # The QBO invoice email attaches invoice PDF only, so we don't enforce
-        # requiredDocs here — no need to fail the invoice send because POD isn't
-        # on the QBO record yet.
-        is_oec = customer.get("sendMethod") == "qbo_invoice_only_then_pod_email"
-        required_docs = (
-            []
-            if is_oec
-            else [d for d in customer.get("requiredDocs", []) if d.lower() != "invoice"]
-        )
-        await self._emit_send(job, "checking_attachments", {
+        # Step 3: Fetch every TMS doc with a file_url. TMS is the source of truth
+        # for supporting docs in the new flow — we never upload to QBO from here.
+        await self._emit_send(job, "tms_fetching_docs", {
             "invoiceNumber": invoice.invoice_number,
+            "containerNumber": verification.get("found_container") or invoice.container_number or "",
+            "docTypes": [],
         })
 
-        att_check = await api.check_attachments(invoice_id, required_docs)
-        result.attachments_emailed = att_check.get("found", [])
-        result.attachments_missing = att_check.get("missing", [])
-        # WORKAROUND(TMS-008): see docs/tms-workarounds.md — drop duplicate Attachable records before email
-        all_attachments = await self._dedup_and_emit(
-            job, invoice.invoice_number, att_check.get("attachments", []),
-        )
-
-        # Step 3b: TMS cascade — TMS is source of truth for supporting docs.
-        # Run unconditionally for non-OEC (OEC does its own POD pull in send_oec.py).
-        # `requiredDocs` is enforced AFTER this block as a pure block gate.
         temp_dir = None
-
-        logger.info("Attachment check for %s: found=%s, missing=%s, tms_available=%s",
-                     invoice.invoice_number, result.attachments_emailed,
-                     result.attachments_missing, bool(self._tms_data))
-        for a in all_attachments:
-            logger.info("  -> '%s' classified as '%s'", a.get("fileName"), a.get("docType"))
-
-        if self._tms_data and not is_oec:
+        if not self._tms_data:
+            logger.warning("TMSDataLayer not configured — skipping TMS doc fetch for %s",
+                           invoice.invoice_number)
+            tms_paths: dict = {}
+            tms_reason = "tms_unreachable"
+        else:
             temp_dir = Path(tempfile.mkdtemp(prefix="ngl_docs_"))
             try:
-                uploaded = await asyncio.wait_for(
-                    self._tms_fetch_and_upload_missing_docs(
-                        job, invoice, api, invoice_id, verification, temp_dir,
-                        invoice_data=invoice_data, existing_attachments=all_attachments,
+                rows_before = len(self._tms_data.get_failed_rows(job.id))
+                tms_paths, tms_reason = await asyncio.wait_for(
+                    self._tms_data.get_all_documents_with_reason(
+                        job.id, invoice_data, temp_dir, source="api",
                     ),
                     timeout=TMS_FETCH_TIMEOUT_S,
                 )
-                if uploaded:
-                    att_check = await api.check_attachments(invoice_id, required_docs)
-                    result.attachments_emailed = att_check.get("found", [])
-                    result.attachments_missing = att_check.get("missing", [])
-                    all_attachments = await self._dedup_and_emit(
-                        job, invoice.invoice_number, att_check.get("attachments", []),
-                    )
+                if len(self._tms_data.get_failed_rows(job.id)) > rows_before:
+                    await self._emit_failed_rows_changed(job, "added")
             except asyncio.TimeoutError:
-                logger.warning("TMS doc fetch timed out after %ds for %s — skipping",
+                logger.warning("TMS doc fetch timed out after %ds for %s",
                                TMS_FETCH_TIMEOUT_S, invoice.invoice_number)
-                await self._emit_send(job, "tms_fetch_timeout", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "message": f"TMS doc fetch timed out after {TMS_FETCH_TIMEOUT_S}s",
-                })
-            except Exception as e:
-                logger.warning("TMS doc fetch failed for %s: %s",
-                               invoice.invoice_number, e)
-                await self._emit_send(job, "tms_fetch_error", {
-                    "invoiceNumber": invoice.invoice_number,
-                    "error": str(e),
-                })
+                tms_paths, tms_reason = {}, "tms_unreachable"
 
-        # OEC's invoice email attaches ONLY the invoice PDF (no QBO attachments),
-        # so an empty attachment list on QBO is fine for OEC — don't abort.
-        if not all_attachments and not is_oec:
-            result.status = "skipped_no_attachments"
-            result.error = "No attachments found on invoice"
-            await self._emit_send(job, "invoice_skipped", {
+        # Step 4: TMS unreachable -> hold send.
+        if tms_reason == "tms_unreachable":
+            result.status = "tms_unreachable"
+            result.error = "TMS unreachable after retries — supporting docs could not be fetched"
+            await self._emit_send(job, "tms_fetch_error", {
                 "invoiceNumber": invoice.invoice_number,
-                "reason": "no_attachments",
+                "error": result.error,
             })
             self._cleanup_temp(temp_dir)
             return
 
-        if required_docs and not att_check.get("allPresent"):
-            result.status = "missing_docs"
-            result.error = f"Missing required docs: {', '.join(result.attachments_missing)}"
-            await self._emit_send(job, "invoice_missing_docs", {
+        # Step 5: POD required but missing -> hold send.
+        required_docs = [d.lower() for d in customer.get("requiredDocs", [])]
+        pod_required = "pod" in required_docs
+        if pod_required and "pod" not in tms_paths:
+            result.status = "pod_missing"
+            wo_no = ""
+            for f in invoice_data.get("CustomField", []) or []:
+                if "REF" in (f.get("Name") or "").upper():
+                    val = (f.get("StringValue") or "").split("/", 1)[0].strip()
+                    if val:
+                        wo_no = val
+                        break
+            result.error = f"POD not yet available on TMS for WO {wo_no or '<unknown>'}"
+            await self._emit_send(job, "invoice_pod_missing", {
                 "invoiceNumber": invoice.invoice_number,
-                "found": result.attachments_emailed,
-                "missing": result.attachments_missing,
+                "woNo": wo_no,
             })
             self._cleanup_temp(temp_dir)
             return
 
-        # Step 4: Build email fields
+        # Step 6: Build email fields.
         container = verification.get("found_container") or invoice.container_number or ""
-        # Use subject as-is if provided (frontend handles [NGL_INV_REVISED] prefix for resends)
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
         to_emails = customer_emails
         cc_emails = ["ar@ngltrans.net"] + normalize_email_list(customer.get("ccEmails", []))
         bcc_emails = normalize_email_list(customer.get("bccEmails", []))
 
-        # OEC: also CC the D/O sender (resolved in the preceding POD email step)
-        if is_oec:
-            added = validate_and_append_email(
-                cc_emails, invoice.do_sender_email, label="D/O SENDER (invoice email)"
-            )
-            await self._emit_send(job, "oec_invoice_cc_built", {
-                "invoiceNumber": invoice.invoice_number,
-                "ccEmails": cc_emails,
-                "doSenderEmail": invoice.do_sender_email or "",
-                "doSenderIncluded": added,
-            })
-
         result.to_emails = to_emails
         result.cc_emails = cc_emails
         result.bcc_emails = bcc_emails
         result.subject = subject
+        result.attachments_emailed = sorted(tms_paths.keys())
 
         await self._emit_send(job, "filling_send_form", {
             "invoiceNumber": invoice.invoice_number,
@@ -303,30 +278,25 @@ class SendQBOApiMixin:
             "subject": subject,
         })
 
-        # Step 5: Test mode approval
+        # Test mode approval gate (unchanged from old flow).
         if job.test_mode:
-            # For OEC, the email will attach only the invoice PDF (POD/D-O doc
-            # goes out separately). Show that accurately in the approval preview
-            # instead of the QBO attachment list which would mislead the user.
-            attachments_display = ["invoice"] if is_oec else result.attachments_emailed
             approved = await self._wait_for_approval(
                 job, invoice, result, index,
                 to_emails, cc_emails, bcc_emails, subject,
-                attachments_display=attachments_display,
+                attachments_display=result.attachments_emailed,
             )
             if not approved:
                 self._cleanup_temp(temp_dir)
                 return
 
-        # Step 6: Download invoice PDF + all attachments from QBO
+        # Step 7: Download invoice PDF + build attachments list.
         await self._emit_send(job, "downloading_attachments", {
             "invoiceNumber": invoice.invoice_number,
-            "count": len(all_attachments) + 1,  # +1 for invoice PDF
+            "count": len(tms_paths) + 1,  # +1 for invoice PDF
         })
 
-        email_attachments = []
+        email_attachments: list[dict] = []
 
-        # Download the invoice PDF
         invoice_pdf = await api.download_invoice_pdf(invoice_id)
         if invoice_pdf:
             email_attachments.append({
@@ -334,54 +304,18 @@ class SendQBOApiMixin:
                 "data": invoice_pdf,
             })
 
-        # Download all linked attachments (POD, BOL, etc.)
-        # OEC flow (qbo_invoice_only_then_pod_email): send invoice PDF only —
-        # POD/DO go out in the separate POD email.
-        import httpx
-
-        # HARD RULE: OEC invoice email carries the invoice PDF ONLY.
-        # POD/D-O doc goes out separately in the preceding D/O email.
-        attachments_to_email = [] if is_oec else all_attachments
-
-        for att in attachments_to_email:
-            fname = att.get("fileName", "attachment.pdf")
+        for doc_type, path in tms_paths.items():
             try:
-                download_url = att.get("tempDownloadUri")
-                if not download_url:
-                    # Fallback: /download/{id} returns a redirect URL as text
-                    att_id = att.get("id")
-                    if not att_id:
-                        continue
-                    token = await api._token_manager.get_access_token()
-                    realm = api._token_manager.realm_id or api._realm_id
-                    url = f"{api._base_url}/v3/company/{realm}/download/{att_id}"
-                    async with httpx.AsyncClient(timeout=60.0) as client:
-                        resp = await client.get(
-                            url,
-                            headers={"Authorization": f"Bearer {token}"},
-                            timeout=30,
-                        )
-                    if resp.status_code != 200:
-                        logger.warning("Failed to get download URL for %s: %d", fname, resp.status_code)
-                        continue
-                    download_url = resp.content.decode("utf-8").strip()
-
-                # Fetch the actual file bytes
-                async with httpx.AsyncClient(follow_redirects=True) as client:
-                    file_resp = await client.get(download_url, timeout=30)
-                if file_resp.status_code == 200:
-                    email_attachments.append({
-                        "filename": fname,
-                        "data": file_resp.content,
-                    })
-                else:
-                    logger.warning("Failed to download attachment %s: %d", fname, file_resp.status_code)
+                email_attachments.append({
+                    "filename": path.name,
+                    "data": path.read_bytes(),
+                })
             except Exception as e:
-                logger.warning("Error downloading attachment %s: %s", fname, e)
+                logger.warning("Failed to read TMS doc %s for email: %s", path, e)
 
         if not email_attachments:
             result.status = "error"
-            result.error = "Failed to download invoice PDF and attachments"
+            result.error = "Failed to download invoice PDF and TMS attachments"
             await self._emit_send(job, "invoice_error", {
                 "invoiceNumber": invoice.invoice_number,
                 "error": result.error,
@@ -389,7 +323,7 @@ class SendQBOApiMixin:
             self._cleanup_temp(temp_dir)
             return
 
-        # Step 7: Send via Gmail SMTP
+        # Step 8: Send via Gmail SMTP.
         await self._emit_send(job, "sending_invoice", {
             "invoiceNumber": invoice.invoice_number,
             "method": "gmail",
@@ -405,12 +339,11 @@ class SendQBOApiMixin:
             self._cleanup_temp(temp_dir)
             return
 
-        # Extract customer name and ref# from invoice data
+        # Build email body (unchanged from old flow).
         customer_name = invoice_data.get("CustomerRef", {}).get("name", "")
         if "] " in customer_name:
             customer_name = customer_name.split("] ", 1)[1]
 
-        # Parse "NGL REF#/Your REF#" custom field for the email body.
         ngl_ref = ""
         customer_ref = ""
         for field in invoice_data.get("CustomField", []):
@@ -425,8 +358,6 @@ class SendQBOApiMixin:
 
         due_date = invoice_data.get("DueDate", "")
         amount = str(invoice_data.get("TotalAmt", ""))
-
-        # Get QBO payment portal link for the "Review and pay" button
         invoice_link = await api.get_invoice_link(invoice_id)
 
         body = build_invoice_email_html(
@@ -441,17 +372,6 @@ class SendQBOApiMixin:
             resend_notice=RESEND_NOTICE,
         )
 
-        # HARD RULE for OEC: invoice email carries ONLY the invoice PDF.
-        # Guard against regressions that might sneak extra attachments back in.
-        if is_oec and len(email_attachments) != 1:
-            logger.error(
-                "[OEC_INVOICE] Attachment rule violation for %s: expected 1 (invoice PDF), got %d — %s",
-                invoice.invoice_number, len(email_attachments),
-                [a.get("filename") for a in email_attachments],
-            )
-            email_attachments = [a for a in email_attachments
-                                 if a.get("filename") == f"{invoice.invoice_number}.pdf"]
-
         send_result = await self._email_sender.send_invoice_email(
             to=to_emails,
             cc=cc_emails,
@@ -462,14 +382,8 @@ class SendQBOApiMixin:
         )
 
         if send_result.get("sent"):
-            # For OEC, reconcile final status with the preceding POD email result.
-            if is_oec and result.pod_status == "failed":
-                result.status = "sent_no_pod"
-            elif is_oec and result.pod_status == "skipped":
-                result.status = "sent_no_pod"
-            else:
-                result.status = "sent"
-                result.error = None
+            result.status = "sent"
+            result.error = None
             await self._emit_send(job, "invoice_sent", {
                 "invoiceNumber": invoice.invoice_number,
                 "containerNumber": container,
@@ -477,7 +391,6 @@ class SendQBOApiMixin:
                 "subject": subject,
                 "method": "gmail",
                 "attachmentCount": len(email_attachments),
-                "podStatus": result.pod_status if is_oec else "",
             })
         else:
             result.status = "error"

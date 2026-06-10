@@ -58,6 +58,12 @@ async def test_fetch_and_upload_uses_tms_data_get_all_documents(mock_layer, tmp_
     assert not jm._tms.fetch_pod_and_do_sender.called
 
 
+@pytest.mark.skip(
+    reason="Obsolete (2026-06-10): the TMS-direct rewrite of _send_qbo_api removes "
+    "the QBO-attachment listing + dedup step from this code path. dedupe_attachments "
+    "is preserved dead code (still used by the warehouse path) but is no longer "
+    "exercised from _send_qbo_api. See docs/superpowers/specs/2026-06-10-tms-direct-email-design.md."
+)
 @pytest.mark.asyncio
 async def test_dedup_drops_5x_duplicate_pod_before_email(tmp_path, monkeypatch):
     """TMS-008: 5 duplicate POD Attachables → email_attachments has only the invoice PDF + 1 POD."""

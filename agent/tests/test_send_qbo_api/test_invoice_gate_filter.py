@@ -62,6 +62,12 @@ def test_oec_returns_empty_regardless_of_required_docs():
     assert _filter_required_docs(customer, is_oec=True) == []
 
 
+@pytest.mark.skip(
+    reason="Obsolete (2026-06-10): the TMS-direct rewrite of _send_qbo_api removes "
+    "the QBO check_attachments gate that this filter was working around. "
+    "requiredDocs is now only consulted to check whether 'pod' is required. "
+    "See docs/superpowers/specs/2026-06-10-tms-direct-email-design.md."
+)
 def test_production_code_uses_same_filter():
     """Smoke check that the production code at send_qbo_api.py:192 matches
     the helper above. If this fails, the production code and the test
