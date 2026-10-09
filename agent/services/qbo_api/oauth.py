@@ -171,6 +171,16 @@ class QBOTokenManager:
         # QBO rotates refresh tokens, so an outdated refresh_token will fail.
         self._refresh_from_remote()
 
+        # If another agent already refreshed and saved fresh tokens to Supabase, the
+        # re-fetch above may have loaded a valid unexpired access token. Don't refresh
+        # again — that would rotate the refresh token unnecessarily and break other agents.
+        if self._tokens:
+            now = time.time()
+            expires_at = self._tokens.get("access_token_expires_at", 0)
+            if now < expires_at - REFRESH_BUFFER_S:
+                logger.info("QBO access token already fresh (loaded from Supabase) — skipping refresh")
+                return True
+
         refresh_token = self._tokens.get("refresh_token") if self._tokens else None
         if not refresh_token:
             logger.error("No refresh token available — re-authorization required")
