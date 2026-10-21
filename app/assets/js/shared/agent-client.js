@@ -408,7 +408,16 @@ export const agentBridge = {
         if (search) params.set('search', search);
         params.set('activeOnly', activeOnly);
         const res = await this._authFetch(this.baseUrl + '/customers?' + params.toString());
-        if (res.ok) return await res.json();
+        if (res.ok) {
+          const data = await res.json();
+          // Sync to localStorage so invoice-sender enrichment works on fresh machines
+          if (!search && data.customers && data.customers.length > 0) {
+            const all = this._custRead();
+            for (const c of data.customers) all[c.code] = c;
+            this._custWrite(all);
+          }
+          return data;
+        }
       } catch {}
     }
     // Fallback: localStorage
