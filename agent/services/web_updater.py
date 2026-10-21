@@ -88,12 +88,19 @@ def _extract_zip(zip_bytes: bytes, dest: Path) -> None:
 
 def _check_github_releases(owner_repo: str, pat: str, app_dir: Path, cache_dir: Path) -> Path:
     """Check GitHub releases for a newer webapp.zip."""
-    local_version = _get_local_version(cache_dir if cache_dir.exists() else app_dir)
-
     # Get latest release
     release = _github_api(f"/repos/{owner_repo}/releases/latest", pat)
     tag = release.get("tag_name", "")
     logger.info("Latest GitHub release: %s", tag)
+
+    # Check for webapp.zip first — regular app releases won't have it, skip quietly
+    assets = release.get("assets", [])
+    zip_asset = next((a for a in assets if a["name"] == "webapp.zip"), None)
+    if not zip_asset:
+        logger.debug("Release %s has no webapp.zip — no web UI update available", tag)
+        return cache_dir if cache_dir.exists() and (cache_dir / "version.json").exists() else app_dir
+
+    local_version = _get_local_version(cache_dir if cache_dir.exists() else app_dir)
 
     # Extract version from tag (e.g. "web-v2" → 2, "v3" → 3)
     import re
@@ -107,13 +114,6 @@ def _check_github_releases(owner_repo: str, pat: str, app_dir: Path, cache_dir: 
 
     if remote_version <= local_version:
         logger.info("Web UI is up to date (v%d)", local_version)
-        return cache_dir if cache_dir.exists() and (cache_dir / "version.json").exists() else app_dir
-
-    # Find webapp.zip in release assets
-    assets = release.get("assets", [])
-    zip_asset = next((a for a in assets if a["name"] == "webapp.zip"), None)
-    if not zip_asset:
-        logger.warning("Release %s has no webapp.zip asset", tag)
         return cache_dir if cache_dir.exists() and (cache_dir / "version.json").exists() else app_dir
 
     # Download and extract
