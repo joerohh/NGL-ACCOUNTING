@@ -285,6 +285,13 @@ class SendQBOApiMixin:
             return
 
         # Step 6: Build email fields.
+        # Filter TMS docs to only those the customer requested. Empty requiredDocs
+        # (ALL mode) means attach everything TMS returns.
+        attach_paths = (
+            {k: v for k, v in tms_paths.items() if k in required_docs}
+            if required_docs else tms_paths
+        )
+
         container = verification.get("found_container") or invoice.container_number or ""
         subject = invoice.subject or f"[NGL_INV] {invoice.invoice_number} - Container#{container}"
         to_emails = customer_emails
@@ -295,7 +302,7 @@ class SendQBOApiMixin:
         result.cc_emails = cc_emails
         result.bcc_emails = bcc_emails
         result.subject = subject
-        result.attachments_emailed = sorted(tms_paths.keys())
+        result.attachments_emailed = sorted(attach_paths.keys())
 
         await self._emit_send(job, "filling_send_form", {
             "invoiceNumber": invoice.invoice_number,
@@ -317,7 +324,7 @@ class SendQBOApiMixin:
         # Step 7: Download invoice PDF + build attachments list.
         await self._emit_send(job, "downloading_attachments", {
             "invoiceNumber": invoice.invoice_number,
-            "count": len(tms_paths) + 1,  # +1 for invoice PDF
+            "count": len(attach_paths) + 1,  # +1 for invoice PDF
         })
 
         email_attachments: list[dict] = []
@@ -329,7 +336,7 @@ class SendQBOApiMixin:
                 "data": invoice_pdf,
             })
 
-        for doc_type, path in tms_paths.items():
+        for doc_type, path in attach_paths.items():
             try:
                 email_attachments.append({
                     "filename": path.name,

@@ -533,11 +533,16 @@ window.invRenderPanel = renderPanel;
 // ── Task 10: Fix-It drop zones (Fix 2) ────────────────────────────
 
 const FILENAME_PATTERNS = {
-  POD: /\b(pod|proof.?of.?delivery|delivery.?receipt)\b/i,
-  BOL: /\b(bol|bill.?of.?lading|b\.?l)\b/i,
-  POL: /\b(pol|proof.?of.?loading)\b/i,
-  DO:  /\b(d\.?o\.?|delivery.?order)\b/i,
-  PL:  /\b(p\.?l\.?|packing.?list)\b/i,
+  POD:               /\b(pod|proof.?of.?delivery|delivery.?receipt)\b/i,
+  BL:                /\b(b\.?l\.?|bol|bill.?of.?lading)\b/i,
+  POL:               /\b(pol|proof.?of.?loading)\b/i,
+  DO:                /\b(d\.?o\.?|delivery.?order)\b/i,
+  IT:                /\b(it[_\-\s]?ticket|import.?ticket|intermodal.?ticket)\b|_it[_\.]/i,
+  ITE:               /\b(ite[_\-\s]?ticket|export.?ticket|intermodal.?export)\b|_ite[_\.]/i,
+  CF:                /\b(c\.?f\.?|customs?.?form|customs?.?filing)\b/i,
+  CFS:               /\b(cfs|container.?freight.?station)\b/i,
+  'WAREHOUSE-BL':    /\b(warehouse.?bl|warehouse.?bill|wh.?bl)\b/i,
+  'WAREHOUSE-INBOUND': /\b(warehouse.?inbound|wh.?inbound)\b/i,
 };
 
 function matchesByFilename(filename, slot) {
