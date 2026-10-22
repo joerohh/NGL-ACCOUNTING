@@ -5,6 +5,7 @@ import logging
 import mimetypes
 import os
 import smtplib
+from smtplib import SMTPServerDisconnected, SMTPAuthenticationError
 from typing import Optional
 from email import encoders
 from email.mime.application import MIMEApplication
@@ -128,9 +129,14 @@ class EmailSender:
         all_recipients = list(dict.fromkeys(list(to) + list(cc)))
 
         # Send via Gmail SMTP
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(self._address, self._password)
-            server.send_message(msg, self._address, all_recipients)
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(self._address, self._password)
+                server.send_message(msg, self._address, all_recipients)
+        except SMTPAuthenticationError:
+            return {"sent": False, "error": "Gmail login failed — check your App Password in Settings → Email"}
+        except SMTPServerDisconnected:
+            return {"sent": False, "error": "Gmail rejected the connection — check your App Password in Settings → Email"}
 
         logger.info(
             "POD email sent: to=%s, cc=%s, subject=%s, attachment=%s",
@@ -200,9 +206,14 @@ class EmailSender:
         all_recipients = list(dict.fromkeys(list(to) + list(cc) + list(bcc)))
 
         # Send via Gmail SMTP
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(self._address, self._password)
-            server.send_message(msg, self._address, all_recipients)
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(self._address, self._password)
+                server.send_message(msg, self._address, all_recipients)
+        except SMTPAuthenticationError:
+            return {"sent": False, "error": "Gmail login failed — check your App Password in Settings → Email"}
+        except SMTPServerDisconnected:
+            return {"sent": False, "error": "Gmail rejected the connection — check your App Password in Settings → Email"}
 
         logger.info(
             "Invoice email sent: to=%s, cc=%s, bcc=%s, subject=%s, attachments=%d",
